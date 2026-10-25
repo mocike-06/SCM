@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - 片外存储器扩展（6264 与地址译码）</title>
+  <meta name="description" content="51 单片机片外 RAM 扩展零基础教程：系统总线扩展、74LS373 锁存、74LS138 地址译码、6264 SRAM 读写、xdata 关键字，教材系统扩展章节核心内容。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link active" aria-current="page">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>片外存储器扩展（6264 与地址译码）</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：51 单片机</span>
+          <span class="badge badge-orange">进阶</span>
+          <span class="badge badge-gray">更新：2026-10-25</span>
+        </div>
+
+        <p class="text-secondary mb-6">51 片内只有 128 字节（STC89C52 有 512 字节）RAM——做个稍大的缓存、数组、液晶字库就爆了。教材「系统扩展」章节的第一课：把 RAM 接到单片机外面。本课讲透 51 的总线扩展机制（P0 分时复用、74LS373 锁存、74LS138 译码），并用 6264 芯片做出 8KB 片外 RAM，验证读写。</p>
+
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>说清 51 怎么用 8 根数据线接 8KB 存储器的：地址/数据分时复用 + 锁存。</li>
+            <li>看懂 74LS138 译码器怎么把地址空间分给多个器件。</li>
+            <li>用 Keil 的 <span class="inline-code">xdata</span> 关键字直接读写片外 RAM，并写自检程序。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识（对应学习路线阶段 2）：</strong></p>
+          <ul>
+            <li>IO 口（mcu51-led.html）：P0/P2 的口结构，扩展后变成总线。</li>
+            <li>原理图阅读（mcu51-minisys.html）：最小系统的总线形态。</li>
+            <li>C 语言指针（c-array-pointer.html）：地址与存储空间概念。</li>
+          </ul>
+          <p><strong>本课会出现的新名词：</strong>系统总线（数据/地址/控制）、分时复用、74LS373 锁存器、74LS138 译码器、片选 CE、xdata、6264 SRAM。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. 总线扩展：把引脚「升级」成公交线路</h3>
+          <p><strong>生活类比</strong>：小区只有一条窄路（8 个 IO 口），平时只走几个住户（LED、按键）。现在要建一座大楼（8KB 存储器），就把这条路拓宽成「公共大道」：大家共用，靠「门牌号」（地址）区分谁跟谁说话。</p>
+          <p><strong>一句话定义</strong>：<strong>系统总线</strong> = 数据总线（DB，8 位传数据）+ 地址总线（AB，传门牌号）+ 控制总线（RD/WR/PSEN 等发指令）。51 的 P0 口兼职「数据 + 低 8 位地址」，P2 口出高 8 位地址——扩展就是让这些口按总线时序工作。</p>
+          <p><strong>例子</strong>：访问地址 0x0001：P2 送 0x00（高 8 位），P0 先送 0x01（低 8 位地址）再送数据。</p>
+
+          <h3>2. 分时复用与锁存器：一条线干两件事</h3>
+          <p><strong>生活类比</strong>：胡同里先「贴门牌号再送快递」：先到 1 号（地址），记下来，再去取货（数据）。门牌号不能边走边忘，得有个「记录本」（锁存器 74LS373）把地址记住。</p>
+          <p><strong>一句话定义</strong>：P0 在一个访问周期内先输出<strong>低 8 位地址</strong>，再切换为<strong>数据</strong>——这叫分时复用。ALE 信号在高电平期间，<strong>74LS373 锁存器</strong>把地址「锁存」下来，之后的 P0 变化（数据）不影响地址线。</p>
+          <p><strong>例子</strong>：ALE 下降沿把 P0 上的地址存入 373 输出端；随后 P0 上的数据走 DB 总线——存储器看到的是「373 给的稳定地址 + P0 给的数据」。</p>
+
+          <h3>3. 地址译码：给每个器件分配「地盘」</h3>
+          <p><strong>一句话定义</strong>：地址空间有限（51 可访问 64KB 片外 RAM），多个器件不能都占满——用 <strong>74LS138 三八译码器</strong>把高位地址译成多个<strong>片选（CE）</strong>信号，一个器件一个地盘：6264 占 0x0000~0x1FFF（8KB），别的器件占别的地段。</p>
+          <p><strong>例子</strong>：P2.5/P2.6/P2.7 接 138 的 A/B/C，选通 Y0~Y7 八个区段，每段 8KB，一共 64KB——一片 6264 接 Y0，地址范围 0x0000-0x1FFF。</p>
+
+          <h3>4. xdata：C 语言里访问片外 RAM 的「门牌」</h3>
+          <p><strong>一句话定义</strong>：Keil C51 把存储空间分为 data（片内 128B）、idata（片内间接）、xdata（片外，经 MOVX 指令访问）。声明 <span class="inline-code">unsigned char xdata buf[100];</span> 数组就放在片外 RAM，读写自动走 MOVX 总线时序——编译器帮你管，无需手动控制总线。</p>
+          <p><strong>例子</strong>：<span class="inline-code">buf[i] = 0x55;</span> 编译后就是「地址→P2/P0→锁存→数据→写 CE」一串操作。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-principle">三、原理介绍：51 只有 32 根 IO，怎么接出 64KB 外部内存的地址+数据总线</h2>
+          <p>51 内部只有 128~256 字节 RAM，不够用时就外扩 6264 SRAM。难点在于：51 外扩总线要 16 根地址线(64KB) + 8 根数据线，但它没这么多引脚——答案是<strong>让 P0 口「一肩二任」</strong>。</p>
+          <p><strong>一次片外读的流程：</strong></p>
+          <ol>
+            <li>读地址 0x1234：P2 出高 8 位 0x12，P0 出低 8 位 0x34。</li>
+            <li>ALE 正脉冲下降沿，74LS373 锁存 P0 上的低 8 位 0x34。</li>
+            <li>P0 随即腾出来当数据线；74LS138 据高位地址选中 6264 的 CE。</li>
+            <li>CPU 发 RD(P3.7) 低，6264 把该单元数据放到 P0。</li>
+            <li>CPU 读入数据，访问结束。</li>
+          </ol>
+
+          <h3>原理 1：P0 为什么要「先送地址、再送数据」——地址/数据分时复用</h3>
+          <p>51 只有 P0 这 8 根口能兼做外部总线。<strong>它的物理技巧是：一个总线周期里，先让 P0 输出低 8 位地址，几微秒后再把它转成数据线用</strong>。问题来了——低 8 位地址只在头几微秒出现在 P0 上，等 P0 转去传数据，地址就没了，存储器怎么知道要访问哪个单元？<strong>解决办法就是 ALE 信号 + 74LS373 锁存器</strong>：51 在送出低 8 位地址的同时，自动在 ALE 脚上打一个正脉冲，脉冲下降沿命令 373「把现在 P0 上的地址锁存住」。这样地址被 373 永久托住一整个周期，P0 空出来传数据。<strong>P2 口不用锁存</strong>：高 8 位地址在整个访问期间一直稳定输出在 P2 上，存储器直接取就行。这就是「P0 外接锁存、P2 直接接」的全部原因。</p>
+
+          <h3>原理 2：为什么要用 138 译码器切「地盘」——片选机制</h3>
+          <p>存储器要靠 <strong>CE（片选）脚</strong>才会响应总线上的读写。如果只有一颗 6264、CE 直接接地，那它就把整个 64KB 地址空间全占了——以后想再扩第二颗芯片、或接别的外扩设备，就没它的地址可用了。<strong>74LS138 的作用是「按高位地址挑地盘」</strong>：它把 P2 的高 3 位译码成 8 根 CE 线，地址落在哪个 8KB 段，对应的 CE 才变低、只有那颗存储器响应。于是 64KB 被切成 8 个 8KB 段分给不同器件——「谁的地址谁响应」，这就是<strong>存储器地址译码</strong>。</p>
+
+          <h3>原理 3：C 代码里的 xdata 到底在背后做什么</h3>
+          <p>Keil C51 把内存分区：<span class="inline-code">data</span>=片内 128B、<span class="inline-code">xdata</span>=片外扩展 RAM。声明 <span class="inline-code">unsigned char xdata buf[100];</span> 后，<span class="inline-code">buf[i]=0x55</span> 这行 C 代码，编译后就是一条 <strong>MOVX</strong> 指令——它自动触发上面那整套时序：地址送 P2/P0、ALE 锁存、138 译码、RD/WR 选通、数据进出 P0。<strong>你不用手动拨这些线</strong>，MOVX 硬件一把全包。<strong>坑</strong>：xdata 变量必须加 <span class="inline-code">volatile</span>（可能被中断/硬件改），否则编译器优化会把它误判为「没变」而跳过读写。</p>
+          <h3>原理 4：为什么外扩 RAM 和 ROM 地址重叠却不打架——三个独立 64KB 空间</h3>
+          <p>张毅刚教材强调：51 的 64KB 寻址空间其实是<strong>三个物理上独立、地址却重叠</strong>的空间，靠不同指令和控制信号区分：</p>
+          <table>
+            <thead><tr><th>空间</th><th>地址范围</th><th>访问指令</th><th>控制信号</th><th>本课对应</th></tr></thead>
+            <tbody>
+              <tr><td>程序存储器 ROM</td><td>0000H~FFFFH（64KB）</td><td>MOVC（查表/取指）</td><td>PSEN</td><td>放代码和常数表</td></tr>
+              <tr><td>片外数据存储器 RAM</td><td>0000H~FFFFH（64KB）</td><td>MOVX</td><td>RD(P3.7)/WR(P3.6)</td><td>本课 6264 占 0x0000~0x1FFF</td></tr>
+              <tr><td>片内 RAM/SFR</td><td>00H~FFH</td><td>MOV</td><td>无（片内）</td><td>工作寄存器/位寻址区/通用RAM/SFR</td></tr>
+            </tbody>
+          </table>
+          <p>所以 ROM 的 0x0000 和外扩 RAM 的 0x0000<strong>地址相同但指的是两个完全不同的物理单元</strong>：CPU 取指用 MOVC 拉 PSEN，读外 RAM 用 MOVX 拉 RD——信号不冲突，这就是「哈佛结构」的精髓。<strong>DPTR</strong> 是唯一的 16 位地址指针（DPH+DPL，地址 0x83/0x82），MOVX 访问外 RAM、MOVC 查表都靠它装 16 位地址。教材指令速查三类：<span class="inline-code">MOV</span>=片内传送、<span class="inline-code">MOVX</span>=片外 RAM/IO 传送、<span class="inline-code">MOVC</span>=ROM 查表（如 <span class="inline-code">MOVC A,@A+DPTR</span> 查 LED 段码表）。</p>
+          <p><strong>时序落点（教材经典波形）</strong>：51 每个机器周期 ALE 自动输出<strong>两拍正脉冲</strong>——第一拍在 P0 送出低 8 位地址时把它锁进 373，第二拍是参考；ALE 频率固定为晶振的 1/6（11.0592MHz 下约 1.843MHz），所以 373 的锁存节奏完全由硬件保证，软件不用管。这也是「P0 分时复用」在波形图上的直观体现：同一组引脚上先出现地址低字节、再出现数据，中间被 ALE 下降沿切开。</p>
+          <blockquote>记忆点：P0 一肩二任——先送低8位地址、靠 ALE 下降沿让373锁存，再腾出来传数据；P2 固定出高8位地址不用锁存；138 把高位地址译成8路CE、给每颗芯片切8KB地盘；C 里 xdata 变量编译成 MOVX、自动跑总线时序，记得加 volatile；ROM/外RAM/片内是三个独立64KB空间，靠 MOVC(PSEN)/MOVX(RD/WR)/MOV 区分，DPTR 是16位地址指针。</blockquote>
+        </section>
+
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <table>
+            <thead>
+              <tr><th>6264 引脚</th><th>接 51</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>A0~A12（13 根）</td><td>373 输出 Q0~Q7 + P2.0~P2.4</td><td>地址线：低 8 位经锁存，高 5 位直接 P2</td></tr>
+              <tr><td>D0~D7</td><td>P0.0~P0.7</td><td>数据线（分时复用）</td></tr>
+              <tr><td>CE（片选）</td><td>74LS138 的 Y0</td><td>低电平有效：地址 0x0000~0x1FFF 时选中</td></tr>
+              <tr><td>OE（输出使能）</td><td>RD（P3.7）</td><td>读信号</td></tr>
+              <tr><td>WE（写使能）</td><td>WR（P3.6）</td><td>写信号</td></tr>
+              <tr><td>VCC/GND</td><td>+5V / GND</td><td>SRAM 供电</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么地址线分两路</strong>：6264 需要 13 根地址线，51 只有 P0 的 8 根（被数据复用）+ P2 的 8 根。低 8 位地址从 373 锁存器输出接 A0~A7，P2.0~P2.4 直接接 A8~A12——这就是「锁存」在硬件上的落地。</p>
+          <div class="tip-warn mt-4"><span class="tip-label">避坑</span>
+            仿真（Proteus）里跑这个电路时，SRAM 芯片的 CE 千万别直接接地：接地 = 片选常选，读写正常但地址空间全被它占死，再挂别的器件会冲突。教材实验普遍用 138 译码，也是为了让「片选逻辑」成为可考察的知识点。</div>
+        </section>
+
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p>示例 1：xdata 读写自检；示例 2：地址直接访问。</p>
+          <p><strong>示例 1：8KB 片外 RAM 全量读写自检</strong></p>
+          <pre><code class="language-c">/* 片外 RAM 自检：对 8KB 空间写 0x55/0xAA 再读回校验 */
+#include "reg52.h"
+#include &lt;stdio.h&gt;
+
+/* 声明一个 8KB 的片外数组：编译器把它放在 xdata 空间 */
+unsigned char xdata ext_ram[8192];
+
+void uart_init(void);   /* 串口初始化（沿用 uart 课的代码） */
+
+void main(void)
+{
+    unsigned int i;
+    unsigned char err = 0;
+
+    uart_init();
+
+    /* 1. 全片写入 0x55 */
+    for (i = 0; i &lt; 8192; i++) ext_ram[i] = 0x55;
+
+    /* 2. 读回校验 */
+    for (i = 0; i &lt; 8192; i++) {
+        if (ext_ram[i] != 0x55) { err++; }
+    }
+
+    /* 3. 再写 0xAA 校验一遍 */
+    for (i = 0; i &lt; 8192; i++) ext_ram[i] = 0xAA;
+    for (i = 0; i &lt; 8192; i++) {
+        if (ext_ram[i] != 0xAA) { err++; }
+    }
+
+    if (err == 0)
+        printf("SRAM 8KB test OK\r\n");
+    else
+        printf("SRAM test FAIL: %u errors\r\n", err);
+
+    while (1);
+}</code></pre>
+          <p><strong>示例 2：用指针直接访问指定地址（理解地址映射）</strong></p>
+          <pre><code class="language-c">/* 直接用地址访问：0x0000 和 0x1FFF 是 6264 的首末单元 */
+#include "reg52.h"
+
+void main(void)
+{
+    /* volatile：防止编译器把重复访问优化掉 */
+    volatile unsigned char xdata *p;
+    unsigned char val;
+
+    p = (volatile unsigned char xdata *)0x0000;
+    *p = 0x3C;              /* 写首单元 */
+    val = *p;               /* 读回 */
+
+    p = (volatile unsigned char xdata *)0x1FFF;
+    *p = 0x5A;              /* 写末单元 */
+
+    while (1);
+}</code></pre>
+        </section>
+
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第一段：xdata 数组声明发生了什么</h3>
+          <p><span class="inline-code">unsigned char xdata ext_ram[8192];</span> 告诉编译器：这个数组放在<strong>片外 RAM</strong>。编译器生成访问代码时不用普通 MOV 指令，改用 <span class="inline-code">MOVX</span>（MOV external）——这条指令就是触发「P2 出高地址、P0 出低地址、373 锁存、RD/WR 读写」整个时序的起点。<strong>为什么 8192 正好</strong>：6264 容量 8KB = 8192 字节，数组大小 = 芯片容量。</p>
+
+          <h3>第二段：为什么校验用两种数据</h3>
+          <p>先写 0x55（01010101）再写 0xAA（10101010）：<strong>两个互为反码</strong>，能暴露数据线短路、地址线粘连、单元坏块等硬件问题（如某位恒 0 会在 0x55 校验时被发现、恒 1 会在 0xAA 时被发现）。自检程序是「扩展芯片验证」的标准动作——焊接/布线后第一件事。</p>
+
+          <h3>第三段：volatile 的作用</h3>
+          <p><span class="inline-code">volatile</span> 告诉编译器「这个地址每次都要真实访问，别优化」。<strong>为什么需要</strong>：编译器可能认为「刚写的值又读回来没意义」而删掉读操作——但我们要的正是「验证硬件真能读」。volatile 是访问外设寄存器/扩展存储器的必需品（对应教材「易变性」知识点）。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-demo">七、现象演示与验证</h2>
+          <ul>
+            <li><strong>自检通过</strong>：串口打印 <span class="inline-code">SRAM 8KB test OK</span>。</li>
+            <li><strong>硬件故障模拟</strong>：拔掉 6264 或断开某根地址线，打印 <span class="inline-code">FAIL: xxx errors</span>。</li>
+          </ul>
+          <p><strong>验证方法：</strong></p>
+          <ol>
+            <li>在 Keil 调试器 Memory 窗口输入地址 0x0000，写入 0x55，单步后在 Watch 看 ext_ram[0]——验证内存窗口能直接看片外 RAM。</li>
+            <li>把数组大小改成 100（远小于 8KB），程序正常——验证「只用了 6264 的一部分地址也没问题」。</li>
+            <li>断开 74LS138 的 Y0 输出（CE 悬空），自检全失败——理解片选断开的后果。</li>
+          </ol>
+        </section>
+
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>自检全失败</td><td>CE 没接 / 373 锁存方向接反 / 供电缺失</td><td>核对 138 Y0 → CE；373 的 D/Q 方向；芯片 VCC</td></tr>
+              <tr><td>个别字节读写错</td><td>某根地址线虚焊 / 数据线短路</td><td>按 0x55/0xAA 校验结果定位到具体位</td></tr>
+              <tr><td>访问卡死（仿真）</td><td>WR/RD 没接对，或 xdata 空间溢出</td><td>检查 WR=P3.6、RD=P3.7；确认数组大小 ≤8KB</td></tr>
+              <tr><td>编译报 xdata 空间不足</td><td>Keil 没配置片外 RAM 范围</td><td>Target 选项里 Memory Model 选 Large、XRAM 填 0x0000-0x1FFF</td></tr>
+              <tr><td>与串口/LCD 冲突</td><td>别的器件也占用了 0x0000 区段</td><td>调整 138 的接线把器件分到不同 Y 区段</td></tr>
+              <tr><td>上电后内容随机</td><td>SRAM 掉电丢失（正常特性）</td><td>需要保持数据用 EEPROM（mcu51-i2c-eeprom.html）</td></tr>
+              <tr><td>数组访问速度慢</td><td>MOVX 访问片外确实比片内慢</td><td>高频数据放片内 data；大数据放 xdata 按需搬运</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（必做）</strong>：把自检程序改成「随机地址抽查 100 次」（用随机数算地址），体会全量 vs 抽样校验的取舍。</p>
+          <p><strong>练习 2</strong>：在 138 的 Y1 上再挂一片 6264（地址 0x2000~0x3FFF），把数组拆成两段读写——验证译码分区。</p>
+          <p><strong>练习 3（进阶）</strong>：Proteus 里画完整扩展电路（51 + 373 + 138 + 6264），仿真运行自检——把原理图能力（proteus-basics.html）用起来。</p>
+          <p><strong>延伸学习</strong>：片外 RAM 会扩展了，下一课学 <a href="mcu51-dac.html">DAC0832 模拟量输出</a>——同样的总线扩展技术，这次把数字量变成真实电压。</p>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="mcu51-adc.html" class="btn btn-outline btn-sm">← 上一篇：ADC0832 模拟采集</a>
+          <a href="mcu51-dac.html" class="btn btn-outline btn-sm">下一篇：DAC0832 模拟量输出 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - BLE 低功耗蓝牙与 GATT</title>
+  <meta name="description" content="ESP32 BLE 零基础教程：经典蓝牙 vs BLE、广播与连接、GATT 服务/特征值、BLE UART 透传，手机 App 用 nRF Connect 与 ESP32 通信。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link active" aria-current="page">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>BLE 低功耗蓝牙与 GATT</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：ESP32</span>
+          <span class="badge badge-orange">进阶</span>
+          <span class="badge badge-gray">更新：2026-10-25</span>
+        </div>
+
+        <p class="text-secondary mb-6">上一课用经典蓝牙（SPP）实现了串口透传。但手环、温湿度计、门锁……现代 IoT 设备几乎都用 <strong>BLE（低功耗蓝牙）</strong>：连一次电能用半年。本课讲透 BLE 的广播/连接模型和 GATT 数据模型，用 ESP32 做个「BLE UART 透传」，手机 App 和开发板互发文字——这是蓝牙遥控器的 BLE 版基础。</p>
+
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>分清经典蓝牙（SPP）与 BLE 的差别，知道什么时候用哪个。</li>
+            <li>说出 GATT 模型：服务（Service）→ 特征（Characteristic）→ UUID，数据怎么组织。</li>
+            <li>用 nRF Connect 手机 App 连接 ESP32，双向收发字符串。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识（对应学习路线阶段 5）：</strong></p>
+          <ul>
+            <li>经典蓝牙（esp32-bluetooth.html）：已有「手机 ↔ ESP32」配对通信经验。</li>
+            <li>串口（esp32-bluetooth.html / stm32-usart.html）：透传 = 无线版串口。</li>
+            <li>本课与 I2C（esp32-i2c.html）无依赖，可并行学。</li>
+          </ul>
+          <p><strong>本课会出现的新名词：</strong>BLE、广播（Advertising）、连接（Connection）、GATT、Service、Characteristic、UUID、Notify、透传、nRF Connect。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. 经典蓝牙 vs BLE：省电是头等大事</h3>
+          <p><strong>生活类比</strong>：经典蓝牙像「打电话」——建立连接后一直保持通话（持续占用链路）；BLE 像「发微信」——平时不连接、不吭声，只在有事时广播/收发一下，其余时间睡觉。</p>
+          <p><strong>一句话定义</strong>：经典蓝牙（SPP）持续连接、速率高（可达 1~2Mbps）、适合音频和连续数据传输；BLE 以「极低功耗」为核心，支持广播发现、按需连接、几十 ms 完成一次小数据收发，一颗纽扣电池能用数月——IoT 传感器首选。</p>
+          <p><strong>例子</strong>：蓝牙音箱用经典蓝牙（连续音频流）；温湿度计用 BLE（每 10 分钟报一次数）。ESP32 两种都支持。</p>
+
+          <h3>2. 广播与连接：先「吆喝」再「握手」</h3>
+          <p><strong>一句话定义</strong>：BLE 设备默认 <strong>广播</strong>：周期性在 37/38/39 三个信道发出自己的名称和能力（如「MyBLE_Device」）；手机扫描到后发起 <strong>连接</strong>，建立后进入低功耗连接状态（两设备按约定间隔醒来交换数据）。</p>
+          <p><strong>例子</strong>：nRF Connect 里能搜到「ESP32_BLE_UART」这个名字——那是广播包里带的服务名；点击 connect 即建立连接。</p>
+
+          <h3>3. GATT：BLE 的数据「图书馆」</h3>
+          <p><strong>生活类比</strong>：GATT 把设备数据组织得像图书馆：<strong>服务</strong>（Service）= 一个书架（如「温度服务」），<strong>特征</strong>（Characteristic）= 书架上的书（如「当前温度」），每本书有唯一编号 <strong>UUID</strong>。手机要读温度，就按「书架号 + 书号」去取。</p>
+          <p><strong>一句话定义</strong>：GATT（通用属性协议）定义 BLE 数据的组织方式：设备暴露若干 <strong>Service</strong>，每个 Service 含若干 <strong>Characteristic</strong>（最小数据单元），每个都用 16 位或 128 位 <strong>UUID</strong> 标识。读、写、订阅（Notify）都作用在 Characteristic 上。</p>
+          <p><strong>例子</strong>：本课用的 Nordic UART 服务（NUS，服务 UUID 6E400001-…）里有两个特征：写通道 6E400002（手机→设备发数据）、Notify 通道 6E400003（设备→手机推数据）。</p>
+
+          <h3>4. Notify：设备主动「推送」而不是等手机来问</h3>
+          <p><strong>一句话定义</strong>：Notify（通知）让设备在数据变化时主动把值推给手机（手机先订阅该特征）。相比手机轮询读，Notify 实时且省电——传感器上报的标准姿势。</p>
+          <p><strong>例子</strong>：设备每 1 秒通过 Notify 推一次温湿度，手机 App 实时刷新，无需请求。</p>
+        </section>
+
+          <h3>5. GAP 与 GATT：BLE 的两员大将</h3>
+          <p><strong>生活类比</strong>：GAP 像「门口保安」——负责谁能靠近、怎么广播、怎么配对进门；GATT 像「图书馆管理员」——进门之后，数据按书架/书号怎么取。一个管「连上之前」，一个管「连上之后」。</p>
+          <p><strong>一句话定义</strong>：BLE 两大核心协议——<strong>GAP（通用访问协议）</strong>管广播、扫描、连接、断开（决定设备能不能被发现、能不能连上）；<strong>GATT（通用属性协议）</strong>管连上之后的数据组织（Service/Characteristic/UUID，决定数据怎么读写）。本课「startAdvertising」是 GAP，「createService/createCharacteristic」是 GATT。</p>
+          <p><strong>例子</strong>：手机搜不到设备，问题出在 GAP（广播没开/权限）；能连上但读写不到数据，问题出在 GATT（UUID/属性错）——排障先分清是 GAP 层还是 GATT 层。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-principle">三、原理介绍：BLE UART 透传的数据流</h2>
+          <p>BLE（低功耗蓝牙）和经典蓝牙是两套完全不同的协议：经典蓝牙像「一直挂电话」，BLE 像「平时睡觉、有事发个微信」。理解它「广播→连接→按 GATT 表收发」的模型，才能搞懂为什么需要服务/特征值/UUID 这套绕口令。</p>
+          <p>一次 BLE 透传的链路：ESP32 广播 → 手机扫描连接 → 手机读 GATT 表找到服务和特征 → 写特征上行 / Notify 特征下行。</p>
+
+          <h3>原理 1：BLE 为什么省电——广播与连接间隔</h3>
+          <p>未连接时，BLE 设备每隔几百 ms 在 3 个广播信道上喊一声自己的名字，其余时间全睡——平均电流微安级。一旦手机连接，双方约定一个<strong>连接间隔</strong>（比如每 50ms 一起醒来交换一次数据），其余时间依然睡觉。对比经典蓝牙 SPP 一直保持链路通电，这就是「一颗纽扣电池用半年」的物理基础。<strong>代价</strong>：数据是小包、有延迟——所以 BLE 传不了音频，只适合传感器上报和开关指令。</p>
+
+          <h3>原理 2：GATT 分层——Server / Service / Characteristic / UUID</h3>
+          <p>连上之后，数据怎么组织由 GATT 协议规定，分四层：</p>
+          <ul>
+            <li><strong>Server（设备）</strong>：ESP32 整台设备就是一个 GATT Server。</li>
+            <li><strong>Service（服务）</strong>：一组相关功能的集合，本课用 Nordic UART Service（UUID 6E400001）。</li>
+            <li><strong>Characteristic（特征值）</strong>：服务里的具体数据点，本课两个：6E400002（手机→设备写）、6E400003（设备→手机 Notify）。</li>
+            <li><strong>UUID</strong>：每个 Service/Characteristic 的唯一编号——手机靠 UUID 找到「往哪个特征写、从哪个特征收」。</li>
+          </ul>
+          <p>nRF Connect 里你看到的就是这棵树：一个服务展开两个特征值。<strong>注意</strong>：0xFFE0/0xFFE1 是 HM-10 模块用的另一组短 UUID，不是 NUS——别混淆。</p>
+
+          <h3>原理 3：写回调与 Notify——手机怎么收设备的数据</h3>
+          <p>两个方向走两套机制：<strong>手机→设备</strong>是「写」——手机往 6E400002 写字节，ESP32 注册的 <span class="inline-code">onWrite</span> 回调被自动调用，在回调里读值打印。<strong>设备→手机</strong>是「Notify（通知）」——ESP32 调 <span class="inline-code">setValue + notify()</span> 把值推出去，但前提是<strong>手机先往该特征的 CCCD 描述符写 1 订阅</strong>（没订阅，notify 发了手机也收不到——这就是 nRF Connect 里要先点那个「↓」订阅的原因）。</p>
+          <blockquote>记忆点：BLE=平时睡、按连接间隔醒来交换（微安级）；GATT 四层=Server→Service→Characteristic→UUID；上行=手机写特征（触发 onWrite 回调）；下行=Notify 推送，手机必须先订阅 CCCD；小包低延迟，不适合音频。</blockquote>
+        </section>
+
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <p>BLE 在芯片内部射频，<strong>无需接线</strong>。本课硬件只需：</p>
+          <table>
+            <thead>
+              <tr><th>设备</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>ESP32 开发板</td><td>USB 供电 + 串口监控</td></tr>
+              <tr><td>手机</td><td>安装 nRF Connect（Android/iOS 均有）</td></tr>
+              <tr><td>（可选）LED</td><td>GPIO2 板载 LED，验证手机指令控制</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么演示不需要任何外设</strong>：BLE 是无线射频，天线上板载——「串口监控 + 手机 App」就是全部装备。手机和 ESP32 距离 10 米内即可。</p>
+          <div class="tip-warn mt-4"><span class="tip-label">避坑</span>
+            某些手机 App 需要位置权限才能扫描 BLE（Android 上 BLE 扫描归「位置」权限管）——nRF Connect 首次使用会弹权限，全部允许，否则扫描不到任何设备。</div>
+        </section>
+
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p>需要安装 <span class="inline-code">ESP32 BLE Arduino</span> 库（库管理器搜索安装）。示例：BLE UART 透传 + 指令控灯。</p>
+          <p><strong>BLE UART 透传 + LED 控制</strong></p>
+          <pre><code class="language-cpp">/* BLE UART：手机 ↔ ESP32 双向收发；收到 "ON"/"OFF" 控制板载 LED */
+#include &lt;BLEDevice.h&gt;
+#include &lt;BLEServer.h&gt;
+#include &lt;BLEUtils.h&gt;
+#include &lt;BLE2902.h&gt;
+
+#define SERVICE_UUID        "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"  // Nordic UART Service
+#define CHAR_RX_UUID        "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"  // 手机→设备（写）
+#define CHAR_TX_UUID        "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"  // 设备→手机（Notify）
+
+BLECharacteristic *pTxChar;
+bool deviceConnected = false;
+
+/* 连接状态回调 */
+class MyServerCallbacks : public BLEServerCallbacks {
+  void onConnect(BLEServer *s)    { deviceConnected = true;  Serial.println("Connected"); }
+  void onDisconnect(BLEServer *s) { deviceConnected = false; Serial.println("Disconnected");
+                                     BLEDevice::startAdvertising();  /* 断开后重新广播 */
+                                   }
+};
+
+/* 手机写数据回调 */
+class MyCallbacks : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *pChar) {
+    std::string value = pChar-&gt;getValue();
+    if (value.length() &gt; 0) {
+      Serial.print("RX: ");
+      Serial.println(value.c_str());
+
+      /* 指令控制：收到 ON/OFF 翻转板载 LED */
+      if (value == "ON")  digitalWrite(2, HIGH);
+      if (value == "OFF") digitalWrite(2, LOW);
+    }
+  }
+};
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(2, OUTPUT);
+
+  /* 初始化 BLE */
+  BLEDevice::init("ESP32_BLE_UART");           // 广播名称
+  BLEServer *server = BLEDevice::createServer();
+  server-&gt;setCallbacks(new MyServerCallbacks());
+
+  /* 建服务 + 两个特征 */
+  BLEService *service = server-&gt;createService(SERVICE_UUID);
+
+  pTxChar = service-&gt;createCharacteristic(
+              CHAR_TX_UUID, BLECharacteristic::PROPERTY_NOTIFY);
+  pTxChar-&gt;addDescriptor(new BLE2902());        // Notify 必须加 2902 描述符
+
+  BLECharacteristic *pRxChar = service-&gt;createCharacteristic(
+              CHAR_RX_UUID, BLECharacteristic::PROPERTY_WRITE);
+  pRxChar-&gt;setCallbacks(new MyCallbacks());
+
+  service-&gt;start();
+  BLEDevice::startAdvertising();
+  Serial.println("BLE UART ready");
+}
+
+void loop() {
+  /* 设备→手机：每 2 秒 Notify 推送一次时间戳 */
+  if (deviceConnected) {
+    char buf[32];
+    sprintf(buf, "tick=%lu", (unsigned long)millis());
+    pTxChar-&gt;setValue(buf);
+    pTxChar-&gt;notify();                          // 推送（需手机先订阅）
+  }
+  delay(2000);
+}</code></pre>
+          <p><strong>第二个实例：再加一个「读特征」，手机随时读 ESP32 状态</strong>——主程序只有写/Notify 两个特征，这个片段演示如何补一个手机主动读的状态特征（加在主程序建服务之后、loop 之前）：</p>
+          <pre><code class="language-cpp">/* BLE 变体：新增只读特征（手机读它拿设备状态） */
+BLECharacteristic *pStatusChar;
+
+/* 在主程序 pService-&gt;createCharacteristic(...) 之后加： */
+pStatusChar = pService-&gt;createCharacteristic(
+      BLEUUID((uint16_t)0x2A18),                 // 标准特征 UUID，可自定
+      BLECharacteristic::PROPERTY_READ);          // 只读属性
+pStatusChar-&gt;setValue("ESP32 alive");
+
+/* 在 loop() 的 notify 旁，每次循环刷新读数： */
+char st[24];
+sprintf(st, "uptime=%lus", (unsigned long)(millis()/1000));
+pStatusChar-&gt;setValue(st);
+/* 手机在 nRF Connect 里点这个特征的 Read，就能看到已运行秒数 */</code></pre>
+        </section>
+
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第一段：UUID 与三个组件的关系</h3>
+          <p><span class="inline-code">SERVICE_UUID</span> 标识整个服务；<span class="inline-code">CHAR_RX_UUID</span> 是手机写给设备的「收件箱」；<span class="inline-code">CHAR_TX_UUID</span> 是设备推给手机的「发件箱」。<strong>为什么用这么长的 UUID</strong>：128 位 UUID 全球唯一、避免和标准服务冲突；16 位短 UUID（如 0xFFE1）是标准预分配。<strong>规则</strong>：一个服务里可以有好几个特征，各管一件事——收发分两个特征是 BLE UART 的惯例。</p>
+
+          <h3>第二段：setValue 与 notify 的推送链路</h3>
+          <p><span class="inline-code">pTxChar-&gt;setValue(buf)</span> 把字符串放进特征值缓存，<span class="inline-code">notify()</span> 把它广播给已订阅的手机。<strong>为什么必须加 BLE2902 描述符</strong>：Notify 属性要求配 CCCD（客户端特征配置描述符，UUID 0x2902），没有它手机无法完成「订阅」操作——这是新手最常见的「能连上但收不到通知」的原因。</p>
+
+          <h3>第三段：onWrite 回调与字符串比较</h3>
+          <p>手机写数据时 <span class="inline-code">onWrite</span> 被调用，<span class="inline-code">getValue()</span> 取出字节流。<strong>为什么用 == 比较而不是逐个字节</strong>：<span class="inline-code">std::string</span> 直接支持内容比较，代码最简洁。<strong>为什么 Serial.print 收尾要 println</strong>：方便串口监视器看完整一行。指令解析从这里扩展：改成 switch 多指令，就是遥控器协议。</p>
+
+          <h3>第四段：断开重连与重广播</h3>
+          <p><span class="inline-code">onDisconnect</span> 里调用 <span class="inline-code">BLEDevice::startAdvertising()</span>——BLE 设备连接断开后不会自动回到广播状态，必须手动重启广播，否则手机再也扫不到它。<strong>这是从 demo 到产品的关键细节</strong>：任何断开都要处理重连逻辑。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-demo">七、现象演示与验证</h2>
+          <ul>
+            <li><strong>发现</strong>：nRF Connect 扫描到 <span class="inline-code">ESP32_BLE_UART</span>，点 Connect 显示 Connected。</li>
+            <li><strong>上行</strong>：在 0x6E400002 特征写 <span class="inline-code">hello</span>，串口打印 RX: hello；写 ON/OFF 板载 LED 亮/灭。</li>
+            <li><strong>下行</strong>：订阅 0x6E400003 的 Notify，App 每 2 秒收到 tick=xxxx。</li>
+          </ul>
+          <p><strong>验证方法：</strong></p>
+          <ol>
+            <li>连接状态断开 ESP32 电源再上电——观察 App 端断开提示与重新广播（1~2 秒后又能扫到）。</li>
+            <li>不订阅 Notify 直接看 0x6E400003——读不到推送值，订阅后才出现——理解 CCCD 订阅机制。</li>
+            <li>把 <span class="inline-code">BLEDevice::init("ESP32_BLE_UART")</span> 改成别的名字，App 搜索新名字——验证广播名称由 init 决定。</li>
+          </ol>
+        </section>
+
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>手机扫不到设备</td><td>Android 位置权限没开 / 广播没启动</td><td>开位置权限；确认 startAdvertising 被调用且未被连接占用</td></tr>
+              <tr><td>能连上但收不到 Notify</td><td>特征没加 BLE2902 描述符</td><td>Notify 特征必须 <span class="inline-code">addDescriptor(new BLE2902())</span></td></tr>
+              <tr><td>写数据 App 提示失败</td><td>特征属性没开 WRITE</td><td>createCharacteristic 第二参数加 <span class="inline-code">PROPERTY_WRITE</span></td></tr>
+              <tr><td>断开后再也连不上</td><td>没在 onDisconnect 重启广播</td><td>断开回调里 <span class="inline-code">BLEDevice::startAdvertising()</span></td></tr>
+              <tr><td>串口收到乱码</td><td>手机发的不是纯 ASCII / 波特率不匹配</td><td>确认 115200；中文 UTF-8 在 Serial Monitor 选 UTF-8 编码</td></tr>
+              <tr><td>编译报 BLE 库找不到</td><td>ESP32 BLE Arduino 库没装</td><td>库管理器安装 <span class="inline-code">ESP32 BLE Arduino</span></td></tr>
+              <tr><td>两个 ESP32 互相干扰</td><td>广播名称相同</td><td>改 init 名称区分设备；或用 MAC 尾号做后缀</td></tr>
+              <tr><td>App 显示「GATT 错误」</td><td>服务/特征 UUID 与代码不一致</td><td>核对三个 UUID 与代码完全一致</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（必做）</strong>：把「ON/OFF」指令升级为「数值调光」：手机发 <span class="inline-code">D:128</span>，ESP32 解析出占空比控制 LED 亮度（结合 esp32-pwm.html）。</p>
+          <p><strong>练习 2</strong>：在 0x6E400003 Notify 通道上每 5 秒推送一次 AHT20 温湿度（复用 esp32-i2c.html 的读取代码）——做「手机远程温度计」。</p>
+          <p><strong>练习 3（进阶）</strong>：把服务 UUID 换成 HM-10 透传模块常用的短 UUID 0xFFE0（写特征 0xFFE1），观察 nRF Connect 里它不再显示「Nordic UART Service」友好名——体会「标准 UUID 被工具内置识别」的好处。</p>
+          <p><strong>延伸学习</strong>：BLE 能收发数据了，下一课学 <a href="esp32-freertos.html">FreeRTOS 多任务</a>——BLE 回调 + 传感器采集 + 显示三件事同时跑，需要任务调度。</p>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="esp32-i2c.html" class="btn btn-outline btn-sm">← 上一篇：I2C 通信与 OLED 显示</a>
+          <a href="esp32-freertos.html" class="btn btn-outline btn-sm">下一篇：FreeRTOS 多任务 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

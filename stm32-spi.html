@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - SPI 通信与 W25Q64 Flash 存储</title>
+  <meta name="description" content="STM32 SPI 零基础教程：SPI 四线协议、主从模式、CPOL/CPHA、HAL_SPI_Transmit/Receive，读写 W25Q64 Flash（读 ID、页编程、扇区擦除）。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link active" aria-current="page">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>SPI 通信与 W25Q64 Flash 存储</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：STM32</span>
+          <span class="badge badge-orange">进阶</span>
+          <span class="badge badge-gray">更新：2026-10-25</span>
+        </div>
+
+        <p class="text-secondary mb-6">I2C 用 2 根线、SPI 用 4 根线，但速度更快、一次传更多数据——教材把 SPI 叫「高速串行总线」。本课以 W25Q64 Flash 芯片（8Mbit，开发板标配）为例，讲透四线协议、主从角色、时序模式，并写出读 ID、页写、扇区擦除、读数据的完整代码，学会给单片机加一块「掉电不丢的大仓库」。</p>
+
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>说清 SPI 四根线（SCK/MOSI/MISO/CS）各干什么，主从模式怎么分工。</li>
+            <li>理解 CPOL/CPHA 与时序模式（Mode 0~3），能看懂芯片手册的时序图。</li>
+            <li>用 HAL 读写 W25Q64：读 ID 验证通信、写入并读回数据。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识（对应学习路线阶段 4）：</strong></p>
+          <ul>
+            <li>寄存器与地址（stm32-register.html）：SPI 外设也在固定地址上，只是 HAL 帮你封装了。</li>
+            <li>时钟配置（stm32-clock.html）：SPI1 挂在 APB2，SPI2/3 挂在 APB1。</li>
+            <li>I2C 概念（stm32-i2c-oled.html，可选）：同为串行总线，对照着学更容易。</li>
+          </ul>
+          <p><strong>本课会出现的新名词：</strong>SPI、SCK/MOSI/MISO/CS、主从模式、CPOL/CPHA、全双工、W25Q64、页编程、扇区擦除、指令集、状态寄存器。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. SPI 的 4 根线：分工明确的快递通道</h3>
+          <p><strong>生活类比</strong>：SPI 像一套人工快递流程：<strong>CS</strong>（片选）= 给哪个收件人派单（拉低表示「这单是你的」）；<strong>SCK</strong>（时钟）= 收发双方的节拍器（每跳一次传一位）；<strong>MOSI</strong> = 主机→从机方向的车道（Master Out Slave In）；<strong>MISO</strong> = 从机→主机方向的车道。</p>
+          <p><strong>一句话定义</strong>：SPI（串行外设接口）是主从式全双工串行总线：主机控制时钟 SCK 和片选 CS，通过 MOSI 发数据、MISO 收数据，四根线同时工作，速度远高于 I2C（F103 SPI 可达 18MHz）。</p>
+          <p><strong>例子</strong>：给 W25Q64 发「读 ID」命令：CS 拉低选中它 → SCK 打节拍 → MOSI 发命令字节 → MISO 回读 2 个字节 ID → CS 拉高结束。</p>
+
+          <h3>2. 主从模式与片选 CS</h3>
+          <p><strong>生活类比</strong>：总线上只有一个「发号施令的老板」（主机=STM32）和很多「听令的员工」（从机=Flash、SD 卡等），老板喊谁（CS 拉低谁）谁应答，其它员工保持沉默（MISO 高阻）。</p>
+          <p><strong>一句话定义</strong>：SPI 是主从结构，时钟永远由主机产生；每个从机一根独立 CS 线，<strong>CS 低电平 = 被选中</strong>。一根 SPI 总线可挂多个从机（各一根 CS），但同一时刻只能选中一个。</p>
+          <p><strong>例子</strong>：W25Q64 的 CS 接 PA4，SD 卡的 CS 接 PA3——两个都挂在 SPI1 上，靠 CS 区分谁说话。</p>
+
+          <h3>3. CPOL/CPHA：时钟的「性格」与时序模式</h3>
+          <p><strong>生活类比</strong>：同一个节拍器，有的器件喜欢「高电平休息」（空闲高）、有的喜欢「低电平休息」（空闲低）；数据采样有的在上升沿、有的在下降沿。CPOL（时钟极性）= 空闲时 SCK 是高还是低；CPHA（时钟相位）= 数据在哪个边沿采样。</p>
+          <p><strong>一句话定义</strong>：<strong>CPOL=0</strong> 空闲低、<strong>CPOL=1</strong> 空闲高；<strong>CPHA=0</strong> 第一个边沿采样、<strong>CPHA=1</strong> 第二个边沿采样。组合出 <strong>Mode 0~3</strong>。W25Q64 支持 Mode 0 和 Mode 3（常用 Mode 0：CPOL=0、CPHA=0）。</p>
+          <p><strong>例子</strong>：CubeMX 里 SPI 配置页面选 Mode 0（CPOL Low、CPHA 1Edge）；配错模式，读回来的数据全是 0xFF 或错位——这是 SPI 新手第一大坑。</p>
+
+          <h3>4. W25Q64 的组织结构：256 字节一页、4096 字节一扇区</h3>
+          <p><strong>生活类比</strong>：Flash 像一本「只能整块擦、不能单个改字」的涂改本：写之前必须把那一块擦成空白（全 0xFF），而且擦的最小单位是扇区（4KB），不是字节。</p>
+          <p><strong>一句话定义</strong>：W25Q64 = 64Mbit = 8MB 的 SPI Nor Flash。<strong>页</strong>：256 字节（一次最多写 256 字节，页编程）；<strong>扇区</strong>：4KB（擦除的最小单位）；<strong>块</strong>：32KB/64KB。写数据前必须先擦除所在扇区，否则写不进去。</p>
+          <p><strong>例子</strong>：往地址 0x1000 写数据 → 先擦除 0x1000 所在的扇区（地址 0x1000~0x1FFF）→ 再发「页编程」命令写入。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-principle">三、原理介绍：W25Q64 的一条完整指令流程</h2>
+          <p>SPI 比 I2C 快得多，靠的是「一根时钟线同步、两根数据线收发同时进行」。三个机制讲清它。</p>
+          <p><strong>整条链路：</strong>主机拉低 CS 选中 → SCK 打 8 个脉冲 → MOSI 出一位同时 MISO 进一位 → 一个字节收发完成 → 拉 CS 结束。</p>
+
+          <h3>原理 1：四线与同步移位——为什么发一字节必同时收一字节</h3>
+          <p>SPI 有四根线：<strong>SCK 时钟（主机出）、MOSI 主机发、MISO 从机发、CS 片选（低有效）</strong>。主机和从机内部各有一个 8 位移位寄存器，且在 SCK 下<strong>同步串联</strong>成一个 16 位环：主机打一个脉冲，把自己寄存器的一位推到 MOSI，同时把 MISO 的一位拉进自己寄存器。打满 8 个脉冲，双方寄存器恰好交换完一个字节。<strong>所以 SPI 没有单独的「读」操作</strong>——读 ID 本质是边发 0x90 + 哑字节、边借同样的时钟把 MISO 读回来。</p>
+
+          <h3>原理 2：CPOL/CPHA——SCL 空闲电平和采样沿怎么定</h3>
+          <p>「什么时候采样」有两种自由：SCK 空闲是高还是低（CPOL）、在第一个沿还是第二个沿采样（CPHA），组合成 4 种模式。两端必须一致。W25Q64 用最常见的 <strong>Mode0（CPOL=0、CPHA=0）</strong>：SCK 空闲为低，第一个下降沿移位、上升沿采样。模式不匹配，读回来的 ID 全错——这是 SPI 调不通第一大原因。</p>
+          <p><strong>教材标准四模式对照表（野火/SPI 时序图）：</strong></p>
+          <table>
+            <thead><tr><th>模式</th><th>CPOL</th><th>CPHA</th><th>SCK 空闲电平</th><th>数据采样沿</th><th>移位沿</th></tr></thead>
+            <tbody>
+              <tr><td>Mode 0</td><td>0</td><td>0</td><td>低</td><td>上升沿</td><td>下降沿</td></tr>
+              <tr><td>Mode 1</td><td>0</td><td>1</td><td>低</td><td>下降沿</td><td>上升沿</td></tr>
+              <tr><td>Mode 2</td><td>1</td><td>0</td><td>高</td><td>下降沿</td><td>上升沿</td></tr>
+              <tr><td>Mode 3</td><td>1</td><td>1</td><td>高</td><td>上升沿</td><td>下降沿</td></tr>
+            </tbody>
+          </table>
+          <p><strong>总线归属决定最高速度：</strong>SPI1 挂在 <strong>APB2(72MHz)</strong>，最高 SCK = fPCLK2/2 = 36MHz；SPI2/SPI3 挂在 <strong>APB1(36MHz)</strong>，最高 SCK = fPCLK1/2 = 18MHz——所以同样是 SPI，用 SPI1 能跑得更快。W25Q64 手册上限约 50/80MHz，F103 这边受总线限制，实际分频选 fPCLK/4 左右（18MHz）最稳。</p>
+
+          <h3>原理 3：W25Q64 命令流——为什么必须写使能+查忙</h3>
+          <p>读器件 ID 的一条指令：CS 拉低 → 发 0x90 → 发 3 字节地址 → MISO 返回厂商 ID(0xEF) 与器件 ID → CS 拉高。写还要多两步：</p>
+          <ol>
+            <li>先 <strong>写使能 0x06</strong>（Flash 默认禁写，防止误改）。</li>
+            <li>发页编程 0x02 + 24 位地址 + 数据，然后 <strong>读状态寄存器 0x05 查 BUSY 位</strong>，等它变 0。</li>
+          </ol>
+          <p><strong>为什么必须查忙</strong>：Flash 内部擦/写是慢操作（几 ms），状态机没忙完就发下一条命令，数据必丢。擦除最小单位是扇区 4KB（0x20 命令）。这套「写使能→操作→查忙」是所有 SPI Flash 的固定套路。</p>
+          <blockquote>记忆点：SPI=CS 片选+SCK 时钟+MOSI/MISO 同步移位，发一字节必收一字节；CPOL/CPHA 两端要一致，W25Q64 用 Mode0；W25Q64 套路=写使能 0x06→发指令+地址→查忙 0x05；擦除最小 4KB 扇区。</blockquote>
+        </section>
+
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <p>W25Q64 模块（8 脚）接 STM32 的 SPI1（PA5=SCK、PA6=MISO、PA7=MOSI、PA4=CS，正点原子等开发板的标准接法）：</p>
+          <table>
+            <thead>
+              <tr><th>模块引脚</th><th>单片机引脚</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>CS</td><td>PA4</td><td>片选（软件 GPIO 控制）</td></tr>
+              <tr><td>CLK (SCK)</td><td>PA5</td><td>SPI1_SCK，时钟输出</td></tr>
+              <tr><td>DO (MISO)</td><td>PA6</td><td>SPI1_MISO，芯片→主机</td></tr>
+              <tr><td>DI (MOSI)</td><td>PA7</td><td>SPI1_MOSI，主机→芯片</td></tr>
+              <tr><td>VCC / GND</td><td>3.3V / GND</td><td>W25Q64 是 3.3V 器件，不能接 5V</td></tr>
+              <tr><td>WP、HOLD</td><td>VCC</td><td>写保护与保持，接高电平禁用保护</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么 CS 用普通 GPIO 而不是 SPI 硬件自动控制</strong>：CS 逻辑简单（通信前拉低、结束拉高），用 GPIO 控制更灵活，还能随时选中/释放；硬件 NSS 模式反而容易误触发。这也是教材和开发板例程的常见做法。</p>
+          <p><strong>为什么 W25Q64 必须 3.3V</strong>：W25Q64 是 3.3V 逻辑器件，接 5V 会损坏；STM32 引脚正好 3.3V，无需电平转换——这也是 SPI 接法「直连即可」的原因。</p>
+          <div class="tip-warn mt-4"><span class="tip-label">避坑</span>
+            买模块时注意是「W25Q64」（8MB）还是「W25Q128」（16MB）——容量不同，器件 ID 和扇区规划不同；仿真里 Proteus 的 SPI FLASH 元件型号选对应 W25Q64。</div>
+        </section>
+
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p>CubeMX 配置要点：SPI1 全双工主机、Mode 0（CPOL Low / CPHA 1Edge）、速率 ≤18MHz；PA4 配 GPIO 输出。以下为核心读写代码。</p>
+          <p><strong>示例 1：读取 W25Q64 的厂商与器件 ID（验证通信）</strong></p>
+          <pre><code class="language-c">/* SPI 读写 W25Q64：读 ID 验证通信 */
+#include "main.h"
+
+extern SPI_HandleTypeDef hspi1;
+
+#define W25_CS_LOW()   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET)
+#define W25_CS_HIGH()  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET)
+
+/* 写使能（0x06）：每次写/擦除前必须调用 */
+void w25_write_enable(void)
+{
+    uint8_t cmd = 0x06;
+    W25_CS_LOW();
+    HAL_SPI_Transmit(&amp;hspi1, &amp;cmd, 1, 100);
+    W25_CS_HIGH();
+}
+
+/* 查忙：读状态寄存器（0x05），返回 1=忙 */
+uint8_t w25_busy(void)
+{
+    uint8_t cmd = 0x05, sr = 0xFF;
+    W25_CS_LOW();
+    HAL_SPI_Transmit(&amp;hspi1, &amp;cmd, 1, 100);
+    HAL_SPI_Receive(&amp;hspi1, &amp;sr, 1, 100);  /* 读回状态字节 */
+    W25_CS_HIGH();
+    return sr &amp; 0x01;                /* bit0 = BUSY */
+}
+
+/* 读 ID：返回 16 位（厂商|器件） */
+uint16_t w25_read_id(void)
+{
+    uint8_t cmd[4] = {0x90, 0x00, 0x00, 0x00};  /* 指令 + 3 哑地址 */
+    uint8_t buf[2] = {0, 0};
+    W25_CS_LOW();
+    HAL_SPI_Transmit(&amp;hspi1, cmd, 4, 100);      /* 发指令 + 哑字节 */
+    HAL_SPI_Receive(&amp;hspi1, buf, 2, 100);       /* 读 2 字节 ID */
+    W25_CS_HIGH();
+    return (uint16_t)(buf[0] &lt;&lt; 8 | buf[1]);
+}</code></pre>
+          <p><strong>示例 2：扇区擦除 + 页写 + 随机读（完整写读流程）</strong></p>
+          <pre><code class="language-c">/* 擦除指定扇区（0x20），扇区地址按 4KB 对齐 */
+void w25_erase_sector(uint32_t addr)
+{
+    uint8_t cmd[4] = {0x20,
+                      (addr &gt;&gt; 16) &amp; 0xFF, (addr &gt;&gt; 8) &amp; 0xFF, addr &amp; 0xFF};
+    w25_write_enable();             /* 1. 写使能 */
+    W25_CS_LOW();
+    HAL_SPI_Transmit(&amp;hspi1, cmd, 4, 100);      /* 2. 擦除指令 + 24 位地址 */
+    W25_CS_HIGH();
+    while (w25_busy());             /* 3. 等擦除完成 */
+}
+
+/* 页编程（0x02）：一次最多写 256 字节 */
+void w25_page_program(uint32_t addr, uint8_t *data, uint16_t len)
+{
+    uint8_t cmd[4] = {0x02,
+                      (addr &gt;&gt; 16) &amp; 0xFF, (addr &gt;&gt; 8) &amp; 0xFF, addr &amp; 0xFF};
+    w25_write_enable();
+    W25_CS_LOW();
+    HAL_SPI_Transmit(&amp;hspi1, cmd, 4, 100);
+    HAL_SPI_Transmit(&amp;hspi1, data, len, 100);  /* 写数据 */
+    W25_CS_HIGH();
+    while (w25_busy());
+}
+
+/* 读数据（0x03）：任意地址任意长度 */
+void w25_read_data(uint32_t addr, uint8_t *buf, uint16_t len)
+{
+    uint8_t cmd[4] = {0x03,
+                      (addr &gt;&gt; 16) &amp; 0xFF, (addr &gt;&gt; 8) &amp; 0xFF, addr &amp; 0xFF};
+    W25_CS_LOW();
+    HAL_SPI_Transmit(&amp;hspi1, cmd, 4, 100);
+    HAL_SPI_Receive(&amp;hspi1, buf, len, 100);    /* 读数据 */
+    W25_CS_HIGH();
+}
+
+int main(void)
+{
+    uint8_t wbuf[16] = "McuStudy SPI ok";
+    uint8_t rbuf[16] = {0};
+    HAL_Init();
+    SystemClock_Config();
+    /* MX_GPIO_Init / MX_SPI1_Init 由 CubeMX 生成 */
+
+    uint16_t id = w25_read_id();            /* 应为 0xEF14 左右 */
+    w25_erase_sector(0x0000);               /* 先擦除 0 扇区 */
+    w25_page_program(0x0000, wbuf, 16);     /* 写入 16 字节 */
+    w25_read_data(0x0000, rbuf, 16);        /* 读回验证 */
+    /* rbuf 应与 wbuf 相同，串口打印 "McuStudy SPI ok" */
+    while (1);
+}</code></pre>
+        </section>
+
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第一段：三个基础函数——指令帧的标准结构</h3>
+          <p>每个 W25Q64 命令都是「CS 拉低 → 发指令（可含地址）→ 收发数据 → CS 拉高」。<span class="inline-code">w25_read_id()</span> 里 <span class="inline-code">cmd[4]={0x90,0,0,0}</span> 就是「指令 + 3 个哑地址字节」——<strong>为什么发 0 也要打时钟</strong>：SPI 是同步全双工，主机必须提供时钟芯片才能回数据，发哑字节就是「借时钟」。</p>
+
+          <h3>第二段：写使能与查忙的顺序</h3>
+          <p><span class="inline-code">w25_write_enable()</span> 必须先于任何写/擦操作，因为 W25Q64 上电后默认「写保护」；<span class="inline-code">while (w25_busy());</span> 死等内部操作完成。<strong>为什么不能省</strong>：省了写使能 → 写入静默失败（数据还是 FF）；省了查忙 → 下一次命令撞上内部操作，数据丢失。这两个坑教材反复强调。</p>
+
+          <h3>第三段：24 位地址怎么拆</h3>
+          <p><span class="inline-code">(addr &gt;&gt; 16) &amp; 0xFF</span> 取高 8 位、<span class="inline-code">(addr &gt;&gt; 8) &amp; 0xFF</span> 取中 8 位、<span class="inline-code">addr &amp; 0xFF</span> 取低 8 位。<strong>为什么拆成 3 字节</strong>：W25Q64 最大 8MB 需要 23 位地址（0x000000~0x7FFFFF），SPI 每次只传一字节，所以按 24 位拆开发——这正是位运算课「拆字节」在真实外设上的应用。</p>
+
+          <h3>第四段：erase → program → read 的完整链路</h3>
+          <p>main 里的三步顺序是 Flash 编程的「铁律」：<strong>先擦后写再读</strong>。擦扇区把地址 0x0000~0x0FFF 全部置 0xFF；页编程把 16 字节写进去（不足 256 字节也没问题）；读回比较。<strong>为什么不擦直接写</strong>：Flash 只能把 1 变 0，不能把 0 变 1（写 0 可以、写 1 不行）——所以必须先擦（全变 1）再写。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-demo">七、现象演示与验证</h2>
+          <ul>
+            <li><strong>读 ID</strong>：串口打印厂商 ID 0xEF、器件 ID（W25Q64 约 0x40，W25Q128 约 0x18），与芯片丝印对应。</li>
+            <li><strong>写读验证</strong>：串口打印读回的 16 字节，应为 <span class="inline-code">McuStudy SPI ok</span>。</li>
+          </ul>
+          <p><strong>验证方法：</strong></p>
+          <ol>
+            <li>把写的内容改成递增数字（0x00~0x0F），读回逐字节比对——发现错位即时序模式（Mode）选错。</li>
+            <li>把 <span class="inline-code">w25_write_enable()</span> 注释掉再写，读回全 FF——亲手验证写使能的必要性。</li>
+            <li>在模式 0 与模式 3（CPOL/CPHA 各组合）之间切换，观察读 ID 结果——体会 CPOL/CPHA 对通信的决定性影响。</li>
+          </ol>
+        </section>
+
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>读 ID 全 FF 或全 00</td><td>时序模式不对（Mode 选错）/ CS 没拉低 / 接线错</td><td>改 Mode 0；确认 CS 时序与引脚；核对 MOSI/MISO 是否接反</td></tr>
+              <tr><td>写入后读回全 FF</td><td>没写使能 / 没擦除</td><td>写前先 <span class="inline-code">w25_write_enable()</span>；先擦扇区再页编程</td></tr>
+              <tr><td>数据错位 / 少字节</td><td>CPHA 选错 / 频率太快</td><td>试 Mode 3；把 SPI 分频降到 4 或 8 再试</td></tr>
+              <tr><td>写了一半丢数据</td><td>跨页了（256 字节边界）</td><td>页编程不能跨 256 字节边界，超长要拆成多页写</td></tr>
+              <tr><td>长时间读写后死机</td><td>CS 没有正确拉高复位 / 忙标志没等完</td><td>每条命令都严格 CS 拉高；查忙循环加超时保护</td></tr>
+              <tr><td>ID 是 0xFFFF</td><td>芯片没供电或 WP/HOLD 悬空</td><td>确认 3.3V 供电；WP/HOLD 接 VCC</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（必做）</strong>：把写读地址从 0x0000 换到 0x2000（跨一个扇区），先擦对应扇区再写读，验证地址拆分正确。</p>
+          <p><strong>练习 2</strong>：实现「掉电记忆」：上电先读 0x0000 处的次数值，+1 后写回（先擦后写），串口打印——做一个小计数器，重启不归零。</p>
+          <p><strong>练习 3（进阶）</strong>：结合 <a href="stm32-dma.html">DMA 教程</a>，把页编程的数据传输改成 DMA 模式，对比普通模式与 DMA 模式的主循环占用差异。</p>
+          <p><strong>延伸学习</strong>：SPI 是「高速搬数据」，下一课学 <a href="stm32-dma.html">DMA 直接存储器访问</a>——让数据搬运不再占用 CPU，串口、ADC、SPI 全都能提速。</p>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="stm32-register.html" class="btn btn-outline btn-sm">← 上一篇：存储器映射与寄存器本质</a>
+          <a href="stm32-dma.html" class="btn btn-outline btn-sm">下一篇：DMA 直接存储器访问 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

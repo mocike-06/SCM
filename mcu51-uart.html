@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - UART 串口通信（零基础）</title>
+  <meta name="description" content="零基础学 51 单片机 UART：什么是串口、并行 vs 串行、波特率、TTL 电平、SBUF、方式1、为什么用 11.0592MHz 晶振实现 9600 波特率整数分频，以及乱码原因排查。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link active" aria-current="page">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>UART 串口通信</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：51 单片机</span>
+          <span class="badge badge-orange">进阶</span>
+          <span class="badge badge-gray">更新：2026-10-24</span>
+        </div>
+
+        <p class="text-secondary mb-6">单片机不只是让灯亮——它还要会「说话」。本讲让 STC89C52 通过串口和电脑互发文字：单片机每秒打印一行 Hello，电脑发什么它回什么。重点搞懂什么是波特率、为什么 51 选 11.0592MHz 晶振、乱码是怎么来的，以及 SBUF、TI/RI 这两个标志位怎么用。</p>
+
+        <!-- ===== 一、本课目标与前置知识 ===== -->
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>说清楚并行 vs 串行、波特率、TTL 电平、SBUF、方式 1 各是什么。</li>
+            <li>解释为什么 51 常用 11.0592MHz 晶振，能算出 9600 波特率下 TH1=0xFD。</li>
+            <li>写出双向串口程序：上电每秒发一行字符串、收到字节立刻回发，并在串口助手看到效果。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识（对应学习路线阶段 2）：</strong></p>
+          <ul>
+            <li>定时器一课（mcu51-timer.html）：知道 TMOD、方式 2、中断。</li>
+            <li>STC-ISP 烧录与 USB-TTL 接线（mcu51-env.html）：串口线和烧录线是同一对 P3.0/P3.1。</li>
+          </ul>
+          <p><strong>本课会出现的新名词：</strong>UART、并行/串行、波特率、TTL 电平、SBUF、SCON、方式 1、TI/RI、乱码。</p>
+        </section>
+
+        <!-- ===== 二、基础概念铺垫 ===== -->
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. 什么是串口（并行 vs 串行）</h3>
+          <p><strong>生活类比</strong>：要把 8 个箱子从仓库搬到门口。「并行」是 8 个人同时各搬一个，一次搞定；「串行」是只有 1 个人，一次搬一个，来回 8 趟。串行慢，但只需要一条道（一根线），成本低、距离远。</p>
+          <p><strong>一句话定义</strong>：<strong>并行通信</strong>用多根线同时传多位数据（如 LCD1602 的 8 根数据线）；<strong>串行通信</strong>只用一根线，把数据<strong>一位一位排队</strong>依次传送。UART（通用异步收发器）就是 51 内部的串行通信硬件。</p>
+          <p><strong>例子</strong>：51 的串口只用 P3.0(RXD)、P3.1(TXD) 两根线（一收一发），就能和电脑互传字符串——虽然一位一位慢，但对「每秒发几行字」的调试场景完全够用。</p>
+
+          <h3>2. 波特率</h3>
+          <p><strong>生活类比</strong>：两个人用摩斯密码发报，必须事先约好「每分钟敲多少下」。敲快了对方跟不上，敲慢了干等。</p>
+          <p><strong>一句话定义</strong>：<strong>波特率</strong>是串口每秒传送的位数（单位 bit/s，常说的 9600 即每秒传 9600 位）。收发双方必须事先约定<strong>完全相同</strong>的波特率，否则收到的就是错位乱码。</p>
+          <p><strong>例子</strong>：单片机按 9600 波特率发，电脑串口助手也必须选 9600。如果助手选成 19200，同样的字节会被按两倍速度采样，解出来全是乱码字符。</p>
+
+          <h3>3. TTL 电平</h3>
+          <p><strong>生活类比</strong>：串口线传的就是高低电平——高=1、低=0。但电脑 USB 口不认 0/5V 这套电平，所以中间要一个「翻译官」CH340，把 USB 信号翻译成 0/5V 的 TTL 电平。</p>
+          <p><strong>一句话定义</strong>：<strong>TTL 电平</strong>指单片机串口用的 0V（低）/5V（高）信号标准。电脑 USB 不直接是 TTL，必须经 CH340 等 USB-TTL 模块转换。</p>
+          <p><strong>例子</strong>：P3.1 输出 5V 表示发了一个高电平位，经 CH340 翻译成 USB 数据给电脑；反过来电脑发来的 USB 数据，CH340 转成 0/5V 加到 P3.0，单片机才能读。</p>
+
+          <h3>4. SBUF 与方式 1</h3>
+          <p><strong>生活类比</strong>：SBUF 像单片机的「收发信箱」——要发数据就把信塞进信箱（写 SBUF），硬件自动一位位发出去；收到数据也放在信箱里（读 SBUF），你取走即可。</p>
+          <p><strong>一句话定义</strong>：<strong>SBUF</strong> 是串口数据寄存器（地址 0x99），写它=启动发送、读它=取走收到的字节。<strong>方式 1</strong>是 51 串口最常用的格式：1 个起始位 + 8 个数据位 + 1 个停止位（8N1），波特率可由定时器 1 设定。</p>
+          <p><strong>例子</strong>：<span class="inline-code">SBUF = 'A';</span> 就把字母 A 发出去；<span class="inline-code">dat = SBUF;</span> 就把收到的字节读进 dat。SCON 寄存器设成 0x50 就是方式 1 + 允许接收。</p>
+
+          <h3>5. 为什么用 11.0592MHz 晶振（9600 整数分频）</h3>
+          <p><strong>生活类比</strong>：要把一根长木棍切成正好 100 毫米的小段。如果木棍总长 11059.2 毫米，除以 12 再分频，正好切出 9600 段——没有零头。如果总长是 12000 毫米，怎么切都有零头，段长不准。</p>
+          <p><strong>一句话定义</strong>：串口波特率由定时器 1 溢出率决定，而溢出率 = 晶振频率 ÷ (12 × 分频)。<strong>11.0592MHz</strong> 这个奇怪的数字，正好能被 9600、19200、57600 等标准波特率整除，<strong>没有任何误差</strong>；换 12MHz 则分频后总有零头，实际波特率偏离标准值，收发乱码。</p>
+          <p><strong>例子</strong>：11.0592MHz、定时器 1 方式 2、SMOD=0 时，要 9600 波特率，算出来 TH1=TL1=<strong>0xFD</strong>，零误差。若用 12MHz 配同样的 9600，误差约 8.5%，大多数设备能容忍但偶发乱码——这就是最小系统选 11.0592MHz 而不是 12MHz 的根本原因。</p>
+        </section>
+
+        <!-- ===== 三、原理介绍 ===== -->
+        <section>
+          <h2 id="sec-principle">三、原理介绍：一根线上是怎么一位一位把字节传过去的</h2>
+          <p>UART 是<strong>异步</strong>串行通信：没有时钟线，收发双方只靠 TXD/RXD 两根线，事先约定好波特率（每秒传多少位），一位一位地收发。51 最常用<strong>方式 1</strong>：8 位数据、1 起始位、1 停止位，波特率可变。</p>
+          <p><strong>一次发送字节的完整流程：</strong></p>
+          <ol>
+            <li>CPU 执行 <span class="inline-code">SBUF = dat;</span>，把 dat 装进发送寄存器。</li>
+            <li>硬件按约定波特率：先拉低发起始位，再一位位发 8 个数据位，最后拉高发停止位。</li>
+            <li>发完一个字节硬件置 <span class="inline-code">TI=1</span>。</li>
+            <li>CPU 检测 TI==1，软件写 <span class="inline-code">TI=0</span> 清掉，再发下一个。</li>
+          </ol>
+
+          <h3>原理 1：一帧里到底排了哪些位——为什么要有起始位和停止位</h3>
+          <p>「异步」意味着收发两端没有共享时钟线，接收方怎么知道一个字节从哪开始？答案是<strong>靠电平跳变找头</strong>。一帧被排成：</p>
+          <ul>
+            <li><strong>1 位起始位</strong>：平时线是高电平，发送方突然拉低——这一跳就是「字节要开始了」的信号。接收方检测到这一下，才开始按约定节拍一位位采样。</li>
+            <li><strong>8 位数据位</strong>：真正传的字节，低位先发。</li>
+            <li><strong>1 位停止位</strong>：拉回高电平，给对方一个字节间的间隔。</li>
+          </ul>
+          <p>接收方是在<strong>每个数据位的正中间采样</strong>的。这就引出本课最大的坑：双方波特率必须一致，否则采样节奏对不上，读出来就是乱码——不是程序坏了，是「每位多长」没对齐。</p>
+
+          <h3>原理 2：9600 这个波特率是怎么用定时器凑出来的</h3>
+          <p>51 的波特率不是独立时钟，而是<strong>拿定时器 1 的溢出率分频出来的</strong>。公式：</p>
+          <p style="text-align:center"><span class="inline-code">波特率 = (2^SMOD / 32) × 定时器1溢出率</span></p>
+          <p>定时器 1 固定用<strong>方式 2（8 位自动重装）</strong>——因为它每个位都要溢出一次，手动重装的抖动会直接毁掉波特率。<strong>溢出率 = 11.0592MHz ÷ 12 ÷ (256 − TH1)</strong>。代进 9600、SMOD=0 反推：<span class="inline-code">9600 = (1/32) × 11059200/12/(256−TH1)</span>，解得 <span class="inline-code">256−TH1 = 3 → TH1 = 253 = 0xFD</span>。<strong>为什么必须选 11.0592MHz 这个怪数字</strong>：因为 11059200/12 = 921600，而 921600/9600 = 96、/4800=192、/19200(SMOD=1)=48，全是整数——波特率误差精确为 0%。换 12MHz 凑出来总有约 8.5% 偏差，传几个字节就开始乱码。这就是最小系统选 11.0592MHz 的全部理由。</p>
+
+          <h3>原理 3：SBUF 为什么发和收是同一个寄存器名——双缓冲</h3>
+          <p>你写 <span class="inline-code">SBUF=c</span>（发）和读 <span class="inline-code">c=SBUF</span>（收）用的是同一个名字，但<strong>物理上是两个独立寄存器</strong>：一个发送缓冲、一个接收缓冲，只是共用 SBUF 这个地址。发时往发送缓冲写、收时从接收缓冲读，互不干扰——这叫<strong>全双工</strong>。配套两个标志：发完一字节硬件置 <span class="inline-code">TI</span>、收完一字节置 <span class="inline-code">RI</span>。<strong>这两个位硬件只负责「置 1」、绝不清 0</strong>——必须你软件手动写 TI=0 / RI=0。忘了清，发送卡在「以为还没发完」、接收再也不触发，是串口调试第一大坑。</p>
+          <h3>原理 4：SCON / PCON 寄存器位定义（教材必考表）</h3>
+          <p>张毅刚《单片机原理及应用》串行口一章把收发控制归纳到 SCON（地址 0x98，可位寻址）和 PCON（地址 0x87，不可位寻址）两个寄存器。SCON 各位含义：</p>
+          <table>
+            <thead><tr><th>位（bit7~bit0）</th><th>SM0</th><th>SM1</th><th>SM2</th><th>REN</th><th>TB8</th><th>RB8</th><th>TI</th><th>RI</th></tr></thead>
+            <tbody>
+              <tr><td>含义</td><td colspan="2">方式选择：00=方式0(同步移位寄存器) / 01=方式1(8位UART,波特率可变) / 10=方式2(9位UART,固定波特率) / 11=方式3(9位UART,波特率可变)</td><td>多机通信允许位（方式2/3用），=1 时只有收到第9位=1才置RI</td><td>接收允许：=1 才允许收数据（本课 SCON=0x50 即 SM0SM1=01、REN=1）</td><td>方式2/3 要发的第9位</td><td>方式2/3 收到的第9位</td><td>发送中断标志，硬件置1、软件清0</td><td>接收中断标志，硬件置1、软件清0</td></tr>
+            </tbody>
+          </table>
+          <p><strong>PCON 的 SMOD 位</strong>（PCON.7，最常用到的一位）：=0 时波特率不翻倍（默认），=1 时波特率×2。所以方式1/3 波特率完整公式是：</p>
+          <p style="text-align:center"><span class="inline-code">波特率 = (2^SMOD / 32) × (fosc / (12 × (256 − TH1)))</span></p>
+          <p><strong>位操作 vs 直接赋值对照</strong>：写 <span class="inline-code">REN = 1;</span> 等价于 SCON.4 置 1；写 <span class="inline-code">TI = 0;</span> 等价于 SCON.1 清 0；写 <span class="inline-code">PCON |= 0x80;</span> 等价于把 SMOD 置 1（PCON 不可位寻址，只能整体或运算）。四种方式的教材要点：方式 0 是同步移位寄存器（波特率固定 fosc/12，常用来扩 IO）、方式 1 是本课用的 8 位 UART、方式 2/3 是 9 位 UART（多机通信时第 9 位做地址/数据帧标志）。</p>
+          <blockquote>记忆点：串口一帧=起始位(低)+8数据位+停止位(高)，没时钟线靠波特率约定每位多长、不一致必乱码；波特率=(2^SMOD/32)×定时器1溢出率，定时器1用方式2自动重装，11.0592MHz 整除出 9600 无误差、初值 0xFD；SBUF 收发是两个缓冲共用一名（全双工），TI/RI 硬件只置 1、必须软件手动清 0。</blockquote>
+        </section>
+
+        <!-- ===== 四、硬件接线说明 ===== -->
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <p>用 USB-TTL 模块和电脑通信，接线与烧录时相同（P3.0/P3.1 交叉相连、共地）。</p>
+          <table>
+            <thead>
+              <tr><th>模块引脚（CH340）</th><th>单片机引脚</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>TXD</td><td>P3.0（RXD）</td><td>电脑发 → 单片机收</td></tr>
+              <tr><td>RXD</td><td>P3.1（TXD）</td><td>单片机发 → 电脑收</td></tr>
+              <tr><td>GND</td><td>GND</td><td>必须共地</td></tr>
+              <tr><td>上位机串口助手</td><td>波特率 9600</td><td>8 位数据、无校验、1 停止位（8N1）</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么这样接：</strong></p>
+          <ul>
+            <li><strong>为什么 TX/RX 要交叉？</strong> 和烧录时同理：CH340 的 TXD（它发）要接到单片机的 RXD（单片机收），反接就收不到。</li>
+            <li><strong>为什么串口助手参数要选 9600、8N1？</strong> 单片机按 9600 波特率、8 数据位、无校验、1 停止位发送，助手必须完全一致，否则解出来是乱码。</li>
+            <li><strong>为什么 STC-ISP 和串口助手不能同时打开同一个 COM 口？</strong> COM 口一次只能被一个软件占用，否则「打不开串口」。</li>
+          </ul>
+        </section>
+
+        <!-- ===== 五、完整代码 ===== -->
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p>单片机上电后每秒向上位机发一行「Hello McuStudy!」；同时进入串口中断，收到什么字节就原样回发（回显），实现双向。</p>
+          <pre><code class="language-c">/* UART 方式1：9600 波特率，定时发字符串 + 收到即回发 */
+#include &lt;reg52.h&gt;
+
+void UART_Init(void) {
+    SCON = 0x50;   /* 方式1(SM0=0 SM1=1)，REN=1 允许接收 */
+    TMOD &amp;= 0x0F;
+    TMOD |= 0x20;  /* 定时器1 方式2，8位自动重装 */
+    TH1 = 0xFD;    /* 11.0592MHz, SMOD=0, 9600 波特率 */
+    TL1 = 0xFD;
+    TR1 = 1;       /* 启动定时器1 */
+    ES  = 1;       /* 允许串口中断 */
+    EA  = 1;       /* 开总中断 */
+}
+
+void Send_Byte(unsigned char dat) {
+    SBUF = dat;        /* 把字节装进发送寄存器 */
+    while (TI == 0);  /* 等发送完成（硬件置 TI=1） */
+    TI = 0;            /* 软件清标志，准备发下一个 */
+}
+
+void Send_Str(unsigned char *s) {
+    while (*s) Send_Byte(*s++);   /* 逐个字节发，直到字符串结束符 */
+}
+
+void delay_ms(unsigned int ms) {
+    unsigned int i, j;
+    for (i = 0; i &lt; ms; i++)
+        for (j = 0; j &lt; 120; j++);
+}
+
+void main(void) {
+    UART_Init();
+    while (1) {
+        Send_Str("Hello McuStudy!\r\n");   /* \r\n = 回车换行 */
+        delay_ms(1000);
+    }
+}
+
+void UART_ISR(void) interrupt 4 {
+    if (RI) {          /* 硬件通知：收到一个字节 */
+        RI = 0;        /* 软件清接收标志 */
+        SBUF = SBUF;   /* 读走收到的字节并原样写回发送寄存器 */
+        while (!TI);
+        TI = 0;
+    }
+}</code></pre>
+          <p><strong>改参数变体：</strong> 想把波特率改成 4800，把 <span class="inline-code">TH1 = 0xFD</span> 改成 <span class="inline-code">TH1 = 0xFA</span>，同时串口助手波特率同步改成 4800——收发必须成对改。</p>
+
+          <h3>进阶实例：电脑发指令遥控 LED</h3>
+          <p>把串口从「打印+回显」升级成「命令控制」：电脑发字符 <span class="inline-code">'1'</span> 点灯、发 <span class="inline-code">'0'</span> 灭灯，并回发一句确认。这是单片机「听指令做事」的最小骨架。</p>
+          <pre><code class="language-c">/* 进阶：串口收 '1' 开灯 / '0' 关灯，并回发确认 */
+#include &lt;reg52.h&gt;
+sbit LED = P1^0;
+
+void UART_Init(void) {
+    SCON = 0x50;
+    TMOD &amp;= 0x0F;
+    TMOD |= 0x20;
+    TH1 = 0xFD; TL1 = 0xFD;   /* 9600@11.0592 */
+    TR1 = 1;
+    ES  = 1;
+    EA  = 1;
+}
+
+void Send_Byte(unsigned char dat) {
+    SBUF = dat;
+    while (TI == 0);
+    TI = 0;
+}
+
+void main(void) {
+    LED = 1;              /* 初始熄灭 */
+    UART_Init();
+    while (1);
+}
+
+void UART_ISR(void) interrupt 4 {
+    unsigned char dat;
+    if (RI) {
+        RI = 0;
+        dat = SBUF;       /* 读走上位机发来的指令 */
+        if (dat == '1') {
+            LED = 0;      /* 开灯 */
+            Send_Byte('O');
+            Send_Byte('N');
+        } else if (dat == '0') {
+            LED = 1;      /* 关灯 */
+            Send_Byte('O');
+            Send_Byte('F');
+            Send_Byte('F');
+        }
+    }
+}</code></pre>
+          <p>烧录后，串口助手发单个字符 <span class="inline-code">1</span> 回车，LED 应点亮并收到回显 <span class="inline-code">ON</span>；发 <span class="inline-code">0</span>，LED 熄灭并收到 <span class="inline-code">OFF</span>。</p>
+        </section>
+
+        <!-- ===== 六、代码逐段讲解 ===== -->
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第 1 段：UART_Init 初始化（第 4~15 行）</h3>
+          <p><strong>在做什么：</strong> 配串口方式、配定时器 1 方式 2、装波特率初值、开串口中断和总中断。</p>
+          <p><strong>为什么这么写：</strong> SCON=0x50 选方式 1 并允许接收；定时器 1 用方式 2（8 位自动重装）专门给串口当波特率发生器，溢出后自动重装，CPU 不用管；TH1=0xFD 是 9600 的初值。ES=1 允许串口中断、EA=1 开总电闸。</p>
+          <p><strong>不写会怎样：</strong> 漏 REN（SCON 少 0x10）→ 收不到上位机数据；漏 TR1 → 定时器 1 不跑，波特率发生器不工作；漏 ES/EA → 收数据不进中断。</p>
+
+          <h3>第 2 段：Send_Byte / Send_Str 发送函数（第 17~27 行）</h3>
+          <p><strong>在做什么：</strong> 发一个字节：写 SBUF、等 TI 置 1、再清 TI。发字符串就是循环发每个字符。</p>
+          <p><strong>为什么这么写：</strong> 串口发一个字节要花约 1ms（9600 下），如果不等发完就发下一个，数据会覆盖。<span class="inline-code">while(TI==0)</span> 就是等硬件发完；TI 必须手动写 0，否则下次判断 TI 永远是 1，以为还在发。</p>
+          <p><strong>不写会怎样：</strong> 不清 TI → 第二个字节开始就发不出去；不等 TI → 发出来的全是乱码或丢字符。</p>
+
+          <h3>第 3 段：main 主循环（第 33~39 行）</h3>
+          <p><strong>在做什么：</strong> 每秒发一行带回车换行的字符串。</p>
+          <p><strong>为什么这么写：</strong> <span class="inline-code">\r\n</span>（CR+LF）让串口助手下次打印时换到新的一行，而不是接着上一行末尾打。delay_ms(1000) 控制每秒一行的节奏。</p>
+          <p><strong>不写会怎样：</strong> 不加 \r\n，所有文字会挤在同一行滚动；不加延时，一秒发上千行，助手刷爆。</p>
+
+          <h3>第 4 段：UART_ISR 接收中断（第 41~49 行）</h3>
+          <p><strong>在做什么：</strong> 收到一个字节就进中断，清 RI，把 SBUF 读到的值立刻写回 SBUF 发出去（回显）。</p>
+          <p><strong>为什么这么写：</strong> <span class="inline-code">interrupt 4</span> 是 51 规定的串口中断号。RI 是硬件置 1 的接收标志，必须软件清 0 否则一直进中断。<span class="inline-code">SBUF = SBUF</span> 看似奇怪：右边读走收到的字节，左边把它装回发送寄存器，于是「收到什么发什么」。</p>
+          <p><strong>不写会怎样：</strong> 不清 RI → 进一次中断后 RI 永远是 1，CPU 不停反复进中断卡死；不开 REN → 根本收不到上位机数据。</p>
+        </section>
+
+        <!-- ===== 七、现象演示说明 ===== -->
+        <section>
+          <h2 id="sec-demo">七、现象演示说明</h2>
+          <p>打开串口助手，选对 COM 口、波特率 9600、8N1，打开串口。应看到单片机每秒打印一行 <span class="inline-code">Hello McuStudy!</span>。</p>
+          <p><strong>可量化的验证方法：</strong></p>
+          <ul>
+            <li><strong>双向回显：</strong> 在串口助手输入框敲几个字符（如 <span class="inline-code">abc123</span>）点发送，助手应立刻收到完全相同的字符回显——说明收发链路都正常。</li>
+            <li><strong>波特率错配实验：</strong> 把助手波特率改成 4800，重新看输出——应全是乱码。改回 9600 又恢复正常，直观理解「波特率不一致=乱码」。</li>
+            <li><strong>频率验证：</strong> 数 10 行 Hello 的间隔，应约 1 秒一行（软件延时不精确，误差零点几秒）。</li>
+          </ul>
+        </section>
+
+        <!-- ===== 八、常见报错排查方案 ===== -->
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>串口收到全是乱码</td><td>波特率/晶振不匹配</td><td>确认 9600、TH1=0xFD、晶振 11.0592MHz 三者一致；助手选 8N1</td></tr>
+              <tr><td>只发一次就再也不发了</td><td>忘了软件清 TI</td><td>每次发完把 TI 手动写 0（Send_Byte 里 while(TI==0); TI=0;）</td></tr>
+              <tr><td>收不到上位机数据</td><td>没开 REN / 没开 ES</td><td>SCON 里 REN=1（SCON=0x50），且 ES=1、EA=1</td></tr>
+              <tr><td>串口助手提示打不开 COM 口</td><td>串口被烧录软件或别的助手占用</td><td>关闭 STC-ISP 和其他串口助手后再打开</td></tr>
+              <tr><td>单片机发的内容助手能收，助手发的单片机收不到</td><td>TX/RX 接反</td><td>把 CH340 的 TXD、RXD 两根线对调试一次</td></tr>
+              <tr><td>原本 9600 好好的，加了一句 PCON |= 0x80 后全乱码</td><td>SMOD 被置 1 但上位机没同步改成 19200：实际波特率翻倍成 19200，对端还按 9600 采样</td><td>SMOD=1 就是把波特率 ×2，要么同时把助手改成 19200，要么删掉这句用 SMOD=0；教材课设里「上位机正常、下位机乱码」多半就是 SMOD 没配对</td></tr>
+              <tr><td>while(!TI) 发完一个字节就卡死 / 再发无输出</td><td>while 之后忘了 TI=0，TI 一直是 1；或中断里清 RI 时顺手把 TI 也清了</td><td>Send_Byte 固定模板：SBUF=dat; while(!TI); TI=0; 中断里只判 RI、只清 RI，不要动 TI</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <!-- ===== 九、课后练习与延伸 ===== -->
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（改打印内容）：</strong> 把打印字符串改成你自己的学号、姓名拼音，重新烧录看效果。提示：只改 <span class="inline-code">Send_Str("...")</span> 里的文字。</p>
+          <p><strong>练习 2（改波特率）：</strong> 把波特率改成 19200。注意 19200 在 SMOD=0 下没有整数分频（会有误差），正确做法是保持 TH1=0xFD、再把 SMOD 置 1（即 <span class="inline-code">PCON |= 0x80;</span> 让波特率加倍到 19200），助手同步改成 19200。提示：SMOD=1 就是把当前波特率整体 ×2，9600×2=19200。</p>
+          <p><strong>练习 3（命令控制 LED）：</strong> 单片机收到字符 '1' 点亮 LED、收到 '0' 熄灭 LED。提示：在 UART_ISR 里读 SBUF 后判断 <span class="inline-code">if(dat=='1') LED=0; if(dat=='0') LED=1;</span>，再回发一个确认字符。</p>
+          <p><strong>延伸学习：</strong></p>
+          <ul>
+            <li><a href="#xxx" data-placeholder>下一篇：LCD1602 液晶驱动（让数据直接显示在屏上）</a></li>
+            <li><a href="#xxx" data-placeholder>printf 重定向到串口（把 printf 用在 51 上，占位）</a></li>
+            <li><a href="#xxx" data-placeholder>ESP32 蓝牙串口透传（占位）</a></li>
+          </ul>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="mcu51-interrupt.html" class="btn btn-outline btn-sm">← 上一篇：外部中断触发</a>
+          <a href="mcu51-lcd1602.html" class="btn btn-outline btn-sm">下一篇：LCD1602 液晶驱动 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

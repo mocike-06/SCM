@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - 51 最小系统电路原理（零基础）</title>
+  <meta name="description" content="零基础讲清 STC89C52 最小系统：电平概念、时钟与晶振（11.0592MHz 与机器周期）、复位电路与上电时序、EA 引脚，理解芯片为什么自己能跑起来。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link active" aria-current="page">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>51 最小系统电路原理</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：51 单片机</span>
+          <span class="badge badge-green">入门</span>
+          <span class="badge badge-gray">更新：2026-10-24</span>
+        </div>
+
+        <p class="text-secondary mb-6">上一讲我们把程序烧进了芯片，但你有没有想过：为什么芯片接上电就能自己跑代码？这背后是电源、晶振、复位、EA 这四件「缺一不可」的外围。本讲把这块「最小系统」拆开讲透——电平是什么、晶振怎么当心跳、复位电路怎么保证上电从第 0 条指令开始跑，让你对单片机不再有黑箱感。</p>
+
+        <!-- ===== 一、本课目标与前置知识 ===== -->
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>说清楚高/低电平、晶振时钟、复位电路、上电时序各是什么，为什么单片机离开它们就不能工作。</li>
+            <li>对照最小系统接线表，独立查出「程序烧进去了但不跑」的常见硬件原因（EA、晶振、复位）。</li>
+            <li>理解「为什么叫最小系统」——哪些电路是最小必需、哪些是可选。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识（对应学习路线阶段 1、阶段 2 第 1 篇）：</strong></p>
+          <ul>
+            <li>开发环境搭建（mcu51-env.html）：会建 Keil 工程、会烧录 hex。</li>
+            <li>认识 USB-TTL 模块、杜邦线、面包板的接法。</li>
+          </ul>
+          <p><strong>本课会出现的新名词：</strong>高/低电平、时钟/晶振、机器周期、复位电路、上电时序、EA 引脚、最小系统。</p>
+        </section>
+
+        <!-- ===== 二、基础概念铺垫 ===== -->
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. 电平概念</h3>
+          <p><strong>生活类比</strong>：把电路比作跷跷板的两端，GND（地）是固定的支点，电压就是另一头翘多高。51 单片机只认两个高度：翘到接近 5V 算「高」，落到接近 0V 算「低」；中间模糊地带它不认。</p>
+          <p><strong>一句话定义</strong>：引脚上的<strong>电压相对 GND 的高低</strong>就叫电平。接近 5V 叫高电平（数字 1），接近 0V 叫低电平（数字 0）。51 是 5V 系统：VCC=5V、GND=0V。</p>
+          <p><strong>例子</strong>：程序写 <span class="inline-code">P1 = 0xff</span>，P1 口 8 根线全部输出 5V（高电平）；写 <span class="inline-code">P1 = 0x00</span>，全部输出 0V（低电平）。芯片判断按键有没有按下，本质就是读那根线现在是高还是低。</p>
+
+          <h3>2. 时钟与晶振（11.0592MHz 与机器周期）</h3>
+          <p><strong>生活类比</strong>：单片机像一群在广场上做操的人，所有人必须踩着同一个鼓点出拳，动作才整齐。晶振就是给芯片提供这个「鼓点」的装置——每敲一下，芯片就完成一步动作。</p>
+          <p><strong>一句话定义</strong>：<strong>晶振</strong>是一块能产生稳定周期性电脉冲的元件，这个脉冲频率就是<strong>时钟</strong>。51 单片机每执行一条指令要花 12 个时钟周期，这 12 个时钟周期合起来叫一个<strong>机器周期</strong>。</p>
+          <p><strong>例子</strong>：本系统用 <span class="inline-code">11.0592MHz</span> 晶振（每秒敲 1105.92 万下），那么一个机器周期 = 12 ÷ 11.0592MHz ≈ <strong>1.085µs</strong>。如果换 12MHz 晶振，机器周期正好是 1µs——这就是老教材里「12MHz 下 1 个机器周期=1 微秒」的来历。选 11.0592MHz 是因为它除出来的串口波特率没有误差（后面 UART 一课细讲）。</p>
+
+          <h3>3. 复位电路</h3>
+          <p><strong>生活类比</strong>：游戏机死机时你按电源重启；单片机也需要一个「重启键」。复位电路的作用就是每次上电时，让芯片先老老实实地「深呼吸一下、清零所有状态」，再从程序第 0 条指令开始执行，不许乱跑。</p>
+          <p><strong>一句话定义</strong>：51 单片机第 9 脚 <strong>RST</strong> 是复位脚，<strong>RST 为高电平时芯片复位</strong>（所有寄存器回到初始值、PC 归零）；RST 变回低电平后才开始运行程序。复位电路就是用「电容刚开始充电相当于短路」这个特性，在上电瞬间自动把 RST 拉高一小段时间。</p>
+          <p><strong>例子</strong>：RST 脚接一个 10µF 电容到 VCC、一个 10kΩ 电阻到 GND。上电瞬间电容两端电压为 0，相当于把 RST 直接接到 VCC（高电平），芯片复位；约零点几秒后电容充满，电流经电阻泄放，RST 被拉到低电平，芯片正式开跑。旁边那颗按键按下时直接把 RST 接高，就是「手动复位键」。</p>
+
+          <h3>4. 上电时序</h3>
+          <p><strong>生活类比</strong>：开演唱会不能一上来就唱歌，要先供电、再起节拍、再喊「开始」。芯片也一样：电先稳、时钟先起振、复位信号再撤掉，三步顺序不能乱，否则芯片起跑时状态是乱的。</p>
+          <p><strong>一句话定义</strong>：<strong>上电时序</strong>指从接 VCC 到芯片正常运行这一小段时间里，电源、晶振、复位信号必须满足的先后顺序：电源稳定 → 晶振起振 → RST 保持高电平足够长（≥几个机器周期）→ RST 变低 → 芯片从 0 地址取第一条指令执行。</p>
+          <p><strong>例子</strong>：如果复位电容短路失效，上电瞬间 RST 一直是低电平，芯片可能在电源还没稳时就开始跑，程序跑飞——表现为「时好时坏、烧录成功但偶尔不跑」。</p>
+
+          <h3>5. 为什么叫「最小系统」</h3>
+          <p><strong>生活类比</strong>：一辆能开走的车，最少需要发动机、油箱、方向盘；至于真皮座椅、大屏导航，都是锦上添花。单片机也一样——去掉所有无关的 LED、按键、液晶屏，剩下能让它自己跑起来的那几样，就叫最小系统。</p>
+          <p><strong>一句话定义</strong>：<strong>最小系统</strong>就是让一颗单片机芯片脱离开发板、只靠最少外围元件（电源、晶振、复位、EA 接对）就能正常取指运行的电路。</p>
+          <p><strong>例子</strong>：本课四件套——5V 电源、11.0592MHz 晶振（+两颗 30pF 电容）、复位电路、EA(31脚) 接 VCC。LED、按键、串口下载电路都是「额外加的功能」，不是芯片能跑起来的必要条件（但调试时仍要留串口才能烧录）。</p>
+        </section>
+
+        <!-- ===== 三、原理介绍 ===== -->
+        <section>
+          <h2 id="sec-principle">三、原理介绍：芯片凭什么自己从第 0 条指令跑起来</h2>
+          <p>STC89C52 要脱离开发板自己跑，必须凑齐四样：<strong>电源、晶振、复位、EA 接对</strong>。它们不是四个孤立元件，而是一条「上电 → 起振 → 保持复位 → 释放 → 取指」的时序链，任何一步不对，现象都是「烧录成功但程序一行不动」。</p>
+          <p><strong>一次上电到运行的完整流程：</strong></p>
+          <ol>
+            <li>插 USB，5V 经稳压爬到 VCC(40脚)，从 0 升到稳定 5V。</li>
+            <li>晶振两端起振，XTAL1(19)/XTAL2(18) 间开始出稳定时钟脉冲。</li>
+            <li>上电瞬间复位电容把 RST(9脚) 拉高，芯片卡在复位态（PC=0、寄存器清零）。</li>
+            <li>几十毫秒后电容充满，RST 经 10kΩ 泄放回低，复位解除。</li>
+            <li>芯片从内部 Flash 的 0 地址取指，跑你的程序。</li>
+          </ol>
+
+          <h3>原理 1：晶振是心脏，机器周期 = 12 ÷ 晶振频率</h3>
+          <p>CPU 执行每条指令都要数节拍，这个节拍就是晶振给的时钟。但 51 有个关键规矩：<strong>它不是每个晶振周期执行一步，而是每 12 个晶振周期才走一个「机器周期」</strong>。所以在 11.0592MHz 下，一个机器周期 = 12 / 11.0592MHz ≈ 1.085µs。后面定时器「数多少个脉冲溢出一次」、软件延时「数几百个空循环」全建立在这个 12 分频上——这就是为什么晶振频率填错，延时和串口时间全错。<strong>为什么偏偏选 11.0592MHz 而不是整齐的 12MHz</strong>：串口波特率是拿定时器 1 的溢出率分频出来的，11.0592 除以 12 后能被 9600、4800 等常用波特率整除（误差 0%），而 12MHz 分频出来总有约 8% 偏差——这是串口不丢字节的黄金频率。</p>
+
+          <h3>原理 2：复位电路为什么靠一颗电容就能自动完成</h3>
+          <p>51 的 RST 是<strong>高电平复位</strong>：RST 保持高，芯片就停在复位态；RST 变低才开始跑。上电复位电路就是利用<strong>电容两端电压不能突变</strong>这个物理特性：上电瞬间电容还没充电，相当于短路，把 VCC 的 5V 直接引到 RST 脚 → RST=高，芯片被按住不跑；随后 VCC 经 10kΩ 电阻给电容充电，电容两端电压逐渐上升、RST 节点电压按指数曲线下降，经过几个 RC 时间常数（约几十毫秒）后 RST 落到低电平阈值以下 → 复位解除、开跑。<strong>为什么 RST 要在高电平待够几十毫秒</strong>：要等电源和晶振都稳定下来再放它跑，否则芯片在半稳的电源上取指，会跑飞。旁边按键是手动复位：按下强行把 RST 接回 VCC，强制重来。</p>
+
+          <h3>原理 3：EA 这一个脚，决定芯片从哪儿取指令</h3>
+          <p>51 的程序存储器分「内部 Flash」和「外部扩展 ROM」两块。第 31 脚 <strong>EA（External Access）是个硬开关</strong>：</p>
+          <ul>
+            <li><strong>EA 接 VCC（高）</strong>：芯片从<strong>内部 Flash</strong> 取指——我们烧录的程序就在这里，所以必须接高。</li>
+            <li><strong>EA 接 GND（低）</strong>：芯片强制从<strong>外部 ROM</strong> 取指。我们根本没外接 ROM，地址总线上读到的是随机电平，于是取到乱码指令 → 死机。</li>
+          </ul>
+          <p>这就是最小系统里最隐蔽的一个坑：电源、晶振、复位全对、烧录也成功，唯独 EA 接地，程序一行都不跑。<strong>为什么仿真里常感觉不到</strong>：Proteus 的 AT89C52 模型默认 EA 接高，所以仿真能跑、搬到实物忘了接 EA 就死——这是「仿真过了实物不亮」的经典原因。</p>
+
+          <h3>原理 4：去耦电容为什么必须「就近」</h3>
+          <p>VCC 与 GND 之间就近并一颗 0.1µF（104）电容，不是为了储能，而是为了<strong>给芯片瞬态电流提供最近的水库</strong>：单片机内部电路快速开关时会从电源瞬时抽电流，电源走线有寄生电感，远端的电容来不及响应，电流冲击就在电源线上打出毛刺。就近放一颗小电容，瞬间要多少电流它立刻给多少，把 VCC 稳压在干净的 5V。<strong>放远了就失效</strong>——寄生电感一长，小电容的高频去耦作用就被吃掉，所以它必须焊在离 40/20 脚最短的距离上。</p>
+          <h3>原理 5：复位后 PC=0000H 与 51 存储器空间分布（张毅刚教材经典图）</h3>
+          <p>51 复位后硬件自动把程序计数器 PC 清 0，所以芯片总是从<strong>程序存储器 0000H</strong> 开始取第一条指令——这就是「上电从第 0 条指令跑起来」的硬件根源。教材把 51 的地址空间分成两块来记：</p>
+          <p><strong>① 程序存储器 ROM（64KB，地址 0000H~FFFFH）</strong>：放你烧进去的代码。其中 <strong>0000H</strong> 是复位入口（上电第一条指令跳到这里），紧接着是 5 个固定的中断入口地址，叫「中断向量表」：</p>
+          <table>
+            <thead><tr><th>地址</th><th>0003H</th><th>000BH</th><th>0013H</th><th>001BH</th><th>0023H</th></tr></thead>
+            <tbody>
+              <tr><td>对应中断</td><td>外部中断 0（/INT0）</td><td>定时器 0 溢出</td><td>外部中断 1（/INT1）</td><td>定时器 1 溢出</td><td>串行口</td></tr>
+            </tbody>
+          </table>
+          <p>所以教材写法是：0000H 放一句 <span class="inline-code">LJMP MAIN</span> 跳到主程序，0003H/000BH…各放一句跳转进对应的中断服务函数。Keil C51 的 <span class="inline-code">interrupt 0/1/2/3/4</span> 就是让编译器自动把跳转指令填到这些地址。</p>
+          <p><strong>② 内部数据存储器 RAM（低 128B 地址 00H~7FH + SFR 区 80H~FFH）</strong>：</p>
+          <table>
+            <thead><tr><th>地址范围</th><th>名称</th><th>用途</th></tr></thead>
+            <tbody>
+              <tr><td>00H~1FH</td><td>工作寄存器区（4 组 × 8 个）</td><td>R0~R7，由 PSW 的 RS1/RS0 选当前用哪一组</td></tr>
+              <tr><td>20H~2FH</td><td>位寻址区（共 128 位）</td><td>每位可直接位操作，sbit 定义的位变量就住这里</td></tr>
+              <tr><td>30H~7FH</td><td>通用 RAM（用户区）</td><td>放全局变量、堆栈</td></tr>
+              <tr><td>80H~FFH</td><td>SFR 特殊功能寄存器区</td><td>P0/P1/P2/P3、TMOD、TCON、SCON、IE、IP、TH0/TL0…都在这</td></tr>
+            </tbody>
+          </table>
+          <p>理解这张图，后面「sbit 到底操作了哪个地址」「堆栈为什么从 SP=07H 开始会撞寄存器组」「DPTR 为什么能访问外部 64KB」就都有根了。</p>
+          <blockquote>记忆点：晶振是心跳、一个机器周期=12÷晶振频率≈1.085µs，所以选 11.0592MHz 让波特率整除；复位靠电容「电压不能突变」上电拉 RST 高、再经电阻泄放回低；EA=高才从内部 Flash 取指、接 GND 必死机；去耦电容要就近放才滤得掉毛刺；复位后 PC=0000H，0003H/000BH/0013H/001BH/0023H 是 5 个固定中断入口。</blockquote>
+        </section>
+
+        <!-- ===== 四、硬件接线说明 ===== -->
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <table>
+            <thead>
+              <tr><th>模块/元件</th><th>单片机引脚</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>5V 电源 / GND</td><td>VCC（40 脚）/ GND（20 脚）</td><td>稳压到稳定 5V，就近并一个 104 去耦电容</td></tr>
+              <tr><td>11.0592MHz 晶振</td><td>XTAL1（19）/ XTAL2（18）</td><td>晶振两脚各接一个约 30pF 电容到 GND（电容与晶振并联到地）</td></tr>
+              <tr><td>复位电容 10µF + 电阻 10kΩ</td><td>RST（9 脚）</td><td>电容接 VCC，电阻接 GND，实现上电自动复位</td></tr>
+              <tr><td>USB-TTL 的 RXD/TXD</td><td>P3.0 / P3.1</td><td>交叉相连且共地，用于 STC-ISP 烧录</td></tr>
+              <tr><td>EA（31 脚）</td><td>VCC</td><td>必须接高电平，从内部 Flash 启动</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么这样接：</strong></p>
+          <ul>
+            <li><strong>为什么晶振还要两颗 30pF 电容？</strong> 晶振要配合负载电容才能稳定起振：晶振本身接在 19、18 两脚之间，再从这两脚各引一个电容接到 GND（电容与晶振<strong>并联到地</strong>，不是串在晶振线路里）。容值偏差大会让实际频率偏移，进而影响串口波特率和延时精度。</li>
+            <li><strong>为什么 EA 必须接 VCC？</strong> 51 上电后先看 EA：EA=1 才从内部 Flash 取我们烧进去的程序；EA=0 会去访问外部程序存储器，我们没有接，于是芯片取到的是无效数据，表现为完全不跑。</li>
+            <li><strong>为什么 VCC 旁要并 104 电容？</strong> 电源线很细、很长时像天线，会引入毛刺让芯片误动作；就近并一颗 0.1µF 小电容，就是给高频噪声开个「短路到地的小口子」，这叫去耦。</li>
+          </ul>
+        </section>
+
+        <!-- ===== 五、完整代码 ===== -->
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p>最小系统本身不需要「程序」——它是硬件电路。验证最小系统是否搭对，仍用下面这段最朴素的闪灯代码：能稳定闪烁，说明电源、晶振、复位、EA 全部正常。</p>
+          <pre><code class="language-c">/* 最小系统验证：P1.0 LED 以约 1 秒周期闪烁 */
+#include &lt;reg52.h&gt;
+
+sbit LED = P1^0;            /* LED 阴极接 P1.0，阳极经电阻接 VCC */
+
+void delay_ms(unsigned int ms) {
+    unsigned int i, j;
+    for (i = 0; i &lt; ms; i++)
+        for (j = 0; j &lt; 120; j++);   /* 11.0592MHz 下约 1ms */
+}
+
+void main(void) {
+    while (1) {
+        LED = ~LED;     /* 每次翻转电平：亮变灭、灭变亮 */
+        delay_ms(500);  /* 间隔约 0.5 秒 */
+    }
+}</code></pre>
+          <p>代码里 <span class="inline-code">~LED</span> 是按位取反：原来写 0 点亮，这一句执行完自动变成 1；下次再执行又变回 0——于是 LED 自动交替亮灭，连「先写 0 再写 1」两行都省了。</p>
+
+          <h3>变体实例：整口 8 位一起翻转（改参数）</h3>
+          <p>不单独定义 sbit，直接对整个 P1 口取反，8 颗 LED（若接了的话）会同时亮灭。这演示了「寄存器是 8 位整体」的概念。</p>
+          <pre><code class="language-c">/* 变体：P1 口 8 位整体翻转 */
+#include &lt;reg52.h&gt;
+
+void delay_ms(unsigned int ms) {
+    unsigned int i, j;
+    for (i = 0; i &lt; ms; i++)
+        for (j = 0; j &lt; 120; j++);
+}
+
+void main(void) {
+    P1 = 0x00;          /* 先让 P1 全输出低电平（8 颗灯全亮） */
+    while (1) {
+        P1 = ~P1;       /* 8 位同时取反：全亮变全灭、全灭变全亮 */
+        delay_ms(500);
+    }
+}</code></pre>
+        </section>
+
+        <!-- ===== 六、代码逐段讲解 ===== -->
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第 1 段：sbit 定义（第 3 行）</h3>
+          <p><strong>在做什么：</strong> 把 P1.0 这根引脚命名为 LED。</p>
+          <p><strong>为什么这么写：</strong> 后面每次只想控制这一颗灯，写 <span class="inline-code">LED = ~LED</span> 比手动算 P1 口的掩码直观得多。</p>
+          <p><strong>不写会怎样：</strong> 就得用 <span class="inline-code">P1 = P1 ^ 0x01;</span> 这种异或翻转写法，可读性差。</p>
+
+          <h3>第 2 段：delay_ms 延时（第 5~9 行）</h3>
+          <p><strong>在做什么：</strong> 双层循环空转约 ms 毫秒。</p>
+          <p><strong>为什么这么写：</strong> 翻转两次之间如果不延时，LED 每秒切换几十万次，肉眼看到的是一片常亮。0.5 秒的间隔让人眼清楚看到「亮灭亮灭」。</p>
+          <p><strong>不写会怎样：</strong> 删掉延时，LED 几乎不亮（视觉暂留），无法判断最小系统是否在运行。</p>
+
+          <h3>第 3 段：main 的翻转循环（第 11~16 行）</h3>
+          <p><strong>在做什么：</strong> 死循环里不断翻转 LED 电平、再延时 500ms。</p>
+          <p><strong>为什么这么写：</strong> 这段程序本身和最小系统无关，它只是一个「自检信号」——只要它稳定闪烁，就证明：电源供上电了、晶振起振提供了时钟、复位电路让程序从 0 开始跑、EA 接对了从内部取到了指令。四件套任何一个坏掉，这个闪烁都不会出现。</p>
+          <p><strong>不写会怎样：</strong> 没有自检信号，最小系统搭对了没搭对完全看不出来。</p>
+        </section>
+
+        <!-- ===== 七、现象演示说明 ===== -->
+        <section>
+          <h2 id="sec-demo">七、现象演示说明</h2>
+          <p>按电路搭好后上电，无需任何操作，LED 应以约 1 秒为周期自行闪烁。这说明：晶振起振了（有心跳）、复位正常（程序在跑）、EA 接对了（从内部取到了指令）、电源供得上。</p>
+          <p><strong>可量化的验证方法：</strong></p>
+          <ul>
+            <li><strong>反证法：</strong> 断电后把 EA（31 脚）从 VCC 改接到 GND，重新上电——LED 应立刻停止闪烁。这直接证明 EA 这一脚对「程序能不能跑」起决定作用。</li>
+            <li><strong>反证法：</strong> 拔掉晶振（或断开 19/18 脚的晶振连线），芯片失去时钟，LED 应停止闪烁——证明晶振是心跳。</li>
+            <li><strong>计时验证：</strong> 数 10 次完整亮灭应约 10 秒。软件延时不精确，偏差零点几秒正常；若偏差到好几秒，多半是晶振频率或 Keil 里 Xtal 设置和实际不符。</li>
+          </ul>
+        </section>
+
+        <!-- ===== 八、常见报错排查方案 ===== -->
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>烧录成功但程序完全不跑</td><td>EA 脚悬空或误接地</td><td>把 31 脚 EA 直接接到 VCC</td></tr>
+              <tr><td>时好时坏、跑着跑着死机</td><td>晶振没起振或负载电容不匹配</td><td>检查晶振两个 30pF 电容是否焊好，换一颗晶振试</td></tr>
+              <tr><td>一上电就一直处于复位状态（LED 常亮/常灭不动）</td><td>复位电容/电阻接反或短路</td><td>核对 RST 脚：电容到 VCC、电阻到 GND，量 RST 平时应为低电平（约 0V）</td></tr>
+              <tr><td>USB 供电时芯片发烫</td><td>VCC 与 GND 接反或短路</td><td>立刻断电，用万用表通断档查 VCC-GND 是否短路，避免烧坏芯片</td></tr>
+              <tr><td>闪烁周期明显偏快或偏慢一倍</td><td>Keil 工程 Xtal 设成 12MHz 而板子是 11.0592MHz</td><td>Options for Target → Xtal 改成 11.0592，与实际晶振一致</td></tr>
+              <tr><td>开了中断后程序乱跑 / 变量莫名被改</td><td>复位后 SP 默认=07H，堆栈从 08H 开始往上长，正好压进工作寄存器区 1 组（08H~0FH），把 R0~R7 改乱</td><td>教材标准动作：main 开头先 SP = 0x30; 把堆栈挪到通用 RAM 区（30H 以上），避开寄存器组和位寻址区</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <!-- ===== 九、课后练习与延伸 ===== -->
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（反证实验）：</strong> 按本节「现象演示」里的反证法，依次断开晶振、改 EA 接地，观察 LED 行为并记录。提示：每次只改一处再上电，才能确定是哪一脚的作用；实验完务必把电路恢复正确。</p>
+          <p><strong>练习 2（手动复位）：</strong> 在 RST 与 GND 之间接一颗按键（按下把 RST 拉到 VCC），程序正常跑时按一下按键，LED 应从头开始重新闪烁。提示：按键一端接 RST、另一端接 VCC，按下时 RST=高电平即复位。</p>
+          <p><strong>练习 3（计算机器周期）：</strong> 若把晶振换成 12MHz，机器周期是多少微秒？定时器要数多少个机器周期才能正好 1ms？提示：机器周期 = 12 ÷ 晶振频率；1ms ÷ 机器周期 就是个数。</p>
+          <p><strong>延伸学习：</strong></p>
+          <ul>
+            <li><a href="#xxx" data-placeholder>上一篇：开发环境搭建（mcu51-env.html）</a></li>
+            <li><a href="#xxx" data-placeholder>下一篇：IO 口输出 LED 流水灯（mcu51-led.html）</a></li>
+            <li><a href="#xxx" data-placeholder>为什么串口要用 11.0592MHz 晶振（UART 一课细讲）</a></li>
+          </ul>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="mcu51-env.html" class="btn btn-outline btn-sm">← 上一篇：开发环境搭建</a>
+          <a href="mcu51-led.html" class="btn btn-outline btn-sm">下一篇：IO 口输出 LED 流水灯 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

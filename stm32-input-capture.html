@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - 定时器输入捕获（测频率与脉宽）</title>
+  <meta name="description" content="STM32 输入捕获零基础教程：CCR 捕获寄存器、TI1/TI2 映射、上升沿/下降沿捕获、测频率与测脉宽的原理与代码，红外遥控解码前置知识。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link active" aria-current="page">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>定时器输入捕获（测频率与脉宽）</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：STM32</span>
+          <span class="badge badge-orange">进阶</span>
+          <span class="badge badge-gray">更新：2026-10-25</span>
+        </div>
+
+        <p class="text-secondary mb-6">上一课让定时器「输出」PWM，这一课让定时器「量」外部信号：电机的转速脉冲、遥控器的红外波形、超声波的回波——本质都是「测信号的频率和脉宽」。输入捕获就是定时器在信号边沿瞬间「拍照记下时间」的能力。本课讲透捕获原理与 HAL 用法，做出频率计和脉宽测量。</p>
+
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>说清输入捕获的机制：CCR 寄存器在边沿瞬间「冻结」计数值。</li>
+            <li>用 HAL 配置一个捕获通道，测方波频率和正脉宽。</li>
+            <li>理解「两次捕获差值 × 定时器分辨率 = 时间」，为红外遥控解码打基础。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识（对应学习路线阶段 4）：</strong></p>
+          <ul>
+            <li>定时器基础（stm32-pwm.html）：PSC 分频、ARR 重载、通道概念。</li>
+            <li>中断与回调（stm32-exti.html）：捕获事件进中断，回调函数写法相同。</li>
+            <li>SysTick（stm32-systick.html）：测量结果换算时间需要时间观念。</li>
+          </ul>
+          <p><strong>本课会出现的新名词：</strong>输入捕获、CCR（捕获比较寄存器）、TI1/TI2 通道映射、边沿极性、捕获中断、频率测量、脉宽测量、红外遥控。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. 输入捕获：定时器在「关键时刻拍照片」</h3>
+          <p><strong>生活类比</strong>：赛场终点有台一直走着的计时器（定时器计数），运动员冲线瞬间（信号边沿）裁判按下快门（捕获），照片里记录的就是当时计时器的读数——这个读数就是 CCR 捕获到的值。</p>
+          <p><strong>一句话定义</strong>：输入捕获 = 定时器在外部信号的<strong>上升沿/下降沿</strong>瞬间，把当前计数器的值复制到 <strong>CCR 寄存器</strong>并触发中断。硬件自动完成，分毫不差，CPU 不用轮询。</p>
+          <p><strong>例子</strong>：信号在计数值 500 时跳高，CCR 就被写入 500——就像「那一刻的时间戳」。</p>
+
+          <h3>2. 通道映射 TI1/TI2：信号从哪个引脚进来</h3>
+          <p><strong>一句话定义</strong>：每个高级/通用定时器有 4 个通道（CH1~CH4），每个通道可捕获一路输入。F103 里 <strong>TIM2_CH1 在 PA0</strong>、TIM3_CH1 在 PA6 等（看引脚复用表）。CubeMX 里把引脚配成「TIM2_CH1 Input Capture」，并选<strong>边沿极性</strong>（上升沿/下降沿捕获）。</p>
+          <p><strong>例子</strong>：测方波频率用 TIM2_CH1（PA0）：每个上升沿拍一次照，两次拍照的计数差就是「一个周期」的时长。</p>
+
+          <h3>3. 频率与脉宽：一个「时间戳序列」能算两个量</h3>
+          <p><strong>一句话定义</strong>：<strong>测频率</strong>：连续两个上升沿的时间差 = 周期 T，频率 f = 1/T。<strong>测脉宽</strong>：上升沿与相邻下降沿的时间差 = 高电平宽度。<strong>核心公式</strong>：时间 = 捕获差值 × 计数周期（1/定时器时钟）。定时器时钟 = 72MHz / (PSC+1)。</p>
+          <p><strong>例子</strong>：PSC=71（计数时钟 1MHz，每计数 1 = 1µs）；两次上升沿差值 500 → 周期 500µs → 频率 2kHz；上升沿→下降沿差值 200 → 高电平 200µs → 占空比 200/500 = 40%。</p>
+
+          <h3>4. 红外遥控：脉宽编码的「阅读理解」</h3>
+          <p><strong>一句话定义</strong>：红外遥控（NEC 协议）就是一段「不同宽度的脉冲序列」：引导码、0/1 码用不同的高电平时长区分（如 0 = 560µs、1 = 1680µs）。解码 = 用输入捕获量出每个脉冲的宽度，再按协议「翻译」成按键码。学会本课的脉宽测量，就拿到了红外解码的钥匙。</p>
+          <p><strong>例子</strong>：捕获一段「2.25ms 引导码 + 一串 0.56ms/1.68ms 的脉冲」，程序查表还原成 0x45 键码——这就是教材「红外遥控实验」的本质。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-principle">三、原理介绍：输入捕获是怎么「给时间戳拍照」的</h2>
+          <p>测频率、测脉宽，本质是「记下两个边沿发生的时刻，再算时间差」。输入捕获就是定时器硬件替你在边沿瞬间拍照存时间戳。</p>
+          <p><strong>整条链路：</strong>外部方波 → 定时器计数器 CNT 自由跑 → 边沿到来瞬间硬件把 CNT 锁进 CCR → 进捕获中断 → 用两次 CCR 之差换算出周期/脉宽。</p>
+
+          <h3>原理 1：边沿硬件锁存——为什么不能在中断里读计数器</h3>
+          <p>定时器 CNT 在不停地自加。外部信号每次上升沿到来，捕获通道<strong>在那一瞬间</strong>由硬件把当前 CNT 复制进 CCR 寄存器——这就是「拍照」。为什么不用软件在中断里读 CNT？因为从中断触发到你读到 CNT，中间已经过了几十个指令周期，对高频信号这就是巨大误差。硬件锁存发生在边沿本身，与软件延迟无关，所以测频准。</p>
+
+          <h3>原理 2：16 位回绕与无符号减法——差怎么算才对</h3>
+          <p>TIM3/4 是 16 位，CNT 数到 65535 就回 0。两次捕获的时间差用<strong>无符号减法</strong> <span class="inline-code">(now - last)</span>：哪怕中间 CNT 绕了一圈（如 now=100、last=65000），无符号 100−65000 在 16 位下自动等于 6536，正好跨过回绕正确算出差值。<strong>前提</strong>是两次间隔 &lt; 65535 个计数——信号太慢就加大 PSC 或换 32 位的 TIM2/5。</p>
+
+          <h3>原理 3：测频率 vs 测脉宽——两次边沿怎么选</h3>
+          <p><strong>测频率</strong>：连续两个<strong>上升沿</strong>的 CCR 之差 = 一个周期 T，f = 1/T。<strong>测脉宽/占空比</strong>：同一周期内先捕上升沿、再捕下降沿，两者差 = 高电平时长；高电平÷周期 = 占空比。PSC=71 让计数频率 = 72MHz/72 = 1MHz，即每个计数 = 1µs，所以「差值 ×1µs」直接就是实际时长，换算最省事。</p>
+          <blockquote>记忆点：捕获=边沿瞬间硬件把 CNT 锁进 CCR，比中断里读准；时间差=无符号减法（now−last）天然处理 16 位回绕，前提是间隔&lt;65535；两上升沿差=周期→f=1/T，升降沿差=高电平时长→占空比；PSC=71 时每计数=1µs。</blockquote>
+
+          <h3>原理 4：TIM 捕获寄存器 ↔ HAL 对照 + 计数时钟从哪来</h3>
+          <table>
+            <thead><tr><th>你做的事</th><th>对应寄存器 / 位</th><th>HAL 函数</th></tr></thead>
+            <tbody>
+              <tr><td>自由计数基准</td><td>TIMx_CNT（计数器）</td><td>htim2.Init.CounterMode = Up</td></tr>
+              <tr><td>预分频</td><td>TIMx_PSC</td><td>Prescaler = 71</td></tr>
+              <tr><td>自动重装（量程）</td><td>TIMx_ARR</td><td>Period = 0xFFFF</td></tr>
+              <tr><td>边沿锁存计数</td><td>TIMx_CCR1（捕获寄存器）</td><td>HAL_TIM_ReadCapturedValue()</td></tr>
+              <tr><td>选上升/下降沿</td><td>TIMx_CCER 的 CC1P 位（0=上升,1=下降）</td><td>Polarity = Rising/Falling</td></tr>
+              <tr><td>启动捕获+中断</td><td>TIMx_DIER CC1IE + CR1 CEN</td><td>HAL_TIM_IC_Start_IT()</td></tr>
+            </tbody>
+          </table>
+          <p><strong>计数时钟易错点（和 PWM 篇同一规则）：</strong>TIM2~TIM4 挂在 APB1，PPRE1=÷2 时定时器内部时钟自动 ×2 = <strong>72MHz</strong>，所以 PSC=71 → 72M/72 = 1MHz 计数、每格 1µs 是对的；别误按 APB1 总线 36MHz 去算 PSC，否则分辨率会差一倍。TIM1/TIM8 在 APB2(72MHz) 上不 ×2。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <p>核心是信号源（方波发生器或 PWM 输出自身）接捕获引脚：</p>
+          <table>
+            <thead>
+              <tr><th>模块引脚</th><th>单片机引脚</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>信号源输出（方波）</td><td>PA0（TIM2_CH1）</td><td>待测信号；0~3.3V 电平</td></tr>
+              <tr><td>信号源 GND</td><td>GND</td><td>共地</td></tr>
+              <tr><td>信号发生器（练习）</td><td>信号端 → PA0</td><td>可调频率的正弦/方波发生器</td></tr>
+              <tr><td>PWM 自测（练习）</td><td>PA1(TIM2_CH2) → PA0</td><td>自己输出 PWM 接回捕获，验证</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么信号电平要 0~3.3V</strong>：STM32 引脚只能承受 0~3.3V（5V 耐受引脚除外）。信号发生器输出 5V 方波会损坏引脚——要么限幅、要么串电阻，或选 5V 耐受引脚（FT 引脚）。<strong>为什么可以自测</strong>：用 TIM2_CH2 输出 PWM 接到 CH1 捕获，程序就能「自己测自己」——不需要外部仪器就能验证捕获逻辑，这是教材常用技巧。</p>
+          <div class="tip-warn mt-4"><span class="tip-label">避坑</span>
+            信号频率超过定时器能「跟得上」的上限时读数失真：计数分辨率 1µs 时，理论最高可测 1MHz 方波，但实际受中断响应限制（每次中断约 1~2µs），工程上测 100kHz 以下稳妥。高频用 DMA/多通道硬件配合。</div>
+        </section>
+
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p>CubeMX 配置要点：PA0 复用为 TIM2_CH1，Input Capture 模式、上升沿（Prescaler=72-1 或 72 视需求）、PSC=71（计数 1MHz）、开 Capture Compare Interrupt。示例 1 测频率；示例 2 测脉宽（含占空比）。</p>
+          <p><strong>示例 1：方波频率测量（PSC=71 → 1MHz 计数）</strong></p>
+          <pre><code class="language-c">/* 输入捕获测频率：TIM2_CH1 每个上升沿捕获，两次差值 = 周期 */
+#include "main.h"
+#include &lt;stdio.h&gt;
+
+extern TIM_HandleTypeDef htim2;
+
+volatile uint32_t last_cap = 0;    /* 上次捕获值 */
+volatile uint32_t period = 0;      /* 周期（计数单位） */
+
+/* 捕获中断回调：每次边沿自动进入 */
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
+{
+    if (htim == &amp;htim2) {
+        uint32_t now = HAL_TIM_ReadCapturedValue(&amp;htim2, TIM_CHANNEL_1);
+        /* 无符号减法：自动处理 16 位回绕 */
+        period = now - last_cap;
+        last_cap = now;
+    }
+}
+
+int main(void)
+{
+    HAL_Init();
+    SystemClock_Config();
+    MX_GPIO_Init();
+    MX_TIM2_Init();               /* PSC=71, ARR=0xFFFF, 上升沿捕获 */
+
+    HAL_TIM_IC_Start_IT(&amp;htim2, TIM_CHANNEL_1);  /* 启动捕获 + 中断 */
+
+    while (1) {
+        if (period &gt; 0) {
+            /* 计数周期 = 1 / 1MHz = 1µs；频率 = 1 / (period µs) */
+            float freq = 1000000.0f / period;
+            printf("period=%luus  freq=%.1fHz\r\n",
+                   (unsigned long)period, freq);
+        }
+        HAL_Delay(500);
+    }
+}</code></pre>
+          <p><strong>示例 2：高电平脉宽测量（两个通道各捕一个边沿）</strong></p>
+          <pre><code class="language-c">/* 脉宽测量：CH1 捕获上升沿、CH2 捕获下降沿，两者差值 = 高电平时长
+   CubeMX 配两个通道：CH1 Rising、CH2 Falling，同一信号接 PA0/PA1
+   简化做法：单通道在中断里切换边沿极性（Polarity toggle） */
+#include "main.h"
+
+extern TIM_HandleTypeDef htim2;
+
+volatile uint32_t rise_time = 0;
+volatile uint32_t high_us = 0;     /* 高电平宽度（µs） */
+volatile uint8_t  waiting_rise = 1;
+
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
+{
+    if (htim != &amp;htim2) return;
+
+    uint32_t cap = HAL_TIM_ReadCapturedValue(&amp;htim2, TIM_CHANNEL_1);
+
+    if (waiting_rise) {
+        /* 刚捕到上升沿：记下时刻，下次改捕下降沿 */
+        rise_time = cap;
+        __HAL_TIM_SET_CAPTUREPOLARITY(&amp;htim2, TIM_CHANNEL_1,
+                                      TIM_INPUTCHANNELPOLARITY_FALLING);
+        waiting_rise = 0;
+    } else {
+        /* 刚捕到下降沿：差值就是高电平时长 */
+        high_us = cap - rise_time;
+        __HAL_TIM_SET_CAPTUREPOLARITY(&amp;htim2, TIM_CHANNEL_1,
+                                      TIM_INPUTCHANNELPOLARITY_RISING);
+        waiting_rise = 1;
+    }
+}</code></pre>
+        </section>
+
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第一段：period = now - last_cap 的回绕处理</h3>
+          <p>无符号减法 <span class="inline-code">now - last_cap</span> 在 now 回绕后依然给出正确差值——例如上次 65000、这次 1000（回绕），差值 = 1000 - 65000 按 16 位无符号 = 1544（实际计了 1544 次）。<strong>为什么这么巧</strong>：定时器是模 65536 计数，无符号减法就是模运算，数学上天然正确。<strong>前提</strong>：两次捕获间隔必须小于 65536 个计数（1MHz 下 &lt;65.5ms）——频率太低（&lt;15Hz）要用更大 PSC 或 32 位定时器。</p>
+
+          <h3>第二段：1µs 计数与频率换算</h3>
+          <p><span class="inline-code">1000000.0f / period</span>：计数时钟 1MHz → 每个计数 1µs，周期 = period µs，频率 = 1/周期。<strong>为什么用 float</strong>：整数除法 1000000/period 会把 333.33 截成 333——显示精度差；float 足够演示（追求更高精度用定点：<span class="inline-code">1000000 * 10 / period</span> 再除 10）。</p>
+
+          <h3>第三段：示例 2 的边沿切换法</h3>
+          <p>单通道通过 <span class="inline-code">__HAL_TIM_SET_CAPTUREPOLARITY</span> 在「捕上升沿」和「捕下降沿」之间切换：上升沿记下时刻，改成下降沿，等下降沿再算差值。<strong>为什么能这样</strong>：信号是高电平期间，捕获极性随时可换——先等上升、再等下降，一高一低就量出了脉宽。<strong>缺点</strong>：切换之间有微小死区（几个计数），测超窄脉冲会漏——双通道同时捕更严谨（本课用切换法入门）。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-demo">七、现象演示与验证</h2>
+          <ul>
+            <li><strong>自测频率</strong>：TIM2_CH2 输出 1kHz PWM 接回 CH1，串口打印 <span class="inline-code">period=1000us freq=1000.0Hz</span>。</li>
+            <li><strong>外部信号</strong>：信号发生器输出 5kHz 方波，读数 <span class="inline-code">freq=5000.0Hz</span>（±0.1% 内）。</li>
+            <li><strong>脉宽</strong>：PWM 占空比 50% 的 1kHz 信号，high_us ≈ 500µs。</li>
+          </ul>
+          <p><strong>验证方法：</strong></p>
+          <ol>
+            <li>改 PWM 输出频率（100Hz、1kHz、10kHz），串口读数应精确跟随——逐档验证。</li>
+            <li>把 PSC 从 71 改成 35（2MHz 计数，0.5µs/计数），同信号 period 翻倍、freq 不变——理解 PSC 只影响分辨率。</li>
+            <li>测 15Hz 以下的低频方波，观察读数出错（回绕前提被破坏）——验证 16 位定时器限制。</li>
+          </ol>
+        </section>
+
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>捕获中断不触发</td><td>没 Start_IT / 引脚复用没配好</td><td>确认 <span class="inline-code">HAL_TIM_IC_Start_IT</span> 调用；CubeMX 里 PA0 复用为 TIM2_CH1</td></tr>
+              <tr><td>频率读数明显偏小</td><td>16 位回绕（低频信号）</td><td>加大 PSC 降计数频率；或换 TIM2/TIM5（32 位）</td></tr>
+              <tr><td>读数抖动大</td><td>信号有噪声产生毛刺边沿</td><td>信号加滤波（RC 或施密特）；捕获后做中值滤波</td></tr>
+              <tr><td>高频测不准</td><td>中断响应跟不上（&gt;100kHz）</td><td>改用 DMA 突发捕获或降低中断频率（只取差不算）</td></tr>
+              <tr><td>脉宽切换法丢脉冲</td><td>切换极性的间隙错过边沿</td><td>用双通道（CH1 上升 + CH2 下降）同时捕获</td></tr>
+              <tr><td>5V 信号烧引脚</td><td>超压输入</td><td>选 FT 5V 耐受引脚或串电阻限流（分压）</td></tr>
+              <tr><td>回调里 printf 卡顿</td><td>ISR 里做串口打印（阻塞）</td><td>ISR 只存 period，打印放主循环</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（必做）</strong>：用 TIM2_CH2 输出 1kHz、占空比 30% 的 PWM 接回 CH1，同时测频率和脉宽，验证占空比 = high_us/period ≈ 30%。</p>
+          <p><strong>练习 2</strong>：把测出的频率换算成电机转速：输入 2 个脉冲/转 → RPM = freq/2×60，做成简易转速计。</p>
+          <p><strong>练习 3（进阶）</strong>：用输入捕获量红外遥控（NEC 协议）的引导码与 0/1 脉宽，按协议表还原按键码——完成教材经典「红外遥控解码实验」。</p>
+          <p><strong>延伸学习</strong>：STM32 进阶三篇（SysTick/RTC/输入捕获）完成。回看 <a href="route.html">学习路线</a> 阶段 4，可以把电压表升级成「带 RTC 记录 + 输入捕获测速」的完整仪表。下一阶段方向：FreeRTOS、CAN 总线（可先在 ESP32 侧体验 <a href="esp32-freertos.html">多任务</a> 思想）。</p>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="stm32-rtc.html" class="btn btn-outline btn-sm">← 上一篇：RTC 实时时钟</a>
+          <a href="stm32-can.html" class="btn btn-outline btn-sm">下一篇：CAN 总线通信 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

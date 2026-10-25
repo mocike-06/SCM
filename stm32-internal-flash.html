@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - 内部 Flash 读写（掉电保存参数）</title>
+  <meta name="description" content="STM32 内部 Flash 零基础教程：Flash 结构、先擦后写规则、页擦除、HAL_FLASH_Program/Erase、参数掉电保存示例、避免误擦程序区的安全边界。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link active" aria-current="page">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>内部 Flash 读写（掉电保存参数）</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：STM32</span>
+          <span class="badge badge-orange">进阶</span>
+          <span class="badge badge-gray">更新：2026-10-25</span>
+        </div>
+
+        <p class="text-secondary mb-6">设备要「记住」校准值、WiFi 配置、累计计数——上电还在。STM32 内部 Flash 就是现成的掉电保存空间：不用外挂 EEPROM。但 Flash 有个坑：<strong>只能把 1 写成 0，恢复 1 必须整页擦除</strong>。本课讲透 Flash 的物理特性、先擦后写流程、HAL 接口，做出「掉电保存累计开机次数」的经典应用。</p>
+
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>说清 Flash 为什么「先擦后写」、为什么擦除的最小单位是页。</li>
+            <li>看懂 F103 的 Flash 布局：主存储区、系统区、选项字节、页大小。</li>
+            <li>用 HAL_FLASH 保存/读取参数，并避免误擦程序区。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识（对应学习路线阶段 4）：</strong></p>
+          <ul>
+            <li>存储器映射（stm32-register.html）：Flash 地址从 0x08000000 起。</li>
+            <li>串口（stm32-usart.html）：读回数据打印验证。</li>
+            <li>可选：51 的 EEPROM（mcu51-i2c-eeprom.html）对比「外挂 vs 内置」。</li>
+          </ul>
+          <p><strong>本课会出现的新名词：</strong>Flash、扇区/页、先擦后写、擦除粒度、写保护/解锁、HAL_FLASH_Program/Erase、0x08000000、选项字节、磨损均衡。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. Flash 是什么：掉电不丢的「改写型存储」</h3>
+          <p><strong>生活类比</strong>：Flash 像「可重写的光盘刻录机」：能写能改，但<strong>改写的最小单元很大</strong>——不能改单个字，要改就得「抹掉整张盘的一整块再重刻」。RAM 是白板（随便改），Flash 是刻录盘（改起来要整块重来）。</p>
+          <p><strong>一句话定义</strong>：Flash 是<strong>非易失存储器</strong>：掉电数据保留。F103 主 Flash 128KB（C8T6）/256KB/512KB，从地址 <span class="inline-code">0x08000000</span> 开始；<strong>页（扇区）大小 1KB</strong>（F103 的页=1KB，F4 系列 16KB+）。</p>
+          <p><strong>例子</strong>：程序烧进去就是写在 0x08000000 起的 Flash 里，掉电不丢——你的代码本身就是 Flash 数据的例子。</p>
+
+          <h3>2. 先擦后写：Flash 的物理规则</h3>
+          <p><strong>一句话定义</strong>：Flash 编程（写入）<strong>只能把位从 1 改成 0</strong>；要把 0 恢复成 1，只能执行<strong>擦除</strong>，而擦除的最小单位是<strong>一页（1KB）</strong>——整页变 0xFF。所以「修改一个字节」= 备份整页 → 擦页 → 重写整页。这就是<strong>先擦后写</strong>。</p>
+          <p><strong>例子</strong>：想把地址 0x08008000 的值从 0xAB 改成 0xCD：不能只写这一字——0xAB 里已 0 的位写不回 1；必须先擦掉这一页（全 0xFF）再写入包含 0xCD 在内的整页数据。</p>
+
+          <h3>3. 页与地址规划：别动程序区</h3>
+          <p><strong>一句话定义</strong>：F103 主 Flash 按 1KB 分页（共 128 页/128KB）。程序从 0x08000000 开始占低地址区；存参数要选<strong>程序占用之外的页</strong>（如 0x0800F800 附近，最后一页附近），并用「魔数标志」判断是否已写入。</p>
+          <p><strong>例子</strong>：程序编译后约 20KB，占用 0x08000000~0x08004FFF；存参数选 0x0800FC00（第 63 页）安全。</p>
+
+          <h3>4. 写保护：先解锁才能动</h3>
+          <p><strong>一句话定义</strong>：Flash 编程/擦除前必须<strong>解锁</strong>（写 KEY1/KEY2 到 FLASH_KEYR）；完成后再<strong>上锁</strong>防止误操作。HAL 里 <span class="inline-code">HAL_FLASH_Unlock()</span> 与 <span class="inline-code">HAL_FLASH_Lock()</span> 封装了这一步——忘了解锁，Program/Erase 返回错误。</p>
+          <p><strong>例子</strong>：擦页前先 Unlock；擦完再 Lock。保护措施的意义：程序跑飞时不会随手改掉自己。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-principle">三、原理介绍：保存参数的标准流程</h2>
+          <p>内部 Flash 是掉电不丢的存储，但它有个怪脾气：写只能把 1 变 0，想变回 1 必须整页擦除。理解这个物理特性，就懂了所有流程为什么这么绕。</p>
+          <p><strong>整条链路：</strong>选用户页 → 解锁 → 擦整页(全变1) → 按字 Program(写0) → 上锁；读则直接按地址取。</p>
+
+          <h3>原理 1：Flash 物理——为什么写只能 1→0、恢复要擦页</h3>
+          <p>Flash 每个位出厂是 1。编程时<strong>只能把 1 写成 0</strong>，没法单独把 0 写回 1。想恢复成 1，只能<strong>整页一起擦除</strong>——F103 中位密度每页 1KB，擦一次整页全变 1。所以「改一个参数」的流程必然是：先擦整页（全清成 1）→ 再按字把要变 0 的位写下去。这就是为什么不能像 RAM 那样随便改一个字节。</p>
+
+          <h3>原理 2：页编号擦除——为什么 Page 传的是序号不是地址</h3>
+          <p><span class="inline-code">HAL_FLASHEx_Erase</span> 的 <span class="inline-code">erase.Page</span> 接收的是<strong>从 0 开始的页序号</strong>，HAL 内部自动乘页大小(1KB)算真实地址。所以要擦 0x0800FC00 这页，应写 <span class="inline-code">erase.Page = (0x0800FC00 - 0x08000000) / 1024</span> = 63。<strong>经典坑</strong>：直接把字节偏移 0xFC00 塞给 Page，会被当成 64512 号页、地址算到芯片外，擦除报错。写入则按 32 位字：<span class="inline-code">HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, addr, value)</span>，所以参数数组要按 4 字节对齐凑整。</p>
+
+          <h3>原理 3：魔数与寿命——为什么用魔数、为什么别频繁写</h3>
+          <p>页擦完全是 1（即 0xFFFFFFFF）。上电先读页首 4 字节，若不等于你约定的魔数（如 0xA5A5A5A5）说明是首次上电，就写入默认参数并打魔数；以后上电见到魔数就直接用、不再重写。<strong>为什么要省着写</strong>：Flash 擦写寿命约 1 万次，每秒存一次几小时就耗尽。工程上只在数值真变化时写、合并写入。<strong>安全红线</strong>：千万别擦到程序所在的页，否则芯片变砖。</p>
+          <blockquote>记忆点：Flash 掉电不丢；写只能 1→0，恢复 1 必须整页擦（F103 页=1KB）；Page 传页序号=(addr−0x08000000)/1024，不是字节地址；按字写、4 字节对齐；魔数判首次；寿命约 1 万次、别频繁写、别擦程序页。</blockquote>
+
+          <h3>原理 4：FPEC 寄存器 ↔ HAL 对照 + Flash 三区映射</h3>
+          <p>F103 的 Flash 编程由 <strong>FPEC（Flash 编程/擦除控制器）</strong>完成，本讲动作对应的寄存器如下（教材查表）：</p>
+          <table>
+            <thead><tr><th>你做的事</th><th>对应寄存器 / 键值</th><th>HAL 函数</th></tr></thead>
+            <tbody>
+              <tr><td>解锁写保护</td><td>FLASH_KEYR 写 KEY1=0x45670123、KEY2=0xCDEF89AB</td><td>HAL_FLASH_Unlock()</td></tr>
+              <tr><td>页擦除</td><td>FLASH_CR 的 PER 位 + FLASH_AR 地址 + STRT 启动</td><td>HAL_FLASHEx_Erase()</td></tr>
+              <tr><td>按字编程</td><td>FLASH_CR 的 PG 位 → 写地址→写数据</td><td>HAL_FLASH_Program(TYPEPROGRAM_WORD,…)</td></tr>
+              <tr><td>查操作完成</td><td>FLASH_SR 的 BSY/WRPRTERR 位</td><td>HAL 内部轮询，返回 HAL_OK/ERROR</td></tr>
+              <tr><td>重新上锁</td><td>FLASH_CR 的 LOCK 位置 1</td><td>HAL_FLASH_Lock()</td></tr>
+            </tbody>
+          </table>
+          <p><strong>Flash 在地址空间里的三个区（呼应 stm32-register.html 存储器映射）：</strong>① <strong>主存储区 0x08000000</strong>（C8=128KB，放你的程序和本讲参数）；② <strong>系统存储器 0x1FFFF000</strong>（ST 出厂 Bootloader，串口 ISP 下载用，用户不可改）；③ <strong>选项字节 0x1FFFF800</strong>（配读写保护、晶振等）。本讲只动主存储区末尾的空闲页，绝不要碰后两个区。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <p><strong>Flash 在芯片内部，无外部接线</strong>。硬件只需串口观察：</p>
+          <table>
+            <thead>
+              <tr><th>资源</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>USB 串口（PA9/PA10）</td><td>打印读回的参数与开机计数</td></tr>
+              <tr><td>复位按键</td><td>验证「掉电/复位后计数还在」</td></tr>
+              <tr><td>按键（可选）</td><td>触发一次参数修改，观察保存</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么不用外接任何芯片</strong>：STM32 片内就有 Flash，学完这课你就知道「配置参数存哪、怎么存」——比外挂 24C02（mcu51-i2c-eeprom.html）更省电路。</p>
+          <div class="tip-warn mt-4"><span class="tip-label">避坑</span>
+            <strong>千万别擦程序所在的页</strong>：擦除范围算错（如把 0x08000000 起始页擦了）会直接抹掉你的代码——芯片变砖（只能重新烧录）。存参数页务必选在程序体积之外，并用链接脚本/Keil 的 Flash 起始地址核对。练习前先备份固件。</div>
+        </section>
+
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p>示例 1 参数读写封装；示例 2 开机计数应用。</p>
+          <p><strong>示例 1：Flash 参数读写封装（带魔数初始化）</strong></p>
+          <pre><code class="language-c">/* Flash 存参数：一页存一个配置块，魔数判断是否已初始化
+   注意：FLASH_USER_ADDR 选在程序区之外（本工程程序小于 60KB） */
+#include "main.h"
+#include &lt;stdio.h&gt;
+
+#define FLASH_USER_ADDR  0x0800F000UL   /* 第 60 页：0x0800F000 */
+#define MAGIC_NUM        0xA5A5A5A5UL
+
+typedef struct {
+    uint32_t magic;
+    uint32_t boot_count;    /* 开机计数 */
+    uint16_t temp_offset;   /* 温度校准值 */
+    uint16_t hum_offset;    /* 湿度校准值 */
+} SysParam;
+
+/* 读参数（Flash 直接按地址读，无需解锁） */
+void flash_read_param(SysParam *p)
+{
+    uint32_t *addr = (uint32_t *)FLASH_USER_ADDR;
+    p-&gt;magic        = addr[0];
+    p-&gt;boot_count   = addr[1];
+    p-&gt;temp_offset  = (uint16_t)(addr[2] &amp; 0xFFFF);
+    p-&gt;hum_offset   = (uint16_t)(addr[2] &gt;&gt; 16);
+}
+
+/* 写参数：Unlock → 擦页 → 逐字写 → Lock */
+HAL_StatusTypeDef flash_write_param(SysParam *p)
+{
+    FLASH_EraseInitTypeDef erase;
+    uint32_t page_err = 0;
+    uint32_t i;
+    uint32_t *data = (uint32_t *)p;
+
+    HAL_FLASH_Unlock();
+
+    /* 1. 擦除整页（必须先擦：1→0 可写，0→1 必须擦） */
+    erase.TypeErase = FLASH_TYPEERASE_PAGES;
+    erase.Page      = (FLASH_USER_ADDR - 0x08000000) / 1024;  /* F1 的 Page 是「页编号」(每页1KB)：0xF000 → 第60页，不是字节地址 */
+    erase.NbPages   = 1;
+    if (HAL_FLASHEx_Erase(&amp;erase, &amp;page_err) != HAL_OK) {
+        HAL_FLASH_Lock();
+        return HAL_ERROR;
+    }
+
+    /* 2. 逐字写入（结构体 12 字节 → 向上取整 3 个字，写入 4 个字安全） */
+    for (i = 0; i &lt; (sizeof(SysParam) + 3) / 4; i++) {
+        if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD,
+                              FLASH_USER_ADDR + i * 4, data[i]) != HAL_OK) {
+            HAL_FLASH_Lock();
+            return HAL_ERROR;
+        }
+    }
+
+    HAL_FLASH_Lock();
+    return HAL_OK;
+}
+
+/* 读取时若魔数不对，写入默认参数 */
+void sysparam_load(SysParam *p)
+{
+    flash_read_param(p);
+    if (p-&gt;magic != MAGIC_NUM) {
+        p-&gt;magic       = MAGIC_NUM;
+        p-&gt;boot_count  = 0;
+        p-&gt;temp_offset = 0;
+        p-&gt;hum_offset  = 0;
+        flash_write_param(p);
+    }
+}</code></pre>
+          <p><strong>示例 2：开机计数应用（复位后计数继续累加）</strong></p>
+          <pre><code class="language-c">/* 应用：每次上电 boot_count +1，掉电不归零 */
+#include "main.h"
+#include &lt;stdio.h&gt;
+
+/* 复用示例 1 的 SysParam / flash_read_param / sysparam_load 等 */
+
+SysParam param;
+
+int main(void)
+{
+    HAL_Init();
+    SystemClock_Config();
+    MX_GPIO_Init();
+    MX_USART1_UART_Init();
+
+    /* 1. 加载参数（首次上电自动写默认值） */
+    sysparam_load(&amp;param);
+
+    /* 2. 计数 +1 并存回 Flash */
+    param.boot_count++;
+    flash_write_param(&amp;param);
+
+    /* 3. 打印：复位后应看到递增且不归零 */
+    printf("Boot count = %lu\r\n", (unsigned long)param.boot_count);
+
+    while (1) {
+        HAL_Delay(1000);
+    }
+}</code></pre>
+        </section>
+
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第一段：为什么读不用解锁、写必须解锁</h3>
+          <p>读 Flash = 普通内存读（<span class="inline-code">*(uint32_t *)FLASH_USER_ADDR</span>），任何时刻可读，不需要流程；<strong>写/擦会改代码运行所在的介质</strong>，所以硬件强制要先写解锁寄存器（KEY1/KEY2）——这是芯片的防呆设计。HAL 的 Unlock/Lock 就包这一层。</p>
+
+          <h3>第二段：擦除参数 TypeErase 与 Page 偏移</h3>
+          <p><span class="inline-code">FLASH_TYPEERASE_PAGES</span> 选页擦除；<span class="inline-code">Page = FLASH_USER_ADDR - 0x08000000</span> 把绝对地址转成「页内偏移量」——HAL 的页参数是相对 Flash 基址的偏移（F103 页大小 1KB，0x0800F000 的偏移 = 0xF000）。<strong>为什么必须用偏移</strong>：HAL_FLASHEx_Erase 的 Page 字段定义如此，填绝对地址会擦错位置。<strong>page_err</strong> 输出参数报告出错页。</p>
+
+          <h3>第三段：先擦后写的顺序不能反</h3>
+          <p>如果先 Program 后 Erase：刚写的值会被整页擦除清零，白写。<strong>为什么循环里逐字写而不是一次写</strong>：HAL_FLASH_Program 一次只写一个 32 位字，参数块有 4 个字就得循环 4 次。<strong>为什么 sizeof/4</strong>：结构体 4 字节对齐（成员都是 4/2 字节组合后 8 字节？——注意此处结构体大小 4+4+2+2=12，不是 4 的倍数，用 (sizeof+3)/4 更稳妥）。</p>
+
+          <h3>第四段：魔数初始化模式的工程意义</h3>
+          <p>Flash 出厂是 0xFF（擦除态），首次烧录后参数区没写过——读到的是全 0xFF，等于魔数不匹配 → 写默认值。<strong>第二次上电魔数匹配 → 直接用已存参数</strong>。魔数方案是「数据区是否有有效数据」的标准判断，类似 RTC 课（stm32-rtc.html）的备份寄存器标志。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-demo">七、现象演示与验证</h2>
+          <ul>
+            <li><strong>首次烧录</strong>：串口打印 <span class="inline-code">Boot count = 1</span>。</li>
+            <li><strong>复位</strong>：按复位键，打印 <span class="inline-code">Boot count = 2</span>、3、4……持续累加。</li>
+            <li><strong>断电</strong>：拔电再上电，计数继续（Flash 掉电不丢）。</li>
+          </ul>
+          <p><strong>验证方法：</strong></p>
+          <ol>
+            <li>在 Keil 调试器 Memory 窗口输入 0x0800F000，观察魔数 0xA5A5A5A5 与计数——直接看 Flash 内容。</li>
+            <li>把 FLASH_USER_ADDR 改到 0x0800F800（另一页），数据丢失（旧页没擦）——理解页边界。</li>
+            <li>故意把程序改到 64KB 以上再跑（会占用参数页）——观察参数读写异常（此练习仅理解，别在实板上做）。</li>
+          </ol>
+        </section>
+
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Program/Erase 返回错误</td><td>没 Unlock / 地址越界</td><td>先 HAL_FLASH_Unlock；核对地址在 0x08000000~0x0801FFFF</td></tr>
+              <tr><td>写进去读出来还是 0xFF</td><td>先 Program 后 Erase 顺序反</td><td>严格先擦后写</td></tr>
+              <tr><td>擦完程序跑飞/白屏</td><td>擦到了程序区</td><td>参数页必须选在程序体积之外；核对编译大小</td></tr>
+              <tr><td>复位后计数归零</td><td>魔数没匹配 / 写失败</td><td>查 Program 返回值；确认结构体大小与写入循环匹配</td></tr>
+              <tr><td>频繁写后参数丢失</td><td>Flash 寿命耗尽（10k 次）</td><td>值变化才写；合并写；用磨损均衡</td></tr>
+              <tr><td>擦除卡死（HardFault）</td><td>擦除期间中断打断</td><td>写/擦期间关中断或确保在 Flash 之外的 RAM 执行</td></tr>
+              <tr><td>结构体尾部数据错位</td><td>结构体大小不是 4 的倍数</td><td>用 <span class="inline-code">(sizeof(SysParam)+3)/4</span> 计算字数量</td></tr>
+              <tr><td>读到旧数据不更新</td><td>读地址与写地址不一致</td><td>统一用 FLASH_USER_ADDR 宏</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（必做）</strong>：给参数结构体加一个「运行时长累计」字段（uint32_t 秒），每次开机把上次时长加回来并保存——多字段参数的完整读写。</p>
+          <p><strong>练习 2</strong>：把 <span class="inline-code">(sizeof+3)/4</span> 的向上取整写法用起来，验证结构体 12 字节也能完整保存。</p>
+          <p><strong>练习 3（进阶）</strong>：实现磨损均衡：两块参数页轮换写（先写页 A、再写页 B），每页寿命翻倍，掉电不丢。</p>
+          <p><strong>延伸学习</strong>：参数能掉电保存了，下一课学 <a href="stm32-lowpower.html">低功耗模式</a>——电池设备把「存参数 + 睡觉 + 唤醒」组合起来，续航翻倍。</p>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="stm32-can.html" class="btn btn-outline btn-sm">← 上一篇：CAN 总线通信</a>
+          <a href="stm32-lowpower.html" class="btn btn-outline btn-sm">下一篇：低功耗模式 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

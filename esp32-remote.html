@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - 综合项目：ESP32 蓝牙遥控器（LED + 继电器 零基础）</title>
+  <meta name="description" content="零基础综合项目：ESP32 经典蓝牙接收手机文本指令（LED_ON/RELAY_OFF 等），按行解析后控制板载 LED 与继电器。讲帧格式、状态机、协议表设计、蓝牙+GPIO 综合应用。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link active" aria-current="page">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>综合项目：ESP32 蓝牙遥控器（LED + 继电器）</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：ESP32</span>
+          <span class="badge badge-orange">进阶</span>
+          <span class="badge badge-gray">更新：2026-10-25</span>
+        </div>
+
+        <p class="text-secondary mb-6">把前面学过的蓝牙 SPP 与 GPIO 控制组合成一个完整小项目：手机蓝牙串口助手发送文本指令，ESP32 按「行」解析后控制板载 LED 与继电器，并回传执行结果。本讲从零讲清为什么要设计帧格式、什么是状态机、协议表怎么对齐，是蓝牙+GPIO 综合应用的模板。</p>
+
+        <!-- ===== 一、本课目标与前置知识 ===== -->
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>设计一套最简单的文本协议（帧格式 = 命令字符串 + 换行符结尾）。</li>
+            <li>用 String 缓冲区逐字符拼接蓝牙收到的字节，遇到换行就解析执行。</li>
+            <li>把解析结果映射到 GPIO 输出（LED、继电器），并回 OK/ERR 给手机。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识（对应学习路线阶段 5 收尾）：</strong></p>
+          <ul>
+            <li>蓝牙 SPP 透传（esp32-bluetooth.html）：会用 SerialBT.read/available。</li>
+            <li>GPIO 输出（esp32-gpio.html）：会用 digitalWrite。</li>
+            <li>C 字符串比较：String 的 == 运算符或 strcmp。</li>
+          </ul>
+          <p><strong>本课会出现的新名词：</strong>帧格式（行协议）、状态机（拼接/解析/执行三态）、协议表、粘包、缓冲区清空、低电平触发继电器。</p>
+        </section>
+
+        <!-- ===== 二、基础概念铺垫 ===== -->
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. 为什么要设计帧格式：裸字节流是「一锅粥」</h3>
+          <p><strong>生活类比</strong>：蓝牙给你的是源源不断的字节流，像有人对着水龙头连续吐字，没有标点。你不知道哪几个字是一条完整指令——必须自己定一个「句号」（换行符），看到句号才算一句话结束。</p>
+          <p><strong>一句话定义</strong>：帧格式是通信双方约定的「消息边界规则」。本课用最简单的行协议：每条指令以 \n 或 \r 结尾，前面是大写英文字符命令，如 <span class="inline-code">LED_ON\n</span>。</p>
+          <p><strong>例子</strong>：手机 App 发 "LED_ON\n"，ESP32 读到 \n 时才知道这是一条完整指令，再去拼前面那 6 个字符。</p>
+
+          <h3>2. 状态机：拼接 / 解析 / 执行 三个阶段</h3>
+          <p><strong>生活类比</strong>：处理一条指令像接快递——先把零散包裹拼起来（拼接态），凑够一件了再拆箱验货（解析态），确认是什么货再搬到货架（执行态），然后清空收货区等下一件。</p>
+          <p><strong>一句话定义</strong>：本项目的状态机（教材称<strong>有限状态机 FSM</strong>，Finite State Machine）= 用一个 String 缓冲区不断追加字符（拼接态），遇到换行符进入解析态（字符串比较），匹配到命令就执行 digitalWrite（执行态），最后清空缓冲区回到拼接态。FSM 的三要素：有限个状态、状态间按条件转移、每个状态下做固定动作——本课就是「拼接→解析→执行→拼接」的循环转移。</p>
+          <p><strong>例子</strong>：inputString 不断 += c；遇到 \n 时 if/else 比较 "LED_ON"/"RELAY_ON" 等，然后 inputString = "" 清空。</p>
+
+          <h3>3. 协议表：手机和单片机必须「对暗号」</h3>
+          <p><strong>生活类比</strong>：手机发什么、ESP32 做什么、回什么——三者必须事先写在一张表上对齐，像地下党对暗号：你说「天王盖地虎」，我必须回「宝塔镇河妖」，对不上就是自己人。</p>
+          <p><strong>一句话定义</strong>：协议表是一张三列对照表：手机发送的命令字符串、ESP32 要执行的动作、ESP32 回包内容。任何一端改了命令字，另一端必须同步改。</p>
+          <p><strong>例子</strong>：表里规定发 "LED_ON" → GPIO2=HIGH → 回 "OK: LED_ON"；发 "RELAY_OFF" → GPIO4=HIGH（低触模块断开）→ 回 "OK: RELAY_OFF"。</p>
+
+          <h3>4. 粘包与缓冲区：不清空就会「串味」</h3>
+          <p><strong>生活类比</strong>：如果上一条指令处理完不清空缓冲区，下一条指令的字符会拼在上一条尾巴后面——像饭盒没洗就装新菜，味道全串了。</p>
+          <p><strong>一句话定义</strong>：粘包指多条指令的字节混在同一个缓冲区里；解决方法是每处理完一条，立即 <span class="inline-code">inputString = "";</span> 清空，等下一条从头拼。</p>
+          <p><strong>例子</strong>：处理完 "LED_ON" 后不清空，下一个字符 "R" 会拼成 "LED_ONR"，再也匹配不到任何命令。</p>
+
+          <h3>5. 低电平触发继电器：不是所有模块都「高电平干活」</h3>
+          <p><strong>生活类比</strong>：继电器模块像一个电磁开关——给信号脚一个电平，内部电磁铁吸合，把 COM 和 NO 两个端子接通。但有的模块「给低电平才吸合」（低触发），有的「给高电平才吸合」（高触发），看板上标签。</p>
+          <p><strong>一句话定义</strong>：常见 5V 继电器模块多为<strong>低电平触发</strong>：IN 脚写 LOW 时吸合（COM-NO 接通），写 HIGH 时断开。代码里默认要把 IN 脚写 HIGH，避免上电瞬间乱吸合。</p>
+          <p><strong>例子</strong>：<span class="inline-code">digitalWrite(relayPin, LOW)</span> 听到「嗒」一声吸合，负载通电；写 HIGH 断开。</p>
+        </section>
+
+        <!-- ===== 三、原理介绍 ===== -->
+        <section>
+          <h2 id="sec-principle">三、原理介绍</h2>
+          <p>本项目是对「蓝牙串口桥」的升级：不再把字节原样透传，而是<strong>按帧解析</strong>后执行动作。蓝牙链路本身只负责「搬字节」，真正的业务逻辑在单片机端完成。</p>
+          <p>一条指令从手机到执行的链路：手机 App 发一串字节 → 蓝牙缓冲区排队 → loop 逐字节拼进 String → 遇到换行判定「一条完整指令」→ 比对命令表 → 执行 digitalWrite → 回一句确认。</p>
+
+          <h3>原理 1：为什么必须有「帧边界」——粘包问题</h3>
+          <p>蓝牙/TCP 这类链路是<strong>字节流</strong>，不是「一条一条消息」：手机连发 <span class="inline-code">LED_ON</span> 和 <span class="inline-code">RELAY_OFF</span>，ESP32 可能一次 read 到 <span class="inline-code">LED_ONRELAY_OFF</span> 连在一起——这就是「粘包」。解法是双方约定一个<strong>边界符号</strong>：本协议用换行符 \n 当边界——没等到换行就一直拼在缓冲区，等到换行才把整串当一条指令解析。<strong>这就是为什么 App 发送设置里必须勾选「加 \n」</strong>：没有边界符，单片机永远不知道一条指令从哪结束。</p>
+
+          <h3>原理 2：文本行协议 vs 二进制帧——各解决什么问题</h3>
+          <p>本课用的是<strong>文本行协议</strong>：人能读懂、调试方便（串口打出来就是 LED_ON），代价是占字节多、没有校验——蓝牙链路偶尔出错拼错一个字母，就匹配不上任何命令。第二个实例演示的<strong>二进制帧协议</strong>（帧头 0xAA + 长度 + 数据 + 校验和）多花几个字节，换来「错包能被校验和丢弃、不会误执行」。工程上简单设备用文本行就够，工业遥控才上二进制帧+CRC。</p>
+
+          <h3>原理 3：为什么要回一句 OK——半双工链路的确认</h3>
+          <p>蓝牙链路是半双工：双方轮流说，没有硬件级确认机制。手机发完一条 <span class="inline-code">LED_ON</span>，如果蓝牙丢包了，手机端毫无察觉——灯没开、用户还以为开了。ESP32 每执行一条就 <span class="inline-code">println("OK: LED ON")</span> 回一句，手机收到回包才知道「这条真的送达并执行了」。<strong>一问一答 = 应用层的确认机制</strong>，这也是所有遥控协议（包括后面 MQTT 的 QoS）解决可靠性的核心思路。</p>
+          <blockquote>记忆点：字节流会粘包，必须约定边界符（本课=\n）；文本行协议好调试但无校验，二进制帧+CRC 更可靠；一问一答回 OK 是应用层确认；协议表=手机发什么/ESP32 做什么/回什么，三者严格对齐。</blockquote>
+        </section>
+
+        <!-- ===== 四、硬件接线说明 ===== -->
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <p>除板载 LED 外，外接一路继电器模块，用它控制一盏台灯 / 风扇等低压或强电负载（强电部分请由有经验者接线，注意安全）。</p>
+          <table>
+            <thead>
+              <tr><th>模块引脚</th><th>单片机引脚</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>板载 LED</td><td>LED_BUILTIN（GPIO2）</td><td>板载已连，无需外接</td></tr>
+              <tr><td>继电器模块 IN（信号）</td><td>GPIO4</td><td>低电平触发 / 高电平触发视模块而定</td></tr>
+              <tr><td>继电器模块 VCC</td><td>5V（VIN）</td><td>多数继电器模块需要 5V 才能可靠吸合</td></tr>
+              <tr><td>继电器模块 GND</td><td>GND</td><td>必须与 ESP32 共地</td></tr>
+              <tr><td>继电器 COM / NO</td><td>外部负载</td><td>吸合时 COM 与 NO 接通，可直接控制强电回路</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么这样接：</strong></p>
+          <ul>
+            <li><strong>为什么继电器 VCC 接 5V 不是 3V3？</strong> 继电器线圈驱动需要 5V，3.3V 往往吸合无力、发出异响；接 VIN（USB 5V）最可靠。</li>
+            <li><strong>为什么必须共地？</strong> ESP32 和继电器模块的地不连，IN 脚的电平参考点不同，继电器会误触发。</li>
+            <li><strong>为什么 GPIO4 默认写 HIGH？</strong> 低触模块上电瞬间 GPIO4 是输入态（电平悬空），可能误吸合；setup 里立刻 pinMode + 写默认 HIGH（断开），保证安全。</li>
+          </ul>
+          <div class="tip-warn">
+            <span class="tip-label">强电安全</span>
+            继电器侧的 220V 接线务必断电操作，用螺钉端子压紧、套热缩管；不要在通电时触碰 COM/NO 端。演示阶段建议先用一个 5V 小电机 / LED 灯串验证。
+          </div>
+        </section>
+
+        <!-- ===== 五、完整代码 ===== -->
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <h3>通信协议表</h3>
+          <table>
+            <thead>
+              <tr><th>手机发送（行尾带 \n）</th><th>含义</th><th>ESP32 动作</th><th>ESP32 回包</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>LED_ON</td><td>点亮板载 LED</td><td>GPIO2 = HIGH</td><td>OK: LED_ON</td></tr>
+              <tr><td>LED_OFF</td><td>熄灭板载 LED</td><td>GPIO2 = LOW</td><td>OK: LED_OFF</td></tr>
+              <tr><td>RELAY_ON</td><td>继电器吸合</td><td>GPIO4 = LOW（低触模块）</td><td>OK: RELAY_ON</td></tr>
+              <tr><td>RELAY_OFF</td><td>继电器断开</td><td>GPIO4 = HIGH（低触模块）</td><td>OK: RELAY_OFF</td></tr>
+              <tr><td>其它</td><td>未知指令</td><td>不动作</td><td>ERR: unknown command</td></tr>
+            </tbody>
+          </table>
+          <pre><code class="language-cpp">/* ESP32 蓝牙遥控器：手机发文本指令控制 LED 与继电器（零基础注释版） */
+#include "BluetoothSerial.h"
+
+BluetoothSerial SerialBT;
+
+const int ledPin   = 2;    // 板载 LED
+const int relayPin = 4;    // 继电器信号脚（低电平触发）
+
+String inputString = "";   // 指令拼接缓冲区
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(ledPin, OUTPUT);
+  pinMode(relayPin, OUTPUT);
+  digitalWrite(relayPin, HIGH);   // 低触模块：默认断开，防止上电误吸合
+
+  SerialBT.begin("ESP32_Remote"); // 蓝牙广播名
+  inputString.reserve(64);       // 预分配 64 字节，避免反复申请内存
+  Serial.println("蓝牙遥控器就绪：ESP32_Remote");
+}
+
+void loop() {
+  while (SerialBT.available()) {           // 把当前所有字节读完
+    char c = SerialBT.read();
+    // 遇到换行 / 回车，认为一条指令结束
+    if (c == '\n' || c == '\r') {
+      if (inputString.length() &gt; 0) {       // 空行忽略
+        Serial.print("收到指令：");
+        Serial.println(inputString);
+
+        if (inputString == "LED_ON") {
+          digitalWrite(ledPin, HIGH);
+          SerialBT.println("OK: LED_ON");
+        } else if (inputString == "LED_OFF") {
+          digitalWrite(ledPin, LOW);
+          SerialBT.println("OK: LED_OFF");
+        } else if (inputString == "RELAY_ON") {
+          digitalWrite(relayPin, LOW);      // 低触模块吸合
+          SerialBT.println("OK: RELAY_ON");
+        } else if (inputString == "RELAY_OFF") {
+          digitalWrite(relayPin, HIGH);     // 低触模块断开
+          SerialBT.println("OK: RELAY_OFF");
+        } else {
+          SerialBT.println("ERR: unknown command");
+        }
+        inputString = "";                   // 清空缓冲区，准备下一条
+      }
+    } else {
+      inputString += c;                     // 拼字符进缓冲区
+    }
+  }
+}</code></pre>
+          <p><strong>第二个实例：二进制帧协议解析（帧头 0xAA + 长度 + 数据 + 校验和）</strong>——主程序是文本指令，这个变体演示状态机解析带校验的二进制帧，抗干扰更强：</p>
+          <pre><code class="language-cpp">/* remote 变体：帧协议状态机解析 */
+#include "BluetoothSerial.h"
+BluetoothSerial SerialBT;
+
+enum { WAIT_HEAD, READ_LEN, READ_DATA, READ_CKS } state = WAIT_HEAD;
+byte buf[16];
+byte len = 0, idx = 0, cks = 0;
+
+void setup() {
+  Serial.begin(115200);
+  SerialBT.begin("ESP32_BT");
+}
+
+void loop() {
+  while (SerialBT.available()) {
+    byte b = SerialBT.read();
+    if (state == WAIT_HEAD &amp;&amp; b == 0xAA) {   /* 帧头 0xAA */
+      state = READ_LEN; idx = 0; cks = 0;
+    } else if (state == READ_LEN) {
+      len = b; state = READ_DATA;             /* 记下数据长度 */
+    } else if (state == READ_DATA) {
+      buf[idx++] = b; cks += b;               /* 收数据并累加校验 */
+      if (idx &gt;= len) state = READ_CKS;
+    } else if (state == READ_CKS) {
+      if (b == cks) Serial.printf("帧OK: %d\r\n", buf[0]);   /* 校验通过 */
+      else          Serial.println("校验失败，丢弃");
+      state = WAIT_HEAD;
+    }
+  }
+}</code></pre>
+          <p>想加高触发继电器？把 RELAY_ON/RELAY_OFF 里的 LOW/HIGH 对调即可；想加一条 <span class="inline-code">STATUS</span> 指令返回当前状态？在 else if 链里加一支即可。</p>
+        </section>
+
+        <!-- ===== 六、代码逐段讲解 ===== -->
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第 1 段：引脚定义与缓冲区（第 4~13 行）</h3>
+          <p><strong>在做什么：</strong> 定义 LED 和继电器引脚号，创建一个空字符串 inputString 作为指令缓冲区。</p>
+          <p><strong>为什么这么写：</strong> 把引脚号提为常量，改硬件只改一行；inputString.reserve(64) 预先分配内存，避免 += 时反复申请释放导致碎片。</p>
+          <p><strong>不写会怎样：</strong> 漏 reserve 也能跑，但长时间运行 String 容易内存碎片；漏 pinMode/默认电平，继电器上电瞬间可能乱跳。</p>
+
+          <h3>第 2 段：setup() 默认安全态（第 15~23 行）</h3>
+          <p><strong>在做什么：</strong> 把 LED 和继电器引脚配成输出，继电器先写 HIGH（低触模块=断开），再开蓝牙广播。</p>
+          <p><strong>为什么这么写：</strong> ESP32 上电瞬间 GPIO 是输入态，电平悬空，低触继电器可能因悬空电平被误触发；立刻 pinMode + 写默认 HIGH 是安全习惯。</p>
+          <p><strong>不写会怎样：</strong> 一上电继电器就「嗒」一声吸合，接的台灯突然亮——有安全隐患。</p>
+
+          <h3>第 3 段：loop() 读字节与状态机（第 25~51 行）</h3>
+          <p><strong>在做什么：</strong> while(SerialBT.available()) 把当前缓存的字节一次读完；遇到 \n/\r 就解析 inputString，否则继续 += 拼字符。</p>
+          <p><strong>为什么这么写：</strong> 蓝牙字节可能一次来多个，用 while 循环一次性清空 available，避免漏读；用 \n/\r 做帧边界是行协议的核心。</p>
+          <p><strong>不写会怎样：</strong> 用 if 而不是 while，蓝牙一次来多个字节时会丢后半；不判 \n 直接解析，命令永远拼不齐。</p>
+
+          <h3>第 4 段：if/else 命令分发（第 30~45 行）</h3>
+          <p><strong>在做什么：</strong> 把缓冲区字符串和预设命令逐一 == 比较，匹配到哪条就执行对应的 digitalWrite 并回 OK；都不匹配回 ERR。</p>
+          <p><strong>为什么这么写：</strong> String 的 == 运算符已经做了逐字符比较，比手写 strcmp 直观；回 OK/ERR 是「应答」，让手机知道命令有没有被收到。</p>
+          <p><strong>不写会怎样：</strong> 不回包，手机发完没反馈，用户不知道命令有没有生效；不加 else 兜底，未知命令被静默忽略。</p>
+
+          <h3>第 5 段：清空缓冲区（第 46 行）</h3>
+          <p><strong>在做什么：</strong> 处理完一条指令后立即 inputString = "" 清空。</p>
+          <p><strong>为什么这么写：</strong> 不清空，下一条指令的字符会拼在上一条尾巴上，导致粘包、命令永远匹配不到。</p>
+          <p><strong>不写会怎样：</strong> 发了几条后所有指令都变成 "LED_ONRELAY_OFF..." 这种串，全部回 ERR。</p>
+        </section>
+
+        <!-- ===== 七、现象演示说明 ===== -->
+        <section>
+          <h2 id="sec-demo">七、现象演示说明</h2>
+          <ul>
+            <li><strong>连接</strong>：手机蓝牙串口助手连接 <strong>ESP32_Remote</strong>，发送选项务必勾选「发送新行（\n）」。</li>
+            <li><strong>验证 LED</strong>：发送 <span class="inline-code">LED_ON</span>，板载 LED 点亮，手机收到 "OK: LED_ON"；发送 <span class="inline-code">LED_OFF</span>，LED 熄灭。</li>
+            <li><strong>验证继电器</strong>：发送 <span class="inline-code">RELAY_ON</span>，听到继电器「嗒」一声吸合，外接负载通电；发送 <span class="inline-code">RELAY_OFF</span>，负载断电。</li>
+            <li><strong>验证异常</strong>：随便发 <span class="inline-code">ABC</span>，ESP32 回 "ERR: unknown command"，且不改变任何引脚状态。</li>
+          </ul>
+          <p><strong>可量化的验证方法：</strong></p>
+          <ul>
+            <li><strong>数回包</strong>：发 5 条合法指令，手机应恰好收到 5 条 "OK: ..." 回包；发 1 条非法指令，收到 1 条 "ERR: ..."。</li>
+            <li><strong>粘包测试</strong>：快速连发 "LED_ON\nLED_OFF\n"，应依次回两条 OK，LED 先亮后灭——验证状态机能处理连续帧。</li>
+            <li><strong>扩展思路</strong>：把这套解析逻辑搬到 MQTT 的 callback 里，就成了「手机 App 通过互联网远程控制家电」，协议层完全不用改。</li>
+          </ul>
+        </section>
+
+        <!-- ===== 八、常见报错排查方案 ===== -->
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>发了指令手机收到 ERR: unknown command</td><td>App 没加换行 / 字符大小写写错</td><td>App 发送设置勾选「加 \n」；严格使用大写 LED_ON 等</td></tr>
+              <tr><td>继电器不吸合但回包 OK</td><td>模块是高电平触发 / VCC 没接 5V</td><td>把代码里 RELAY_ON 改为 digitalWrite(relayPin, HIGH)；VCC 接 VIN(5V)</td></tr>
+              <tr><td>一上电继电器就乱跳</td><td>GPIO4 上电瞬间为输入态，电平悬空</td><td>setup 里立刻 pinMode + digitalWrite 默认电平</td></tr>
+              <tr><td>发几条后就收不到回包</td><td>String 缓冲区没清空，指令粘包</td><td>每次处理完必须 inputString = ""；reserve 避免碎片化</td></tr>
+              <tr><td>蓝牙连接不稳定 / 距离远就断</td><td>USB 供电不足 / 2.4G 干扰</td><td>换 5V/1A 电源；远离 WiFi 路由器与微波炉</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <!-- ===== 九、课后练习与延伸 ===== -->
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（加 STATUS 指令）：</strong> 手机发 "STATUS"，ESP32 回当前 LED 和继电器状态，如 "LED=ON, RELAY=OFF"。提示：在 else if 链里加一支，用 digitalRead 读回引脚电平。</p>
+          <p><strong>练习 2（加 PWM 调光）：</strong> 把 LED 改成 PWM 呼吸灯，发 "DIM:128" 之类的命令设置亮度。提示：用 String::indexOf 找到 ':' 再用 toInt() 解析数字。</p>
+          <p><strong>练习 3（迁移到 MQTT）：</strong> 把这套解析逻辑从蓝牙 SerialBT 搬到 MQTT 的 callback 里，让手机通过互联网（而不是近距离蓝牙）控制继电器——这就是智能家居的雏形。</p>
+          <p><strong>延伸学习：</strong></p>
+          <ul>
+            <li><a href="#xxx" data-placeholder>ESP32 学习路线总览（esp32.html）</a></li>
+            <li><a href="#xxx" data-placeholder>自建 MQTT Broker 做远程控制（占位）</a></li>
+            <li><a href="#xxx" data-placeholder>OTA 远程升级固件（占位）</a></li>
+          </ul>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="esp32-sensor.html" class="btn btn-outline btn-sm">← 上一篇：传感器读取 DHT11、DS18B20</a>
+          <a href="esp32-pwm.html" class="btn btn-outline btn-sm">下一篇：LEDC PWM 调光与舵机 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - 外部中断触发（零基础）</title>
+  <meta name="description" content="零基础学 51 单片机外部中断：什么是中断、中断 vs 轮询、边沿触发与电平触发、IP 中断优先级寄存器、按键抖动与软件消抖，用 INT0 下降沿响应按键翻转 LED。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link active" aria-current="page">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>外部中断触发</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：51 单片机</span>
+          <span class="badge badge-orange">进阶</span>
+          <span class="badge badge-gray">更新：2026-10-24</span>
+        </div>
+
+        <p class="text-secondary mb-6">上一课定时器溢出能自动喊我们，这一课让「按键」也能主动喊单片机：不用在主循环里一遍遍地查按键有没有按下，按下的瞬间芯片自动跳去响应。本讲讲清中断和轮询的区别、边沿/电平两种触发方式、按键为什么要消抖，以及中断优先级。</p>
+
+        <!-- ===== 一、本课目标与前置知识 ===== -->
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>说清楚中断是什么、它和「轮询查按键」的区别与优劣。</li>
+            <li>配置 INT0（P3.2）为下降沿触发，按下按键自动翻转 LED，并做好软件消抖。</li>
+            <li>知道 IT0/EX0/EA 三个开关各管什么，以及 IP 寄存器怎么改优先级。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识（对应学习路线阶段 2）：</strong></p>
+          <ul>
+            <li>定时器一课的中断使用（mcu51-timer.html）：知道「开 EA、写 interrupt 函数」这套写法。</li>
+            <li>sbit、高低电平、按键一端接地的接法（mcu51-led.html）。</li>
+          </ul>
+          <p><strong>本课会出现的新名词：</strong>中断、轮询、边沿触发、电平触发、IT0/EX0、IP 优先级寄存器、按键抖动、消抖。</p>
+        </section>
+
+        <!-- ===== 二、基础概念铺垫 ===== -->
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. 什么是中断</h3>
+          <p><strong>生活类比</strong>：你正在书房写作业，突然电话铃响了——你立刻在当前页夹个书签、跑去接电话，接完回书签处继续写。电话铃响 → 跑去接电话这套自动响应，就是「中断」。</p>
+          <p><strong>一句话定义</strong>：<strong>中断</strong>是单片机在运行主程序时，硬件事件（定时器溢出、按键引脚变化等）发生，芯片<strong>自动暂停当前主程序</strong>、跳去执行一段预先写好的「中断服务函数（ISR）」，执行完再回到断点继续跑主程序。</p>
+          <p><strong>例子</strong>：主循环 while(1) 里什么都不写，按键接在 P3.2。按下的瞬间芯片自动跳去 <span class="inline-code">Int0_ISR</span> 把 LED 翻转——主程序全程「不知道按键被按了」，但响应立刻发生。</p>
+
+          <h3>2. 中断 vs 轮询</h3>
+          <p><strong>生活类比</strong>：等快递有两种方式——每隔 5 分钟开门去楼下看一趟（轮询）；或者留个门铃，快递到了按铃你才去（中断）。</p>
+          <p><strong>一句话定义</strong>：<strong>轮询</strong>是主程序不停地主动读按键引脚「按了没？按了没？」；<strong>中断</strong>是按键按下时硬件主动通知芯片。轮询简单但浪费 CPU（一直查），中断省 CPU（没事件时主程序干别的）、响应及时。</p>
+          <p><strong>例子</strong>：轮询写法 <span class="inline-code">while(1){ if(KEY==0){ 翻转LED; while(KEY==0); } }</span> 也能实现按键，但 CPU 一直在转着圈查按键；中断写法主循环空着也能立刻响应，而且响应延迟只有几微秒。</p>
+
+          <h3>3. 边沿触发 vs 电平触发</h3>
+          <p><strong>生活类比</strong>：门铃有两种——一种只在「按下去的那一下」响一声（边沿触发）；另一种只要手按着就一直响（电平触发）。</p>
+          <p><strong>一句话定义</strong>：<strong>下降沿（边沿）触发</strong>指引脚电平从高变低的<strong>一瞬间</strong>触发一次中断（IT0=1）；<strong>低电平触发</strong>指只要引脚保持低电平就<strong>反复申请</strong>中断（IT0=0）。</p>
+          <p><strong>例子</strong>：按键接 P3.2 另一端接地——按下时引脚从 5V 掉到 0V，正好是一个下降沿。用 IT0=1，按一次只触发一次中断；如果误用 IT0=0，按住不放期间芯片会被反复打断，根本干不了别的。</p>
+
+          <h3>4. 中断优先级（IP 寄存器）</h3>
+          <p><strong>生活类比</strong>：你在接电话时门铃又响了——先接哪个？优先级高的先处理，正在处理的低优先级可以被高优先级打断（中断嵌套）。</p>
+          <p><strong>一句话定义</strong>：<strong>IP</strong>（Interrupt Priority）寄存器的每一位控制一个中断源是高优先级还是低优先级。51 默认是<strong>自然优先级</strong>：INT0 ＞ T0 ＞ INT1 ＞ T1 ＞ 串口；同优先级里同时申请时，按这个顺序响应。写 <span class="inline-code">PX0=1</span> 可把 INT0 提到高优先级。</p>
+          <p><strong>例子</strong>：默认情况下定时器中断跑着、按键同时按下，芯片先响应 INT0（自然优先级更高）。一般入门阶段用默认优先级即可，不必动 IP。</p>
+
+          <h3>5. 按键抖动与消抖</h3>
+          <p><strong>生活类比</strong>：老式金属按钮按下时，两个金属片不是「唰」一下合上，而是像弹珠一样嘣嘣嘣弹跳几下才稳定——这几下弹跳在电平上就是一串快速乱跳。</p>
+          <p><strong>一句话定义</strong>：机械按键按下/松开的瞬间，触点会在几毫秒内反复通断（抖动），电平上表现为一串毛刺，导致一次按键被误判成好几次。<strong>消抖</strong>就是想办法躲过这几毫秒：硬件上并个电容吸收毛刺，软件上在检测到低电平后延时约 10ms 再读一次确认。</p>
+          <p><strong>例子</strong>：不消抖，按一次键 LED 可能跳 2~4 次。中断里加一句 <span class="inline-code">delay_ms(10)</span> 再 <span class="inline-code">if(KEY==0)</span> 确认，毛刺期已过，读到的就是稳定的按下状态——一次按键只翻转一次。</p>
+        </section>
+
+        <!-- ===== 三、原理介绍 ===== -->
+        <section>
+          <h2 id="sec-principle">三、原理介绍：按键按下时，CPU 怎么知道、又怎么安全地「分身」去响应</h2>
+          <p>51 有 INT0(P3.2)/INT1(P3.3) 两根外部中断线。触发方式由 TCON 的 ITx 决定：<strong>ITx=0 低电平触发</strong>（只要引脚低就一直申请，适合按住不放的场景）；<strong>ITx=1 下降沿触发</strong>（高→低那一瞬间触发一次，正是「按下按键」这个动作，首选）。要用中断还得开两道开关：<span class="inline-code">EX0=1</span>（允许 INT0）+ <span class="inline-code">EA=1</span>（总中断，像总电闸）。</p>
+          <p><strong>一次按键的完整响应流程：</strong></p>
+          <ol>
+            <li>主程序在 while(1) 里跑。</li>
+            <li>按键按下，P3.2 高→低，形成下降沿。</li>
+            <li>硬件置 IE0 标志、向 CPU 申请中断。</li>
+            <li>CPU 执行完当前一条指令后暂停主程序，自动跳去 <span class="inline-code">Int0_ISR interrupt 0</span>。</li>
+            <li>ISR 里 delay_ms(10) 躲抖动、确认按下才翻转 LED、等松手。</li>
+            <li>ISR 返回，从断点继续主程序——主程序几乎无感。</li>
+          </ol>
+
+          <h3>原理 1：中断号为什么是固定的——中断向量表</h3>
+          <p>CPU 响应中断时，不是「随便跳到你写的函数」，而是<strong>硬件强制跳到一张固定地址表上的某个入口</strong>，这张表叫中断向量表。51 把各中断的入口地址焊死在程序 Flash 开头：</p>
+          <ul>
+            <li>复位入口 <strong>0x0000</strong>；INT0 入口 <strong>0x0003</strong>；T0 入口 <strong>0x000B</strong>；INT1 入口 <strong>0x0013</strong>；T1 入口 0x001B；串口入口 0x0023。</li>
+          </ul>
+          <p>所以 <span class="inline-code">void Int0_ISR(void) interrupt 0</span> 里那个 <strong>0</strong> 不是随便写的编号——它告诉 Keil：把这个函数的跳转指令放在 0x0003。硬件一收到 INT0 中断，就自动跳到 0x0003 执行你的 ISR。<strong>为什么是 interrupt 0 和 2</strong>：INT0 对应向量 0、INT1 对应向量 2，写错号（比如 INT1 写成 interrupt 0）就会跳错入口、两个中断互相串台。这也是为什么教程代码开头要在 0x0000 后用 <span class="inline-code">ljmp main</span> 跳过这片向量区——否则 main 代码会顶到 INT0 的入口上。</p>
+
+          <h3>原理 2：CPU 怎么做到「去开门还能回来接着看书」——现场保护与恢复</h3>
+          <p>响应中断时，CPU 手里正拿着一堆「现场」：程序指针 PC 当前走到哪、累加器 A 里的中间值、PSW 状态标志……如果跑去改了它们，回来主程序就乱了。<strong>硬件自动做的是</strong>：响应中断瞬间把当前 PC（断点地址）压入栈，跳去 ISR；ISR 末尾执行 RETI 时再把 PC 弹回来。<strong>软件（Keil 的 interrupt 关键字）自动做的是</strong>：在 ISR 开头自动把 A、PSW、B、DPTR 等你可能用到的寄存器压栈保护，结尾恢复。这就是为什么你写 ISR 时不用手动保存现场——<span class="inline-code">interrupt n</span> 这个关键字已经让编译器帮你包好了。<strong>坑</strong>：如果你用 <span class="inline-code">using 1</span> 切换寄存器组、或在 ISR 里调用了没加重入保护的函数，现场就可能被踩——入门阶段不碰这些就安全。</p>
+
+          <h3>原理 3：两个中断同时来了听谁的——自然优先级</h3>
+          <p>51 只有两级优先级（高/低），默认全是低级，按一张<strong>固定的自然优先级表</strong>裁决：INT0(0)＞T0(1)＞INT1(2)＞T1(3)＞串口(4)。<strong>为什么 INT0 天然比 INT1 先响应</strong>：它们默认同级时，CPU 按这张表的先后顺序选，INT0 排在 INT1 前面。<strong>更关键的一条规则</strong>：低级中断进行中，只能被高级中断打断；同级或低级的再来，必须排队等当前 ISR 跑完——这就是「中断嵌套」只有一级深度的原因。想改优先级就写 IP 寄存器（PX0/PX1…）把某个位置成高。<strong>这也解释了为什么 ISR 要尽量短</strong>：ISR 里 delay_ms(10) 那 10ms，其它同级中断全都得干等着。</p>
+
+          <h3>原理 4：为什么机械按键必须消抖</h3>
+          <p>机械触点在按下/松开的几毫秒里会来回弹跳，电平在 0/1 之间乱跳好几次。用下降沿触发时，这一串乱跳会被当成「按了好几次」，LED 连翻好几倍。<strong>本质是时间问题不是逻辑问题</strong>：第一次下降沿进来后，用 delay_ms(10) 等抖动期过去，再读一次引脚确认还是 0——是真按下才动作。硬件方案是并颗 104 电容滤掉尖峰；软件方案更省件，本课用的就是后者。</p>
+          <h3>原理 5：IE / IP 寄存器位定义（教材必考表）</h3>
+          <p>张毅刚教材把 5 个中断源的开关和优先级全部集中在两个可位寻址的 SFR 里。<strong>IE（中断允许寄存器，地址 0xA8）</strong>：</p>
+          <table>
+            <thead><tr><th>位（bit7~bit0）</th><th>EA</th><th>—</th><th>ES</th><th>ET1</th><th>EX1</th><th>ET0</th><th>EX0</th><th>—</th></tr></thead>
+            <tbody>
+              <tr><td>含义</td><td>总允许（=1 才开所有中断）</td><td>保留</td><td>串口中断允许</td><td>定时器1 允许</td><td>外部中断1 允许</td><td>定时器0 允许</td><td>外部中断0 允许</td><td>保留</td></tr>
+            </tbody>
+          </table>
+          <p>所以「开 INT0」的标准三件套就是 <span class="inline-code">EX0=1; EA=1;</span>（再加触发位 IT0=1）。<strong>IP（中断优先级寄存器，地址 0xB8）</strong>每位置 1 对应中断源为高优先级：</p>
+          <table>
+            <thead><tr><th>位</th><th>—</th><th>—</th><th>PS</th><th>PT1</th><th>PX1</th><th>PT0</th><th>PX0</th><th>—</th></tr></thead>
+            <tbody>
+              <tr><td>含义</td><td>保留</td><td>保留</td><td>串口优先级</td><td>定时器1 优先级</td><td>外部中断1 优先级</td><td>定时器0 优先级</td><td>外部中断0 优先级</td><td>保留</td></tr>
+            </tbody>
+          </table>
+          <p><strong>位操作 vs 直接赋值对照</strong>：写 <span class="inline-code">EX0 = 1;</span> 等价于把 IE.0 置 1；写 <span class="inline-code">EA = 1;</span> 等价于 IE.7 置 1；想把串口提到最高优先级就 <span class="inline-code">PS = 1;</span>。电平触发（IT0=0）时有个教材必考坑：<strong>下降沿触发时 IE0 由硬件自动清 0，而低电平触发时 IE0 不会自动清</strong>——只要引脚还低，IE0 就一直置 1，ISR 返回后立刻又被打断，必须在 ISR 里把引脚电平拉高（或用软件把 IE0 写 0）才能撤除请求，这就是「电平触发中断需软件撤除请求」的由来。</p>
+          <blockquote>记忆点：中断号=向量表固定入口（INT0→0x0003、INT1→0x0013），写错号就串台；去响应时硬件压 PC、interrupt 关键字自动保护 A/PSW，所以不用手动存现场；默认自然优先级 INT0＞T0＞INT1＞T1＞串口、只支持一级嵌套，ISR 要短；按键抖动是电平乱跳，进来后延时 10ms 再确认。</blockquote>
+        </section>
+
+        <!-- ===== 四、硬件接线说明 ===== -->
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <p>按键一端接 INT0（P3.2），另一端接地；引脚内部为准双向口，没按下时读为高电平，按下拉低产生下降沿。LED 仍接 P1.0 作为中断响应指示。</p>
+          <table>
+            <thead>
+              <tr><th>模块引脚</th><th>单片机引脚</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>按键 K1 一端</td><td>P3.2（INT0）</td><td>另一端接 GND，按下产生下降沿</td></tr>
+              <tr><td>按键 K2（可选）</td><td>P3.3（INT1）</td><td>同理，用于演示第二个外部中断</td></tr>
+              <tr><td>LED 阴极</td><td>P1.0</td><td>每次进中断翻转一次</td></tr>
+              <tr><td>共地</td><td>GND</td><td>按键与单片机共地</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么这样接：</strong></p>
+          <ul>
+            <li><strong>为什么按键另一端接地、不接 VCC？</strong> 因为 51 的 P3.2 内部有弱上拉，没按下时读到高电平；按下把它拉到 GND，正好形成「高→低」的下降沿，配合 IT0=1 触发一次中断。</li>
+            <li><strong>为什么按键不需要外接上拉电阻？</strong> P3 口内部已有约 30kΩ 上拉电阻，没按下时自动是高电平；但按键到 VCC 的接法才需要外部上拉，初学者容易接反。</li>
+            <li><strong>为什么 LED 仍接 P1.0？</strong> 它只是「中断响应指示器」，让你一眼看到中断确实被触发了，换 P1.1 也行。</li>
+          </ul>
+        </section>
+
+        <!-- ===== 五、完整代码 ===== -->
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p>配置 INT0 为下降沿触发，每按一次 K1，LED 翻转一次；中断里加 10ms 软件消抖。</p>
+          <pre><code class="language-c">/* 外部中断0：按键按下翻转 LED（下降沿触发 + 软件消抖） */
+#include &lt;reg52.h&gt;
+
+sbit LED = P1^0;
+sbit KEY = P3^2;   /* INT0 按键输入 */
+
+void delay_ms(unsigned int ms) {
+    unsigned int i, j;
+    for (i = 0; i &lt; ms; i++)
+        for (j = 0; j &lt; 120; j++);   /* 约 1ms */
+}
+
+void Int0_Init(void) {
+    IT0 = 1;    /* 下降沿触发（按一次只触发一次） */
+    EX0 = 1;    /* 允许 INT0 中断 */
+    EA  = 1;    /* 开总中断 */
+}
+
+void main(void) {
+    Int0_Init();
+    while (1) {
+        /* 主循环可做别的事，按键由中断响应 */
+    }
+}
+
+void Int0_ISR(void) interrupt 0 {
+    delay_ms(10);              /* 消抖：等 10ms 躲过触点抖动期 */
+    if (KEY == 0) {            /* 再确认按键确实按下（稳定低电平） */
+        LED = ~LED;
+        while (KEY == 0);      /* 等待松手，避免长按重复触发 */
+    }
+}</code></pre>
+          <p><strong>变体（改用电平触发观察现象）：</strong> 把 <span class="inline-code">IT0 = 1</span> 改成 <span class="inline-code">IT0 = 0</span>，按住按键不放，LED 会以极快速度反复翻转（一直被申请中断）——这就是低电平触发在按键场景下的问题。</p>
+
+          <h3>进阶实例：INT0 + INT1 双按键各控一颗灯</h3>
+          <p>再加一颗按键 K2 接 P3.3（INT1），两颗灯 P1.0、P1.1 分别由两个外部中断独立翻转。注意 INT1 用 <span class="inline-code">interrupt 2</span>、触发位是 IT1/EX1。</p>
+          <pre><code class="language-c">/* 双外部中断：K1(P3.2) 控 LED1，K2(P3.3) 控 LED2 */
+#include &lt;reg52.h&gt;
+sbit LED1 = P1^0;
+sbit LED2 = P1^1;
+sbit K1   = P3^2;   /* INT0 */
+sbit K2   = P3^3;   /* INT1 */
+
+void delay_ms(unsigned int ms) {
+    unsigned int i, j;
+    for (i = 0; i &lt; ms; i++)
+        for (j = 0; j &lt; 120; j++);
+}
+
+void main(void) {
+    IT0 = 1; EX0 = 1;   /* INT0 下降沿 */
+    IT1 = 1; EX1 = 1;   /* INT1 下降沿 */
+    EA  = 1;            /* 总中断 */
+    while (1);
+}
+
+void Int0_ISR(void) interrupt 0 {
+    delay_ms(10);
+    if (K1 == 0) { LED1 = ~LED1; while (K1 == 0); }
+}
+
+void Int1_ISR(void) interrupt 2 {
+    delay_ms(10);
+    if (K2 == 0) { LED2 = ~LED2; while (K2 == 0); }
+}</code></pre>
+          <p>烧录后应看到：按 K1 只动 LED1、按 K2 只动 LED2，互不干扰——这就是两个独立中断源并行工作的效果。</p>
+        </section>
+
+        <!-- ===== 六、代码逐段讲解 ===== -->
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第 1 段：Int0_Init 初始化（第 11~15 行）</h3>
+          <p><strong>在做什么：</strong> 设触发方式、开 INT0 中断开关、开总中断。</p>
+          <p><strong>为什么这么写：</strong> IT0=1 选下降沿（按一次触发一次）；EX0=1 是「允许 INT0 这个中断源」；EA=1 是「总电闸」——光开 EX0 不开 EA，芯片仍然不理会任何中断。</p>
+          <p><strong>不写会怎样：</strong> 漏 EA → 完全不进中断；漏 IT0（默认 0）→ 变成电平触发，按住不放一直进中断。</p>
+
+          <h3>第 2 段：main 的 while(1)（第 17~22 行）</h3>
+          <p><strong>在做什么：</strong> 初始化后主循环空转。</p>
+          <p><strong>为什么这么写：</strong> 这正是中断的价值——主程序不需要一句「查按键」代码，按下瞬间硬件自动跳去 ISR。主循环里可以放别的任务（比如数码管扫描），按键响应照样及时。</p>
+          <p><strong>不写会怎样：</strong> 没有 while(1)，main 跑完就跑飞，中断来了芯片也没有稳定的主程序可返回。</p>
+
+          <h3>第 3 段：Int0_ISR 中断服务函数（第 24~31 行）</h3>
+          <p><strong>在做什么：</strong> 进中断后先延时 10ms 消抖，再确认 KEY 仍为 0 才翻转 LED，最后等松手。</p>
+          <p><strong>为什么这么写：</strong> 下降沿触发时，抖动产生的第一个毛刺可能已经把中断「骗」进来了。delay_ms(10) 等毛刺过去，再读一次 KEY——如果还是 0，说明是真按下；如果已回弹，说明只是抖动，不翻转。<span class="inline-code">while(KEY==0)</span> 等松手，是因为下降沿只在按下瞬间触发一次，松手动作不会再触发，这一步只是防止长按期间重复执行消抖逻辑。</p>
+          <p><strong>不写会怎样：</strong> 不消抖 → 按一次 LED 跳好几次；不在中断里等待/确认 → 抖动毛刺让一次按键被当成多次。</p>
+        </section>
+
+        <!-- ===== 七、现象演示说明 ===== -->
+        <section>
+          <h2 id="sec-demo">七、现象演示说明</h2>
+          <p>烧录后，每按一次 K1 按键，P1.0 的 LED 状态翻转一次（亮变灭、灭变亮）。即使主循环「什么都没做」，按键依然能立刻被响应，这就是中断的意义。</p>
+          <p><strong>可量化的验证方法：</strong></p>
+          <ul>
+            <li><strong>数次数：</strong> 按 5 次按键，LED 应稳定翻转 5 次，不多不少——说明 10ms 软件消抖生效，没有一次按下去跳好几次。</li>
+            <li><strong>连按测试：</strong> 快速连按 10 次，LED 应每次按下都翻转、松手时不再动作；若出现「按一次跳两三次」，说明抖动没消干净，把 delay_ms(10) 加到 delay_ms(15)。</li>
+            <li><strong>变体观察：</strong> 按上面变体把 IT0 改成 0，按住按键不放，LED 会疯狂闪烁/常亮——直观看懂电平触发和边沿触发的差别。</li>
+          </ul>
+        </section>
+
+        <!-- ===== 八、常见报错排查方案 ===== -->
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>按一次键 LED 跳好几次</td><td>没做按键消抖</td><td>中断里加 10ms 延时后再判断 KEY，或硬件并 104 电容</td></tr>
+              <tr><td>完全不进中断（按了没反应）</td><td>没开 EX0 或 EA</td><td>确认 EX0=1 且 EA=1；确认 IT0 设为 1</td></tr>
+              <tr><td>电平触发下中断一直被触发不停</td><td>IT0 误设为 0，引脚一直低</td><td>按键改用下降沿触发：IT0=1</td></tr>
+              <tr><td>中断函数里 delay 后系统卡死</td><td>在中断里用了太长延时 / 嵌套问题</td><td>中断服务函数要短，消抖 10ms 即可，别在里面做重活或长延时</td></tr>
+              <tr><td>按按键时 LED 偶尔不翻转</td><td>按键接线松动 / 杜邦线没插紧</td><td>重插 P3.2 的杜邦线，用万用表量按键按下时是否真的接地</td></tr>
+              <tr><td>用 IT0=0 低电平触发后，ISR 返回立刻又进中断，主程序像死循环</td><td>低电平触发下 IE0 硬件不自动清 0，引脚还低就一直申请</td><td>ISR 里读完状态后用软件把 IE0 写 0，或把触发方式改成下降沿 IT0=1；这是教材「电平触发需软件撤除请求」的标准考点</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <!-- ===== 九、课后练习与延伸 ===== -->
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（第二外部中断）：</strong> 把 K2 接 P3.3（INT1），实现 K2 翻转另一个 LED。提示：仿造 Int0_Init 写 Int1_Init（IT1=1、EX1=1），中断函数用 <span class="inline-code">interrupt 2</span>。</p>
+          <p><strong>练习 2（轮询对比）：</strong> 写一个轮询版本（while 里 if(KEY==0) 翻转），对比中断版本的响应速度和 CPU 占用。提示：轮询版不需要 EA/EX0/IT0，主循环一直读 P3.2。</p>
+          <p><strong>练习 3（计数功能）：</strong> 每按一次按键，全局变量 key_cnt++，并通过下一课的串口把次数打印出来（还没学串口就先点亮不同颗的 LED 表示次数）。提示：在 ISR 翻转 LED 的同时 key_cnt++，注意 key_cnt 要定义成全局变量。</p>
+          <p><strong>延伸学习：</strong></p>
+          <ul>
+            <li><a href="#xxx" data-placeholder>下一篇：UART 串口通信（单片机和电脑对话）</a></li>
+            <li><a href="#xxx" data-placeholder>中断优先级 IP 寄存器的进阶用法（占位）</a></li>
+            <li><a href="#xxx" data-placeholder>定时器中断与外部中断同时使用时的嵌套（占位）</a></li>
+          </ul>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="mcu51-timer.html" class="btn btn-outline btn-sm">← 上一篇：定时器原理与定时</a>
+          <a href="mcu51-uart.html" class="btn btn-outline btn-sm">下一篇：UART 串口通信 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

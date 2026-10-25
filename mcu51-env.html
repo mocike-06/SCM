@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - 51 单片机开发环境搭建（零基础）</title>
+  <meta name="description" content="零基础搭建 51 单片机开发环境：什么是编译/链接、IDE、hex 文件、烧录与寄存器，Keil C51 新建工程生成 HEX、STC-ISP 冷启动下载全流程，含常见报错排查。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link active" aria-current="page">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>51 单片机开发环境搭建</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：51 单片机</span>
+          <span class="badge badge-green">入门</span>
+          <span class="badge badge-gray">更新：2026-10-24</span>
+        </div>
+
+        <p class="text-secondary mb-6">万事开头难——单片机看不见摸不着，第一步不是写代码，而是搞清楚「你写的 C 语言是怎么进到芯片里的」。本讲先把编译、链接、hex、烧录这条工具链讲明白，再带你用 Keil C51 建工程、用 STC-ISP 冷启动把第一个 LED 闪烁程序烧进 STC89C52。工具链打通，后面所有课才能跑起来。</p>
+
+        <!-- ===== 一、本课目标与前置知识 ===== -->
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>说清楚「编译、链接、hex 文件、烧录、冷启动下载」各是什么，不再对工具链发怵。</li>
+            <li>在 Keil C51 里新建工程、选对芯片、填对晶振、勾上生成 HEX，并编译出 0 Error 的固件。</li>
+            <li>用 STC-ISP 通过 USB-TTL 把 hex 烧进 STC89C52，看到 P1.0 的 LED 按约 1 秒周期闪烁。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识（对应学习路线阶段 1）：</strong></p>
+          <ul>
+            <li><a href="c-basics.html">C 语言基础</a>：变量、for 循环、函数——本课代码只用到这些；基础不牢可先补 <a href="c-array-pointer.html">数组与指针</a>、<a href="c-bitwise-macro.html">位运算与宏定义</a>。</li>
+            <li>会用 Windows：装软件、认设备管理器里的 COM 口、接杜邦线。</li>
+            <li>不需要任何数字电路基础——本讲会从零补齐电平、电源等概念。</li>
+          </ul>
+          <p><strong>本课会出现的新名词（下面逐一讲解）：</strong>编译、链接、IDE、hex 文件、烧录、BootLoader 引导程序、冷启动下载、寄存器（SFR）。</p>
+        </section>
+
+        <!-- ===== 二、基础概念铺垫 ===== -->
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. 编译与链接</h3>
+          <p><strong>生活类比</strong>：你写的 C 代码像一本中文书稿，单片机只看得懂「机器码」（一连串 0 和 1）。编译就是请翻译把书稿逐句翻译成外文；链接就是把翻译好的零散页装订成一本完整、页码连贯的书。</p>
+          <p><strong>一句话定义</strong>：<strong>编译</strong>把人类写的 C 语言翻译成单片机能执行的机器指令（每句 C 被翻成几条机器码）；<strong>链接</strong>把翻译出来的多个小文件和库拼到一起，分配好最终地址，形成一个完整程序。</p>
+          <p><strong>例子</strong>：你只写了一个 <span class="inline-code">main.c</span>。Keil 先编译它得到 <span class="inline-code">main.obj</span>，再链接（Link）成可下载的固件。如果工程里有两个 .c 文件，编译是分别翻，链接是最后才合到一起——这就是为什么「单个文件没报错，链接却报 undefined」的原因。</p>
+
+          <h3>2. IDE 是什么</h3>
+          <p><strong>生活类比</strong>：自己做饭要同时有菜刀、灶台、冰箱；IDE 就是把这些全塞进一间厨房里的「集成厨房」——写代码的编辑器、翻译用的编译器、下载调试的工具，一个软件全搞定。</p>
+          <p><strong>一句话定义</strong>：IDE（Integrated Development Environment，集成开发环境）是把「写代码 + 编译 + 管理工程 + 下载调试」集成在一起的软件；51 单片机常用的 IDE 就是 <strong>Keil uVision（C51 版本）</strong>。</p>
+          <p><strong>例子</strong>：在 Keil 里你点一下「新建工程」选芯片，在左侧文件树里加 main.c，按 F7 就自动完成编译链接——你不需要单独去找「编译器在哪」。</p>
+
+          <h3>3. hex 文件是什么</h3>
+          <p><strong>生活类比</strong>：机器码是纯二进制的，直接传输容易出错；hex 文件就像把每段「货物（机器码）」连同「放在哪个货架（地址）」写成一张人类可读的快递清单，烧录软件照单收货上架。</p>
+          <p><strong>一句话定义</strong>：<span class="inline-code">.hex</span> 是 Intel HEX 格式文件，用文本（ASCII）记录了「从哪个地址开始、依次写哪些字节的机器码」；它不是程序本身，但烧录软件靠它把程序写进芯片。</p>
+          <p><strong>例子</strong>：编译成功后，在工程的 output 目录里能找到 <span class="inline-code">xxx.hex</span>。STC-ISP 打开的就是它，而不是你的 .c 源文件。Keil 默认不生成 hex，必须在设置里勾上「Create HEX File」（本课会讲到）。</p>
+
+          <h3>4. 烧录 = 把程序写进芯片</h3>
+          <p><strong>生活类比</strong>：电脑上装软件是把文件写到硬盘；单片机没有硬盘、没有操作系统，「装软件」就是通过串口把 hex 里的机器码<strong>写入芯片内部的 Flash</strong>（一块掉电不丢的仓库），这个动作叫烧录（也叫下载/编程）。</p>
+          <p><strong>一句话定义</strong>：<strong>烧录</strong>就是通过 USB-TTL 串口把 hex 固件写进 STC89C52 内部的程序存储器（Flash）；写完后程序固化在芯片里，断电再上电依然运行。</p>
+          <p><strong>例子</strong>：STC-ISP 点「下载/编程」、给板子重新上电，底部进度条跑完，固件就进芯片了。以后不接电脑，板子单独接 5V 电也会自己跑这个程序。</p>
+
+          <h3>5. 什么是寄存器（首次出现）</h3>
+          <p><strong>生活类比</strong>：芯片内部像一排排编号的「小抽屉」，每个抽屉控制一件事——这个抽屉写 1，某根引脚就变高电平；那个抽屉设成某个数，定时器就开始数。单片机就是靠读写这些抽屉工作的。</p>
+          <p><strong>一句话定义</strong>：<strong>寄存器</strong>（SFR，特殊功能寄存器）是单片机内部有固定地址、有名字的小存储单元；你往某个寄存器写值，就改变了对应硬件（引脚、定时器、串口等）的状态。<span class="inline-code">reg52.h</span> 这个头文件，就是把这些抽屉的名字（如 P1、TH0）和地址对应好的一张「字典」。</p>
+          <p><strong>例子</strong>：写 <span class="inline-code">P1 = 0xfe;</span>，本质是往地址 0x90 的寄存器（名叫 P1）写入 1111 1110，P1 口 8 根线的电平随之改变。本课代码里的 <span class="inline-code">LED = 0</span>，就是 sbit 给 P1.0 起了个别名后写这一位。</p>
+
+          <h3>6. STC 冷启动下载流程</h3>
+          <p><strong>生活类比</strong>：STC 芯片就像一个保安——每天早上（上电）第一件事是站在门口听几秒，如果听到有人喊「给你送新文件」，就停下手里的活先接收文件；没人喊，就直接开始干昨天的活（运行旧程序）。</p>
+          <p><strong>一句话定义</strong>：STC89C52 出厂内置一段叫 <strong>BootLoader</strong>（引导程序）的小程序。上电瞬间它先监听串口：如果电脑正在发数据，就接收新固件烧进 Flash；否则立刻跳转去运行你原来的用户程序。因此烧录必须「点下载后再给芯片重新上电」，这叫<strong>冷启动下载</strong>。</p>
+          <p><strong>例子</strong>：STC-ISP 里点「下载/编程」后，软件一直显示「正在检测单片机…」——这时你给板子断电再上电，它就检测到并自动开始烧录。只接好线不重新上电，是永远烧不进去的。</p>
+        </section>
+
+        <!-- ===== 三、原理介绍 ===== -->
+        <section>
+          <h2 id="sec-principle">三、原理介绍：一行 P1=0xfe 是怎么最后变成灯亮的</h2>
+          <p>写 51 程序需要两个软件：<strong>Keil C51</strong>（写 C、编译、链接出 .hex）和 <strong>STC-ISP</strong>（串口把 hex 写进芯片）。它们和芯片之间是一条「翻译 → 固化 → 执行」的链：</p>
+          <ol>
+            <li>Keil 把你写的 <span class="inline-code">main.c</span> 翻译成 8051 机器码。</li>
+            <li>机器码按地址打包成 <span class="inline-code">.hex</span> 文本清单。</li>
+            <li>STC-ISP 经 USB-TTL 串口把 hex 逐字节发给芯片。</li>
+            <li>芯片上电瞬间由内置 BootLoader 接收、写入内部 Flash。</li>
+            <li>再上电时芯片从复位向量取指，从头跑你的程序。</li>
+          </ol>
+
+          <h3>原理 1：C 代码到底经历了哪几道翻译</h3>
+          <p>很多人以为「按 F7 代码就变固件」，其实隔着四道工序，Keil 只是把它们串起来：</p>
+          <ol>
+            <li><strong>预处理</strong>：展开 <span class="inline-code">#include &lt;reg52.h&gt;</span>、替换 <span class="inline-code">#define</span>。你写的 <span class="inline-code">P1</span>、<span class="inline-code">TH0</span> 这些名字，全靠 reg52.h 这张字典翻译成真实的 SFR 地址。</li>
+            <li><strong>编译</strong>：C 源码 → 8051 汇编 → 机器码目标文件(.obj)。51 是 8 位 CISC 内核，只有 128~256 字节内部 RAM，所以 C51 编译器对变量存储区做了很多取舍（这也是后面为什么要理解内存布局）。</li>
+            <li><strong>链接</strong>：把你的 obj、启动汇编库、运行时库合并，给函数和变量分配最终地址。</li>
+            <li><strong>生成 hex</strong>：链接出的 .axf 转成 Intel HEX 文本——每条记录写着「起始地址 + 一串字节」，STC-ISP 照单把这些字节写进 Flash。<strong>Keil 默认不生成 hex</strong>，必须 Output 页勾 <span class="inline-code">Create HEX File</span>，否则编译完找不到可烧录文件——这是第一课最常见的「点了下载却找不到 hex」的根因。</li>
+          </ol>
+
+          <h3>原理 2：Flash 与 RAM——为什么断电后程序不丢、变量却从头开始</h3>
+          <p>芯片里两种存储性质相反：<strong>Flash（程序存储器）掉电不丢</strong>，你的机器码烧在这里，所以断电再上电程序还在；<strong>RAM（数据存储器）掉电即丢</strong>，变量、栈放在这里，所以每次上电变量都回到初始值。CPU 上电后从固定的<strong>复位向量地址 0x0000</strong> 开始一条条取指执行——这就是「没有操作系统、没有双击图标」的真相：它只会从 0 地址往下数着跑，谁在 0 地址它就跑谁。</p>
+          <p>新建工程时 Options 里那两个看似无关的设置，本质都是在对齐这条链：<strong>Xtal 填 11.0592MHz</strong>（不参与烧录，但延时函数和后面串口波特率算初值全靠它，填错时间全错）；<strong>芯片选 AT89C52</strong>（Keil 库没有 STC 型号，但指令集与 STC89C52 完全兼容，选它编译出的机器码照跑）。</p>
+
+          <h3>原理 3：为什么烧录必须「点下载后再给芯片重新上电」</h3>
+          <p>STC89C52 出厂内置一段 <strong>BootLoader（引导程序）</strong>，固化在一小段 Boot ROM 里。<strong>上电瞬间的执行顺序是</strong>：芯片不是直接跑用户程序，而是先跳去 BootLoader——它开头几百毫秒会监听串口：「此刻有没有电脑在给我发数据？」</p>
+          <ul>
+            <li>有 → 它接收新 hex、写入用户 Flash 区，写完再跳去运行新程序。</li>
+            <li>没有 → 立刻跳去 Flash 里旧的用户程序，正常干活。</li>
+          </ul>
+          <p>这就解释了本课最大的操作坑：STC-ISP 显示「正在检测单片机…」时你不给芯片重新上电，BootLoader 那段「开门听串口」的时间窗早就过去了，它已经跑去跑旧程序了，永远等不到新固件。<strong>冷启动下载 = 掐准 BootLoader 的开门瞬间</strong>。这也是 STC 和 STM32（按住 BOOT 上电进下载模式）思路相同、只是触发方式不同。</p>
+
+          <h3>原理 4：P1 = 0xfe 到底改了芯片里的什么</h3>
+          <p>你写的 <span class="inline-code">P1 = 0xfe;</span>，编译后就是往地址 <strong>0x90 的特殊功能寄存器(SFR) P1</strong> 写一个字节 1111 1110。这个寄存器的每一位直接连到 P1.0~P1.7 引脚的输出锁存器——写 0 的那一位对应的引脚立刻变低电平，LED 随之点亮。<strong>寄存器不是内存里的数据表，它是硬件的控制旋钮</strong>：写哪个寄存器、写哪个位，就拧动对应的硬件。后面定时器(TMOD/TH0)、串口(SCON/SBUF)、中断(IE)全是这个套路——看懂了「P1 是地址 0x90 的旋钮」，后面所有外设都是「找到对应地址的旋钮、按手册拨位」。</p>
+          <p><strong>教材必背 SFR 地址表（张毅刚教材附录）</strong>：常用 SFR 都在 80H~FFH 区间，且<strong>能被 8 整除的地址才可位寻址</strong>（所以 P0=0x80、P1=0x90、P2=0xA0、P3=0xB0、TCON=0x88、SCON=0x98、IE=0xA8、IP=0xB8、PSW=0xD0、ACC=0xE0、B=0xF0 都能直接用 sbit/位操作）：</p>
+          <table>
+            <thead><tr><th>SFR</th><th>地址</th><th>作用</th><th>可否位寻址</th></tr></thead>
+            <tbody>
+              <tr><td>P0 / P1 / P2 / P3</td><td>0x80 / 0x90 / 0xA0 / 0xB0</td><td>4 个 8 位 IO 口锁存器</td><td>可</td></tr>
+              <tr><td>SP（堆栈指针）</td><td>0x81</td><td>指向栈顶，复位默认 07H</td><td>否</td></tr>
+              <tr><td>DPL / DPH</td><td>0x82 / 0x83</td><td>16 位地址指针 DPTR 的低/高字节</td><td>否</td></tr>
+              <tr><td>PCON / TMOD</td><td>0x87 / 0x89</td><td>波特率倍频 SMOD / 定时器方式</td><td>否</td></tr>
+              <tr><td>TCON / T2CON</td><td>0x88 / 0xC8</td><td>定时器/中断控制</td><td>可</td></tr>
+              <tr><td>TH0/TL0/TH1/TL1</td><td>0x8C/0x8A/0x8D/0x8B</td><td>定时器计数初值</td><td>否</td></tr>
+              <tr><td>SCON / SBUF</td><td>0x98 / 0x99</td><td>串口控制 / 收发缓冲</td><td>SCON 可</td></tr>
+              <tr><td>IE / IP</td><td>0xA8 / 0xB8</td><td>中断允许 / 中断优先级</td><td>可</td></tr>
+              <tr><td>PSW</td><td>0xD0</td><td>程序状态字（CY/AC/F0/RS1/RS0/OV/P）</td><td>可</td></tr>
+              <tr><td>ACC / B</td><td>0xE0 / 0xF0</td><td>累加器 / 乘除辅助寄存器</td><td>可</td></tr>
+            </tbody>
+          </table>
+          <p>这就是为什么 <span class="inline-code">sbit LED = P1^0;</span> 能写——P1 在 0x90（可位寻址），P1^0 就是 0x90 地址的最低位。后面学的 TMOD=0x89 不能位寻址，所以只能整体 <span class="inline-code">TMOD|=0x01</span>，不能写 <span class="inline-code">TR0=1</span> 以外的位操作。</p>
+          <div class="tip-info">
+            <span class="tip-label">正版提示</span>
+            Keil C51 为商业软件，请通过正规渠道购买授权或使用官方评估版进行学习。本教程仅介绍工程与烧录流程，不提供任何破解、注册机或序列号。
+          </div>
+          <blockquote>记忆点：C 到固件=预处理→编译→链接→生成 hex；程序在 Flash（掉电不丢）、变量在 RAM（掉电即丢）、CPU 从 0x0000 数着跑；烧录要掐 BootLoader 上电听串口那几百毫秒；P1=0xfe 就是拧地址 0x90 的旋钮。</blockquote>
+        </section>
+
+        <!-- ===== 四、硬件接线说明 ===== -->
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <p>烧录需要一块 USB-TTL 串口模块（常用 CH340 芯片）插到电脑 USB 口，再用杜邦线和单片机的串口引脚交叉相连。务必共地，否则串口电平没有参考点，数据全乱。</p>
+          <table>
+            <thead>
+              <tr><th>模块引脚（CH340）</th><th>单片机引脚（STC89C52）</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>TXD（发送）</td><td>P3.0 / RXD</td><td>交叉相连：模块发 → 单片机收</td></tr>
+              <tr><td>RXD（接收）</td><td>P3.1 / TXD</td><td>交叉相连：单片机发 → 模块收</td></tr>
+              <tr><td>GND</td><td>GND</td><td>必须共地，否则串口通信失败</td></tr>
+              <tr><td>5V / 3V3</td><td>VCC</td><td>由模块供电时接此线；独立供电可不接</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么这样接：</strong></p>
+          <ul>
+            <li><strong>为什么 TX 和 RX 要交叉？</strong> 发送端（TX）必须接到对方的接收端（RX）。你发我收、我发你收，直连（TX-TX）等于两人都在说、没人听，数据永远对不上。</li>
+            <li><strong>为什么必须共地？</strong> 串口电平的高低是「相对谁」算的？相对 GND。两边不共地，5V 对单片机来说根本不是 5V，接收的全是乱码甚至烧坏 IO。</li>
+            <li><strong>为什么要用 USB-TTL 模块，不直接插 USB？</strong> 电脑 USB 是差分信号，单片机串口是 TTL 电平（0/5V），CH340 这类芯片负责在两者间转换。</li>
+          </ul>
+        </section>
+
+        <!-- ===== 五、完整代码 ===== -->
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p>先用下面这段最小测试程序验证工具链是否打通：让 P1.0 上的 LED 以约 0.5 秒间隔闪烁。能编译出 HEX 并烧录后看到闪烁，就说明环境 OK。</p>
+          <pre><code class="language-c">/* 工具链自测：LED 闪烁（P1.0）——环境是否打通的试金石 */
+#include &lt;reg52.h&gt;              /* 引入寄存器字典：P1、sbit 等名字才可用 */
+
+sbit LED = P1^0;   /* 给 P1.0 起个名字叫 LED；LED 串 220Ω 电阻到阴极接法 */
+
+/* 软件延时：大约延时 ms 毫秒（粗略，仅供入门演示） */
+void delay_ms(unsigned int ms) {
+    unsigned int i, j;
+    for (i = 0; i &lt; ms; i++)
+        for (j = 0; j &lt; 120; j++);   /* 11.0592MHz 下内层空转约 1ms */
+}
+
+void main(void) {
+    while (1) {              /* 死循环：单片机没有"程序结束"概念 */
+        LED = 0;            /* 输出低电平，点亮 LED（灌电流接法） */
+        delay_ms(500);      /* 亮 0.5 秒 */
+        LED = 1;            /* 输出高电平，熄灭 */
+        delay_ms(500);      /* 灭 0.5 秒 */
+    }
+}</code></pre>
+
+          <h3>Keil 新建工程要点（保姆级：照着点）</h3>
+          <ol>
+            <li>双击桌面 Keil uVision5 图标启动。顶部菜单点 <span class="inline-code">Project → New uVision Project…</span>。</li>
+            <li>在弹出的「另存为」窗口里，自己新建一个<strong>纯英文、无空格</strong>的文件夹（例如 <span class="inline-code">D:\mcu\test</span>），文件名填 <span class="inline-code">test</span> 保存。<em>应看到：</em>左侧 Project 窗口出现 Target 1。</li>
+            <li>弹出「Select Device for Target」选芯片窗口：左侧依次展开 <span class="inline-code">Manufacturers → Atmel → AT89C52</span>，点一下选中，再点 OK。中途若问「Copy Startup Code?」（是否复制启动代码），选「否 / 关闭」即可，51 入门用不到。<em>应看到：</em>选芯片窗口消失，工程建好。</li>
+            <li>点 <span class="inline-code">File → New</span> 新建一个空白文件，再点 <span class="inline-code">File → Save As…</span> 把它存成 <span class="inline-code">main.c</span>（扩展名必须写 <span class="inline-code">.c</span>，Keil 才会按 C 文件高亮）。</li>
+            <li>在左侧 Project 窗口展开 Target 1，右键 <span class="inline-code">Source Group 1 → Add Existing Files to Group…</span>，选中刚存的 <span class="inline-code">main.c</span> 点 Add，再点 Close。<em>应看到：</em>Source Group 1 下出现 main.c。</li>
+            <li>把上面的代码整段粘贴进 main.c。然后右键 Target 1 → <span class="inline-code">Options for Target 'Target 1'…</span>（或点工具栏那个魔术棒图标）：
+              <ul>
+                <li>切到 <span class="inline-code">Target</span> 页，把 Xtal 后面的数值改成 <span class="inline-code">11.0592</span>（单位 MHz，仅作延时/波特率参考，不烧进芯片）；</li>
+                <li>切到 <span class="inline-code">Output</span> 页，勾选 <span class="inline-code">Create HEX File</span>。</li>
+              </ul>
+              点 OK 关闭。</li>
+            <li>按键盘 <span class="inline-code">F7</span>（或点工具栏 Build 图标）编译。<em>应看到：</em>底部 Build Output 窗口最后一行出现 <span class="inline-code">'target' - 0 Error(s), 0 Warning(s).</span>，并在工程 output 目录生成 <span class="inline-code">test.hex</span>。若有 Error，双击报错行可跳到出错位置，先改完再编译。</li>
+          </ol>
+
+          <h3>STC-ISP 烧录要点（保姆级：照着点）</h3>
+          <ol>
+            <li>用 USB 线把 CH340 串口模块插到电脑。右键「此电脑 → 管理 → 设备管理器 → 端口 (COM 和 LPT)」，记下出现的 <span class="inline-code">USB-SERIAL CH340 (COMx)</span> 里的 COM 号（例如 COM3）。若这里没有端口，说明 CH340 驱动没装，先装驱动。</li>
+            <li>打开 STC-ISP 软件：右侧「单片机型号」下拉选 <span class="inline-code">STC89C52RC</span>；「串口号」选刚才记下的 COMx；波特率上方选较低档（9600）更稳。</li>
+            <li>点「打开程序文件」，在弹出窗口里找到工程 output 目录下的 <span class="inline-code">test.hex</span> 双击打开。<em>应看到：</em>软件上方状态栏显示已加载的 hex 路径与字节数。</li>
+            <li>点左下角「下载/编程」按钮。此时软件变红显示「正在检测单片机…」——<strong>保持软件这个状态，给单片机断电再上电（拔插一次 USB 或拨电源开关）</strong>。软件一检测到上电就自动开始烧录，进度条走完提示「操作成功」。</li>
+            <li>烧录成功后，P1.0 的 LED 应立刻开始闪烁；此时即使拔掉 USB、改用独立 5V 供电，LED 依然闪——说明程序已固化进芯片内部 Flash。</li>
+          </ol>
+
+          <h3>变体实例：双 LED 交替闪烁（改参数）</h3>
+          <p>把上面程序改造成「P1.0、P1.1 两颗灯你亮我灭地交替」，只多定义一个 sbit，其余框架不变。烧录后两颗灯应像互相「打招呼」一样轮流亮。</p>
+          <pre><code class="language-c">/* 变体：P1.0 与 P1.1 双灯交替闪烁 */
+#include &lt;reg52.h&gt;
+sbit LED1 = P1^0;
+sbit LED2 = P1^1;
+
+void delay_ms(unsigned int ms) {
+    unsigned int i, j;
+    for (i = 0; i &lt; ms; i++)
+        for (j = 0; j &lt; 120; j++);
+}
+
+void main(void) {
+    while (1) {
+        LED1 = 0;   /* LED1 亮 */
+        LED2 = 1;   /* LED2 灭 */
+        delay_ms(500);
+        LED1 = 1;   /* LED1 灭 */
+        LED2 = 0;   /* LED2 亮 */
+        delay_ms(500);
+    }
+}</code></pre>
+        </section>
+
+        <!-- ===== 六、代码逐段讲解 ===== -->
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第 1 段：头文件与 sbit 定义（第 1~3 行）</h3>
+          <p><strong>在做什么：</strong> <span class="inline-code">#include &lt;reg52.h&gt;</span> 把寄存器字典引入程序；<span class="inline-code">sbit LED = P1^0;</span> 给 P1.0 这根引脚起个别名 LED。</p>
+          <p><strong>为什么这么写：</strong> reg52.h 提前把 P1、P3 等名字和它们的硬件地址对应好，否则编译器根本不认识 P1。sbit 让后面写 <span class="inline-code">LED = 0</span> 比写 <span class="inline-code">P1 = P1 &amp; 0xfe</span> 直观得多。</p>
+          <p><strong>不写会怎样：</strong> 不包含 reg52.h，编译报 <span class="inline-code">'P1' undefined</span>；不写 sbit，程序就没法单独控制某一根线。</p>
+
+          <h3>第 2 段：延时函数 delay_ms（第 6~10 行）</h3>
+          <p><strong>在做什么：</strong> 两层 for 循环空转，让 CPU 什么也不干地绕 ms 圈，每圈约 1ms。</p>
+          <p><strong>为什么这么写：</strong> 单片机跑一条指令才微秒级，亮灭之间不延时，肉眼看到的就是全亮一片。用空循环凑时间是入门最简单的办法（后面会学用精确定时的硬件定时器替代它）。</p>
+          <p><strong>不写会怎样：</strong> 删掉 delay_ms 或把 500 改成 1，LED 会以几十万次每秒的速度闪烁，看起来像常亮或微亮。</p>
+
+          <h3>第 3 段：main 里的 while(1) 循环（第 12~19 行）</h3>
+          <p><strong>在做什么：</strong> 在死循环里交替执行「点亮 → 延时 → 熄灭 → 延时」。</p>
+          <p><strong>为什么这么写：</strong> 单片机没有「程序结束」的概念，main 跑完最后一行后芯片行为不可控。让程序永远在 while(1) 里循环，是单片机程序的基本写法。</p>
+          <p><strong>不写会怎样：</strong> 去掉 while(1)，main 执行完一轮就「跑飞」——LED 停在随机状态或根本不闪。</p>
+        </section>
+
+        <!-- ===== 七、现象演示说明 ===== -->
+        <section>
+          <h2 id="sec-demo">七、现象演示说明</h2>
+          <p>烧录成功后，STC-ISP 底部状态栏会显示「操作成功」。给单片机上电后，接在 P1.0 的 LED 应以大约 1 秒为周期亮灭闪烁（亮 0.5 秒、灭 0.5 秒）。</p>
+          <p><strong>可量化的验证方法：</strong></p>
+          <ul>
+            <li><strong>改参数看变化：</strong> 把 <span class="inline-code">delay_ms(500)</span> 两处都改成 <span class="inline-code">200</span> 重新烧录，闪烁频率应明显变快；改成 1000 则明显变慢——说明延时函数和固件确实在起作用。</li>
+            <li><strong>换引脚验证：</strong> 把 <span class="inline-code">sbit LED = P1^0;</span> 改成 <span class="inline-code">P1^1</span>，LED 接线同步换到 P1.1，重新烧录后闪烁位置应跟着变——这证明跑的是你刚烧进去的新程序，而不是芯片里残留的旧程序。</li>
+            <li><strong>计时验证：</strong> 用手机秒表数 10 次完整亮灭，应约为 10 秒（每次周期约 1 秒）。软件延时本身不精确，误差零点几秒属正常。</li>
+          </ul>
+        </section>
+
+        <!-- ===== 八、常见报错排查方案 ===== -->
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>编译成功但找不到 .hex 文件</td><td>没勾选 Create HEX File</td><td>Options for Target → Output 勾选 Create HEX File，重新 F7 编译</td></tr>
+              <tr><td>STC-ISP 一直「正在检测单片机…」</td><td>没冷启动 / 串口号选错 / TX RX 接反</td><td>点下载后再给板子重新上电；核对设备管理器 COM 号；把 TXD、RXD 对调试一次</td></tr>
+              <tr><td>编译报错 cannot open source file reg52.h</td><td>装成了 Keil MDK-ARM，或工程建在 ARM 环境</td><td>确认装的是 Keil C51（不是 MDK-ARM），新建工程时选 8051 系列芯片（AT89C52）</td></tr>
+              <tr><td>能烧录但 LED 完全不亮</td><td>晶振/复位没接好、EA 没接 VCC，或 LED 限流电阻开路</td><td>对照下一篇最小系统检查晶振、复位电路，确认 31 脚 EA 接 VCC，用万用表量 VCC 是否 5V</td></tr>
+              <tr><td>设备管理器里看不到 COM 口</td><td>CH340 驱动没装</td><td>安装 CH340 驱动后重插 USB，端口里应出现 USB-SERIAL CH340 (COMx)</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <!-- ===== 九、课后练习与延伸 ===== -->
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（改闪烁速度）：</strong> 把亮灭延时分别改成 100ms 和 900ms（亮短灭长），观察现象。提示：只需改两个 <span class="inline-code">delay_ms()</span> 的参数，体会亮灭不对称的效果。</p>
+          <p><strong>练习 2（换引脚）：</strong> 把 LED 改接到 P2.0 上，软件和接线同步修改，让它继续闪烁。提示：把 <span class="inline-code">sbit LED = P1^0;</span> 改成 <span class="inline-code">sbit LED = P2^0;</span>，硬件杜邦线插到 P2.0。</p>
+          <p><strong>练习 3（理解工具链）：</strong> 在工程 output 目录里找到生成的 .hex 文件，用记事本打开它，观察其中以 <span class="inline-code">:</span> 开头的文本行（这就是地址 + 机器码数据）。提示：不用看懂全部，感受「hex 是文本清单」即可；想想为什么烧录软件能靠它还原程序。</p>
+          <p><strong>延伸学习：</strong></p>
+          <ul>
+            <li><a href="#xxx" data-placeholder>下一篇：51 最小系统电路原理（为什么芯片需要晶振、复位才能跑）</a></li>
+            <li><a href="#xxx" data-placeholder>IO 口输出：LED 流水灯（mcu51-led.html）</a></li>
+            <li><a href="#xxx" data-placeholder>定时器原理与定时（摆脱软件延时，占位）</a></li>
+          </ul>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <span></span>
+          <a href="mcu51-minisys.html" class="btn btn-outline btn-sm">下一篇：51 最小系统电路原理 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

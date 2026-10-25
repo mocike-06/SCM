@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - 触摸传感器（电容触摸开关）</title>
+  <meta name="description" content="ESP32 触摸传感器零基础教程：电容感应原理、Touch 引脚 T0-T9、touchRead 阈值校准、触摸开关 LED、触摸台灯应用，交互设计入门。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link active" aria-current="page">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>触摸传感器（电容触摸开关）</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：ESP32</span>
+          <span class="badge badge-orange">进阶</span>
+          <span class="badge badge-gray">更新：2026-10-25</span>
+        </div>
+
+        <p class="text-secondary mb-6">触摸台灯、触摸开关面板、智能门锁——现在几乎没有机械按键了。ESP32 自带 <strong>电容触摸感应</strong>：把一根导线或 PCB 焊盘变成「触摸键」，手指一碰就感知，不用任何外部芯片。本课讲透触摸原理、ESP32 的 Touch 引脚与 touchRead，做出触摸开关 LED、触摸调光台灯，并学会阈值校准与防误触。</p>
+
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>说清电容触摸原理：手指靠近 = 电容变化 = 充电时间变化。</li>
+            <li>用 touchRead 读取触摸值，校准出可靠的触摸阈值。</li>
+            <li>做出触摸开关 LED 和触摸调光（结合 PWM）两个应用。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识（对应学习路线阶段 5）：</strong></p>
+          <ul>
+            <li>GPIO（esp32-gpio.html）：触摸引脚也是 GPIO，输入读取思维通用。</li>
+            <li>PWM（esp32-pwm.html）：触摸调光需要 LEDC 输出。</li>
+            <li>按键对比（esp32-gpio.html / mcu51-key.html）：触摸 vs 机械按键的差别。</li>
+          </ul>
+          <p><strong>本课会出现的新名词：</strong>电容触摸、Touch 引脚（T0~T9）、touchRead、基准值/阈值、校准、触摸灵敏度、防误触。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. 电容触摸原理：把手指当成「隐形电容」</h3>
+          <p><strong>生活类比</strong>：电容触摸像「静电感应秤」：手指不按下去，只是靠近，就会改变电极周围的电场（增加电容）。芯片测量「充满这个电容需要的时间」，时间变长 = 手指靠近。</p>
+          <p><strong>一句话定义</strong>：ESP32 触摸引脚内部有充放电电路：给引脚电容充电，测放电/充电时间；<strong>手指靠近使寄生电容增大，充电时间变长</strong>——<span class="inline-code">touchRead(pin)</span> 返回的数值随手指靠近而<strong>变大</strong>。</p>
+          <p><strong>例子</strong>：空闲时 touchRead(T0) ≈ 30；手指摸上导线后 ≈ 120——差值就是「触摸信号」。</p>
+
+          <h3>2. ESP32 的 Touch 引脚：哪些脚能用</h3>
+          <p><strong>一句话定义</strong>：ESP32 有 10 个触摸通道：<strong>T0~T9</strong>，对应引脚 GPIO4、GPIO0、GPIO2、GPIO15、GPIO13、GPIO12、GPIO14、GPIO27、GPIO33、GPIO32（查引脚图确认）。<strong>触摸电极</strong>：一根导线、一块 PCB 铜箔焊盘、甚至引脚本身直接摸——无需外部传感器芯片。</p>
+          <p><strong>例子</strong>：把杜邦线一端插 GPIO4（T0），另一端留出金属头——手指捏金属头就是触摸键。</p>
+
+          <h3>3. 基准值与阈值：怎么算「被摸到了」</h3>
+          <p><strong>一句话定义</strong>：触摸值会随湿度、供电、引线长度漂移——不能写死比较。标准做法：<strong>上电先测 10 次取平均 = 基准值 base</strong>；触摸时读数明显高于 base 的某个差值（如 +50）即判定触摸。阈值太灵敏会误触、太迟钝会失灵——<strong>按实测校准</strong>。</p>
+          <p><strong>例子</strong>：base=30，阈值设 80（base+50）；读数 ≥80 判触摸，<80 判松开。</p>
+
+          <h3>4. 为什么比机械按键好（也有坑）</h3>
+          <p><strong>一句话定义</strong>：优点：<strong>无机械磨损、防水防尘、可做手势/长按/滑动</strong>；坑：<strong>环境干扰</strong>（湿度、电磁噪声）、<strong>阈值漂移</strong>（同一电极不同天气 base 不同）、<strong>贴片/导线寄生电容差异</strong>——量产要做灵敏度校准与滤波。</p>
+          <p><strong>例子</strong>：冬天干燥 base 低、夏天潮湿 base 高——写死阈值会「夏天永远触发」。</p>
+          <h3>5. Touch 引脚属 RTC 域：所以能当 Deep Sleep 唤醒源</h3>
+          <p><strong>生活类比</strong>：触摸检测电路住在 RTC 这个「小闹钟」域里——Deep Sleep 把主 CPU 关了，RTC 域还留着电，所以它能在你手指摸上来时把整机叫醒。</p>
+          <p><strong>一句话定义</strong>：ESP32 的 Touch 通道和 RTC GPIO（esp32-deepsleep.html 讲过的那批引脚）属于同一个 <strong>RTC 域</strong>，Deep Sleep 期间仍可值守。这就是为什么触摸能当<strong>深度睡眠唤醒源</strong>（<span class="inline-code">esp_sleep_enable_touchpad_wakeup()</span>）——这是「电池供电触摸灯」的硬件基础：平时 10µA 深睡，摸一下才醒。</p>
+          <p><strong>例子</strong>：练习 3 的低功耗触摸灯——平时深睡只耗微安，手指摸电极时 RTC 触摸电路检测到电容变化、唤醒主 CPU 亮灯。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-principle">三、原理介绍：从「手指靠近」到「LED 翻转」</h2>
+          <p>ESP32 内部有 10 个电容感应通道（T0~T9），能把引脚变成「触摸键」。理解它测的是「电容导致的充电时间变化」，才能解释为什么 touchRead 的值会随湿度漂移、为什么要先取基准再判差值。</p>
+          <p>一次触摸检测的链路：上电校准取 base → 循环读当前值 v → 比较 v-base → 边沿检测触发动作。</p>
+
+          <h3>原理 1：电容感应——手指为什么会改变读数</h3>
+          <p>触摸电极（一根导线）本身就是一个极小的寄生电容的一极。ESP32 内部电路给这个电容<strong>充电并计时</strong>：充电到满需要的时间 = 电容大小 × 电阻。手指靠近时，人体相当于一个对地的大电容并联上去，<strong>总电容变大，充电时间变长</strong>。<span class="inline-code">touchRead()</span> 返回的正是这个充电时间的相对计数——手指靠近 → 计数变大。</p>
+
+          <h3>原理 2：为什么必须先取基准 base、再判差值</h3>
+          <p>这个寄生电容的值并不固定：引线长短、湿度、供电电压都会改变空闲时的充电时间——同一块板今天空闲读数 30，明天潮湿就变 60。所以<strong>绝对值没有通用意义</strong>，要在上电时（手没碰电极）连测 10 次取平均当基准 base，之后永远比较差值 <span class="inline-code">v - base</span>：差值超过阈值（如 +50）才算触摸。差值归一化了基线漂移，换板子、换天气都不用改阈值。<strong>这也是所有模拟传感器校准的通用手法</strong>（ADC 课的两点校准同理）。</p>
+
+          <h3>原理 3：为什么用边沿检测而不是电平判断</h3>
+          <p>如果写成「触摸时 LED 亮、松开灭」，手一直按住就一直亮——想要「按一下翻转一次」，必须检测<strong>状态变化的那一瞬间</strong>（松开→触摸的上升沿），代码里就是 <span class="inline-code">if (now &amp;&amp; !last_touched)</span>。这和机械按键消抖后的沿检测是同一思想：一次物理动作只触发一次事件。</p>
+          <blockquote>记忆点：触摸=手指并联增大电极电容→充电时间变长→touchRead 变大；先取上电基准 base（手别碰），判触摸用差值 ≥ 阈值；沿检测（now &amp;&amp; !last）保证一次触摸只触发一次；湿度/引线会漂移，量产要周期重校准。</blockquote>
+        </section>
+
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <table>
+            <thead>
+              <tr><th>元件</th><th>接法</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>触摸电极（导线/铜箔）</td><td>GPIO4（T0）</td><td>手指触摸的感应面</td></tr>
+              <tr><td>LED + 330Ω</td><td>GPIO2（板载）或 GPIO5</td><td>开关/调光输出</td></tr>
+              <tr><td>GND</td><td>公共地</td><td>触摸回路参考</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么触摸电极就一根线就行</strong>：电容触摸是「测量寄生电容」，电极不需要接电源——芯片自己充放电。手指触摸时人体形成对地的寄生电容，改变测量值。<strong>导线别太长</strong>（&lt;20cm），越长越容易受干扰、基线漂移越大。</p>
+          <div class="tip-warn mt-4"><span class="tip-label">避坑</span>
+            某些开发板 GPIO0/GPIO15 有特殊用途（启动模式/下载模式），做触摸键最好用 <strong>T0(GPIO4)、T5(GPIO12)、T6(GPIO14)</strong> 这些安全的引脚。另外 GPIO12（T5）在部分板子上拉后会影响启动，同样优先避让——先查你的板子原理图。</div>
+        </section>
+
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p>示例 1 触摸开关 LED；示例 2 触摸调光。</p>
+          <p><strong>示例 1：触摸开关 LED（带校准与防抖）</strong></p>
+          <pre><code class="language-cpp">/* 触摸开关：摸一下 GPIO4(T0) 翻转 LED（GPIO2 板载） */
+#include &lt;Arduino.h&gt;
+
+#define TOUCH_PIN  T0        /* GPIO4 */
+#define LED_PIN    2
+
+const int TOUCH_TH = 50;     /* 差值阈值：v - base 超过即触摸 */
+int base = 0;                /* 基准值：上电校准 */
+
+bool led_on = false;
+bool last_touched = false;   /* 上次触摸状态（沿检测） */
+
+/* 上电校准：读 10 次取平均 */
+void calibrate_base(void)
+{
+  long sum = 0;
+  for (int i = 0; i &lt; 10; i++) {
+    sum += touchRead(TOUCH_PIN);
+    delay(20);
+  }
+  base = sum / 10;
+  Serial.printf("base=%d\r\n", base);
+}
+
+bool is_touched(void)
+{
+  int v = touchRead(TOUCH_PIN);
+  return (v - base) &gt;= TOUCH_TH;   /* 差值判定 */
+}
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(LED_PIN, OUTPUT);
+  calibrate_base();
+}
+
+void loop() {
+  bool now = is_touched();
+
+  /* 沿检测：只有「松开 → 触摸」的跳变才翻转 */
+  if (now &amp;&amp; !last_touched) {
+    led_on = !led_on;
+    digitalWrite(LED_PIN, led_on);
+    Serial.printf("toggle, now=%d\r\n", led_on);
+  }
+  last_touched = now;
+
+  delay(20);                /* 20ms 采样周期（兼作滤波） */
+}</code></pre>
+          <p><strong>示例 2：触摸调光台灯（触摸时间控制亮度）</strong></p>
+          <pre><code class="language-cpp">/* 触摸调光：短按切换开关，长按循环调节亮度（PWM） */
+#include &lt;Arduino.h&gt;
+
+#define TOUCH_PIN  T0        /* GPIO4 */
+#define LED_PIN    2
+
+const int TOUCH_TH = 50;
+int base = 0;
+int brightness = 0;          /* 0~255 */
+unsigned long press_ms = 0;  /* 按下起始时刻 */
+bool touching = false;
+
+void setup() {
+  Serial.begin(115200);
+  /* PWM 调光用 LEDC：通道 0、5kHz、8 位（与 esp32-pwm 同一套 API） */
+  ledcSetup(0, 5000, 8);
+  ledcAttachPin(LED_PIN, 0);
+  long sum = 0;
+  for (int i = 0; i &lt; 10; i++) { sum += touchRead(TOUCH_PIN); delay(20); }
+  base = sum / 10;
+}
+
+void loop() {
+  bool now = (touchRead(TOUCH_PIN) - base) &gt;= TOUCH_TH;
+
+  if (now &amp;&amp; !touching) {            /* 刚按下 */
+    touching = true;
+    press_ms = millis();
+  }
+
+  if (!now &amp;&amp; touching) {            /* 刚松开 */
+    touching = false;
+    unsigned long hold = millis() - press_ms;
+
+    if (hold &lt; 300) {               /* 短按：开关 */
+      if (brightness &gt; 0) brightness = 0;
+      else                brightness = 128;
+    } else {                        /* 长按松开的亮度已被调过，保持 */
+      /* 亮度在按住期间已实时更新，无需额外动作 */
+    }
+    ledcWrite(0, brightness);
+    Serial.printf("brightness=%d\r\n", brightness);
+  }
+
+  if (now &amp;&amp; touching) {            /* 按住期间：循环调亮（每 100ms 步进） */
+    static unsigned long last_step = 0;
+    if (millis() - last_step &gt; 100 &amp;&amp; millis() - press_ms &gt; 300) {
+      last_step = millis();
+      brightness += 10;
+      if (brightness &gt; 255) brightness = 0;   /* 循环 */
+      ledcWrite(0, brightness);
+    }
+  }
+  delay(20);
+}</code></pre>
+        </section>
+
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第一段：calibrate_base 为什么取 10 次平均</h3>
+          <p>单次 touchRead 有噪声（±几），取平均压噪；<span class="inline-code">sum / 10</span> 得到稳定基线。<strong>为什么上电时校准而不是用固定值</strong>：同一块板每次上电、不同环境（湿度/温度/供电），空闲读数都不同——固定值迟早失灵。<strong>校准时机</strong>：必须在「没人摸电极」时做（setup 阶段正好）。</p>
+
+          <h3>第二段：差值判定 v - base ≥ TH</h3>
+          <p><span class="inline-code">touchRead(TOUCH_PIN) - base</span> 把「绝对读数」转成「相对变化量」——触摸时变化量稳定（如 50~150），比绝对值好设阈值。<strong>为什么阈值 50</strong>：经验值——太小的（20）误触多，太大的（100）手感差。每块板要实测：串口打印 base 和触摸值，观察后调 TH。</p>
+
+          <h3>第三段：沿检测的意义与写法</h3>
+          <p><span class="inline-code">if (now &amp;&amp; !last_touched)</span>：只在「本次触摸 + 上次松开」时进入——<strong>按住不动也只触发一次</strong>。最后 <span class="inline-code">last_touched = now</span> 更新状态。<strong>为什么这对触摸特别重要</strong>：手指贴上后读数会持续超过阈值几十 ms，没沿检测 = 一次触摸翻转好几次。</p>
+
+          <h3>第四段：触摸调光的状态机</h3>
+          <p>三个分支组成小状态机：<strong>刚按下</strong>（记时间）→ <strong>按住中</strong>（每 100ms 亮度步进）→ <strong>刚松开</strong>（按时长决定开关/保持）。<strong>为什么短按松开的亮度直接设 128 而不是翻转</strong>：演示「短按开关用固定亮度、长按连续调」的交互；真实产品可做「短按切换开关 + 长按循环调光 + 松手保持」。<strong>millis() 非阻塞计时</strong>——这是交互设计的标准写法。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-demo">七、现象演示与验证</h2>
+          <ul>
+            <li><strong>触摸开关</strong>：摸一下电极 LED 亮，再摸灭；串口打印 toggle, now=1/0。</li>
+            <li><strong>触摸调光</strong>：短按开关；长按 300ms 后亮度循环升，松手保持当前亮度。</li>
+            <li><strong>抗干扰</strong>：手指不碰电极但靠近（悬空 1cm），不应误触发。</li>
+          </ul>
+          <p><strong>验证方法：</strong></p>
+          <ol>
+            <li>串口打印 base 与每次的 v、差值：手摸前后差值应明显（如 30→120），据此微调 TH。</li>
+            <li>用湿手触摸：差值变化可能不同——观察阈值是否还可靠（理解环境漂移）。</li>
+            <li>把电极换成铜箔贴纸贴在桌面：触摸灵敏度变化——体会电极面积与灵敏度的关系。</li>
+          </ol>
+        </section>
+
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>摸电极没反应</td><td>用了非触摸引脚 / 电极没接好</td><td>确认用 T0~T9 对应引脚；焊牢电极</td></tr>
+              <tr><td>一直误触发</td><td>阈值太小 / 引线过长 / 环境干扰</td><td>调大 TH；缩短引线；加 10~20ms 滤波</td></tr>
+              <tr><td>触摸很迟钝</td><td>阈值太大 / 电极面积小</td><td>调小 TH；增大电极面积（铜箔）</td></tr>
+              <tr><td>隔天又不灵了</td><td>基准漂移（湿度/供电变化）</td><td>改为周期重校准；或存 base 到 NVS 定期更新</td></tr>
+              <tr><td>某引脚一摸就复位</td><td>GPIO0/15 特殊功能（启动）</td><td>换 T0(GPIO4)/T6(GPIO14) 等安全引脚</td></tr>
+              <tr><td>一次触摸触发多次</td><td>没做沿检测</td><td>用 now &amp;&amp; !last 模式</td></tr>
+              <tr><td>读数全一样不变化</td><td>引脚配置被占用 / 接线虚</td><td>先跑官方 touchRead 例程确认引脚可用</td></tr>
+              <tr><td>触摸导致 WiFi 断连</td><td>触摸引脚靠近天线干扰</td><td>换离天线远的引脚；触摸与 WiFi 互扰是已知现象</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（必做）</strong>：把示例 1 的阈值 50 改为「读取实测差值后动态决定」（如 base + 最大差值的 40%），验证自适应阈值。</p>
+          <p><strong>练习 2</strong>：加第二个触摸键（T6/GPIO14）：双键实现「单击/双击」或「上/下亮度」——多键交互。</p>
+          <p><strong>练习 3（进阶）</strong>：结合 Deep Sleep（esp32-deepsleep.html）：触摸作为唤醒源，睡眠时耗电、摸一下唤醒点亮 LED 再睡——完整低功耗触摸灯。</p>
+          <p><strong>延伸学习</strong>：触摸交互 + 前面所有课（NTP/OTA/多任务/低功耗），ESP32 侧的能力闭环了。回到 <a href="route.html">学习路线</a> 阶段 5，可以做「触摸调光 + 手机遥控 + OTA 升级」的完整智能灯产品原型。</p>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="esp32-ota.html" class="btn btn-outline btn-sm">← 上一篇：OTA 无线升级</a>
+          <a href="esp32.html" class="btn btn-outline btn-sm">返回 ESP32 教程目录 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

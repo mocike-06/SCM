@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - FreeRTOS 多任务（xTaskCreate 入门）</title>
+  <meta name="description" content="ESP32 FreeRTOS 零基础教程：任务与调度器、xTaskCreate 创建任务、优先级与 vTaskDelay、队列任务间通信，多任务同时采集/显示/联网。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link active" aria-current="page">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>FreeRTOS 多任务（xTaskCreate 入门）</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：ESP32</span>
+          <span class="badge badge-orange">进阶</span>
+          <span class="badge badge-gray">更新：2026-10-25</span>
+        </div>
+
+        <p class="text-secondary mb-6">真实项目从来不是「一个死循环」：一边采温度、一边刷 OLED、一边等蓝牙指令、一边连 WiFi——用 delay 硬凑会互相卡死。ESP32 天生跑着 <strong>FreeRTOS 操作系统</strong>：多个「任务」像同时进行一样各自干活，靠调度器分配 CPU。本课讲透任务、优先级、队列，写出「多任务并行」的第一个工程。</p>
+
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>理解「任务」与「调度器」：为什么多个 while 循环能「同时」跑。</li>
+            <li>用 xTaskCreate 创建两个以上任务，用 vTaskDelay 让它们各自定时执行。</li>
+            <li>用队列（Queue）在任务之间安全传数据。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识（对应学习路线阶段 5）：</strong></p>
+          <ul>
+            <li>GPIO 与传感器（esp32-gpio.html / esp32-i2c.html）：任务里干活的内容。</li>
+            <li>SysTick/时基思想（stm32-systick.html）：FreeRTOS 就用 SysTick 做任务调度时基。</li>
+            <li>BLE 回调（esp32-ble.html）：多任务场景的最好例子。</li>
+          </ul>
+          <p><strong>本课会出现的新名词：</strong>任务（Task）、调度器（Scheduler）、优先级（Priority）、vTaskDelay、xTaskCreate、队列（Queue）、xQueueSend/xQueueReceive、共享资源、临界区。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. 任务：一个「拥有自己的 while 循环」的函数</h3>
+          <p><strong>生活类比</strong>：一个厨师（CPU）同时要做三桌菜（任务）：不可能真的一手炒三锅，但可以「炒一下 A、翻一下 B、看一眼 C」来回切换——每桌都感觉自己被照顾着。每个任务就是一段「独立的小程序」，它们轮流被 CPU 执行，速度够快就像「同时进行」。</p>
+          <p><strong>一句话定义</strong>：任务是 FreeRTOS 里并发执行的基本单位——一个永不返回的函数（内部是死循环），有自己的栈、状态和优先级。多个任务由 <strong>调度器</strong> 按优先级和时钟片分配 CPU。</p>
+          <p><strong>例子</strong>：任务 A 每 200ms 翻转 LED，任务 B 每 1s 打印温湿度——两个 while 循环「同时」跑。</p>
+
+          <h3>2. 调度与优先级：谁先跑、谁让路</h3>
+          <p><strong>一句话定义</strong>：FreeRTOS 是抢占式调度：<strong>优先级高的任务就绪时立刻抢占 CPU</strong>；同级任务按时间片轮流；任务主动 <span class="inline-code">vTaskDelay</span> 让出 CPU 给别的任务。优先级 0~configMAX_PRIORITIES-1，数字越大越优先。</p>
+          <p><strong>例子</strong>：蓝牙回调任务设高优先级（及时响应），OLED 刷新设低优先级（慢点没关系）。</p>
+
+          <h3>3. vTaskDelay：让出 CPU 的正确延时</h3>
+          <p><strong>一句话定义</strong>：<span class="inline-code">vTaskDelay(ms)</span> 让当前任务<strong>休眠</strong>指定毫秒——休眠期间不占 CPU，调度器把时间分给其他任务。相比 delay() 的忙等，它是「真正的让路」。任务节奏全靠它。</p>
+          <p><strong>例子</strong>：任务里写 <span class="inline-code">vTaskDelay(500 / portTICK_PERIOD_MS)</span> = 每 500ms 醒来干一次活。</p>
+
+          <h3>4. 队列：任务之间的「信箱」</h3>
+          <p><strong>一句话定义</strong>：队列（Queue）是任务间安全传数据的机制：一个任务 <span class="inline-code">xQueueSend</span> 投递、另一个任务 <span class="inline-code">xQueueReceive</span> 取件（取不到就阻塞等待）。队列让「生产数据」和「消费数据」解耦，避免多个任务抢同一个全局变量。</p>
+          <p><strong>例子</strong>：传感器任务每 1s 把温湿度结构体丢进队列；显示任务从队列取出来刷新 OLED——两任务互不打扰。</p>
+          <h3>5. ESP32 双核：两个 CPU 核同时真跑两个任务</h3>
+          <p><strong>生活类比</strong>：单核 FreeRTOS 像「一个厨师快速切三桌菜」（其实是轮流）；ESP32 是双核——两个厨师同时开工，真能两桌菜并行炒，效率翻倍。</p>
+          <p><strong>一句话定义</strong>：ESP32 有两个 Xtensa 核心——<strong>PRO_CPU（Core 0，跑 WiFi/蓝牙协议栈和 Arduino 后台）</strong>与 <strong>APP_CPU（Core 1，默认跑你的任务）</strong>。用 <span class="inline-code">xTaskCreatePinnedToCore(函数, 名, 栈, 参数, 优先级, 句柄, 核号)</span> 可把任务钉到指定核。教材口径：单核靠切换、双核靠真并行，但调度规则（优先级/时间片）两边一样。</p>
+          <p><strong>例子</strong>：把 BLE 处理任务钉在 Core 1（APP_CPU），让 Core 0 专心跑协议栈——避免用户任务抢占 WiFi 导致断连。</p>
+
+          <h3>6. 信号量 / 互斥量 / 临界区：多任务抢资源的规矩</h3>
+          <p><strong>一句话定义</strong>：除队列外，FreeRTOS 还有三件「同步工具」——<strong>信号量（Semaphore）</strong>：通知/计数（ISR 里 give、任务里 take）；<strong>互斥量（Mutex）</strong>：保护共享资源（谁拿到谁独占，用完归还，带优先级继承）；<strong>临界区（taskENTER_CRITICAL）</strong>：短时间关中断独占代码段。教材常见考题：两个任务同时写同一个全局变量会出错——用互斥量或临界区包起来。</p>
+          <p><strong>例子</strong>：串口是共享资源，任务 A 和任务 B 都 Serial.printf 会串行——把打印逻辑收进队列让一个任务专打，就是避免互斥量的好设计。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-principle">三、原理介绍：两个任务怎么「同时」跑</h2>
+          <p>ESP32 的 Arduino 核心本身就跑在 FreeRTOS 上——你写的 loop() 其实就是系统里的一个任务。理解「任务=独立栈的死循环函数、调度器靠快速切换制造并行假象」，才能搞懂 xTaskCreate 六个参数各管什么、为什么 delay 不再阻塞全局。</p>
+          <p>两个任务「同时」跑的链路：xTaskCreate 建任务（各自带栈）→ 调度器按优先级抢占切换 → 任务 vTaskDelay 主动让路 → 队列在任务间传数据。</p>
+
+          <h3>原理 1：任务是什么——一个永不返回的函数 + 一块独立栈</h3>
+          <p>FreeRTOS 任务就是一个<strong>永不 return 的死循环函数</strong>，外加一块自己的栈内存。<span class="inline-code">xTaskCreate</span> 的六个参数：函数指针、名字（仅调试）、<strong>栈大小（单位是 word，ESP32 上 1 word=4 字节）</strong>、传给任务的参数、优先级、任务句柄。每个任务用自己的栈保存局部变量和函数调用现场，所以任务 A 崩了（栈溢出）不会直接踩坏任务 B 的栈——这就是多任务比「一个大 loop 里 switch 状态机」稳的原因。</p>
+
+          <h3>原理 2：调度器怎么让两个任务「同时」跑——抢占+时间片+上下文切换</h3>
+          <p>ESP32 虽然是双核，但「多任务」的本质是<strong>快速切换</strong>：系统节拍定时器每 1ms 中断一次，调度器在中断里决定下一步跑谁——<strong>高优先级任务一旦就绪就立刻抢占</strong>正在跑的低优先级任务；同优先级任务则轮流分时间片。切换时，调度器把当前任务的 CPU 寄存器存进它的栈（保存现场），把下一个任务栈里存的现场恢复出来（恢复现场）——这个「上下文切换」快到微秒级，人眼就觉得两个任务在并行。</p>
+
+          <h3>原理 3：vTaskDelay 与队列——为什么 delay 不再阻塞全局</h3>
+          <p>普通的 <span class="inline-code">delay(1000)</span> 是忙等——CPU 原地空转 1 秒。而 <span class="inline-code">vTaskDelay(1000/portTICK_PERIOD_MS)</span> 是<strong>把自己挂起、主动让路</strong>：调度器立刻把 CPU 分给别的就绪任务，1 秒后再把它唤醒——等待期间 CPU 一点不浪费。任务间传数据用<strong>队列（Queue）</strong>：一个任务 send、另一个 receive，收发自带阻塞和同步，比共享变量+手动加锁简单可靠。这就是操作系统的价值：等传感器、等 WiFi 的时间全被拿去干别的活了。</p>
+          <blockquote>记忆点：任务=死循环函数+独立栈（栈单位 word=4 字节）；调度器=高优先级抢占+同级时间片+微秒级上下文切换；vTaskDelay=让路不空转（区别于忙等 delay）；队列=任务间信箱；Arduino loop 本身也是优先级 1 的任务。</blockquote>
+        </section>
+
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <p>本课用板载 LED 和串口演示，<strong>无需外接电路</strong>：</p>
+          <table>
+            <thead>
+              <tr><th>资源</th><th>用途</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>GPIO2（板载 LED）</td><td>任务 A 闪烁</td><td>验证独立节奏</td></tr>
+              <tr><td>串口 115200</td><td>任务 B 打印</td><td>验证两任务并行</td></tr>
+              <tr><td>（可选）OLED + AHT20</td><td>任务 C 采集显示</td><td>综合练习用（esp32-i2c.html）</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么一个死循环能「同时」做三件事</strong>：硬件上只有一颗 CPU，但调度器把时间切成片分给三个任务——LED 闪烁和串口打印肉眼看起来就是同时发生的。想加深理解，把任务 A 的延时改短、任务 B 的延时改长，观察「快的那个」和「慢的那个」互不干扰。</p>
+          <div class="tip-warn mt-4"><span class="tip-label">避坑</span>
+            任务栈大小（第 3 参数）给太小会栈溢出（程序莫名其妙重启/跑飞）。<strong>注意单位是 word（StackType_t），ESP32 上 1 word = 4 字节</strong>：打印类任务建议 4096 word（≈16KB RAM）；纯 IO 任务 2048 word（≈8KB）足够。串口打印尽量别在很低的优先级里做——优先级的取舍在练习里体会。</div>
+        </section>
+
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p>示例 1 双任务并行；示例 2 队列传数据。</p>
+          <p><strong>示例 1：两个任务并行（LED 闪烁 + 串口计数）</strong></p>
+          <pre><code class="language-cpp">/* 双任务：TaskLED 每 300ms 翻转板载 LED；TaskCount 每 1s 打印计数 */
+#include &lt;Arduino.h&gt;
+
+/* 任务 1：LED 闪烁 */
+void taskLED(void *param) {
+  pinMode(2, OUTPUT);
+  while (1) {
+    digitalWrite(2, !digitalRead(2));
+    vTaskDelay(300 / portTICK_PERIOD_MS);   // 睡 300ms，期间 CPU 归别人
+  }
+}
+
+/* 任务 2：串口计数 */
+void taskCount(void *param) {
+  int count = 0;
+  while (1) {
+    Serial.printf("count=%d\r\n", count++);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);  // 睡 1s
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  /* 创建两个任务：函数 / 名字 / 栈大小 / 参数 / 优先级 / 句柄 */
+  xTaskCreate(taskLED,   "LED",   2048, NULL, 1, NULL);
+  xTaskCreate(taskCount, "Count", 2048, NULL, 1, NULL);
+
+  /* setup 返回后 Arduino 自动启动调度器，两个任务开始并行跑 */
+}
+
+void loop() {
+  /* 主循环空闲：loopTask 没活干，也让出 CPU */
+  delay(1000);
+}</code></pre>
+          <p><strong>示例 2：队列在任务间传递温湿度数据</strong></p>
+          <pre><code class="language-cpp">/* 传感器任务生产数据 → 队列 → 显示任务消费数据 */
+#include &lt;Arduino.h&gt;
+
+/* 传输的数据结构 */
+typedef struct {
+  float temp;
+  float hum;
+} SensorData;
+
+QueueHandle_t sensorQueue;      // 队列句柄（全局）
+
+/* 生产者：模拟读传感器，每 1s 投一次 */
+void taskSensor(void *param) {
+  SensorData d;
+  float t = 20.0f;
+  while (1) {
+    d.temp = t + (random(0, 10) / 10.0f);  // 模拟抖动
+    d.hum  = 55.0f + random(0, 10);
+    xQueueSend(sensorQueue, &amp;d, 0);         // 0 = 不等待，满了丢弃
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+  }
+}
+
+/* 消费者：等队列数据，收到就打印 */
+void taskDisplay(void *param) {
+  SensorData d;
+  while (1) {
+    /* 阻塞等待：队列里没数据就睡，不空转 */
+    if (xQueueReceive(sensorQueue, &amp;d, portMAX_DELAY) == pdPASS) {
+      Serial.printf("temp=%.1f hum=%.1f\r\n", d.temp, d.hum);
+    }
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  sensorQueue = xQueueCreate(5, sizeof(SensorData));  // 队列深度 5
+
+  xTaskCreate(taskSensor,  "Sensor",  2048, NULL, 2, NULL);  // 生产者优先级高
+  xTaskCreate(taskDisplay, "Display", 2048, NULL, 1, NULL);  // 消费者优先级低
+}
+
+void loop() {
+  delay(1000);
+}</code></pre>
+        </section>
+
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第一段：任务函数的形态——死循环</h3>
+          <p><span class="inline-code">void taskLED(void *param)</span> 的签名固定：无返回值、参数是 void 指针（可以传任何结构体地址）。<strong>为什么必须是死循环</strong>：任务函数一旦 return，调度器会把它「杀死」并报错——FreeRTOS 约定任务永远不结束，所有工作都写在 while(1) 里。这也解释了为什么任务里的局部变量要放在循环内/外想清楚（count 放外面才累计）。</p>
+
+          <h3>第二段：xTaskCreate 的六个参数</h3>
+          <p><span class="inline-code">xTaskCreate(函数, 名字, 栈大小, 参数, 优先级, 句柄)</span>：名字仅调试用；栈大小单位是 <strong>word</strong>（StackType_t，ESP32 上 1 word = 4 字节，2048 word ≈ 8KB RAM）；参数传 NULL 表示不需要；优先级 1 是 Arduino loop 的默认级；句柄用于以后挂起/删除任务。<strong>为什么优先级给 1 而不是更高</strong>：两个任务同优先级 = 时间片轮转，对演示足够；真实工程里把「必须及时响应」的任务（如 BLE 回调转发）提高优先级。</p>
+
+          <h3>第三段：vTaskDelay 与 portTICK_PERIOD_MS</h3>
+          <p><span class="inline-code">vTaskDelay(300 / portTICK_PERIOD_MS)</span>：参数是「tick 数」，1 tick = 1ms（ESP32 默认），所以除以 <span class="inline-code">portTICK_PERIOD_MS</span> 把毫秒换算成 tick。<strong>为什么传 tick 不直接传毫秒</strong>：FreeRTOS 内核时间单位是 tick，与硬件时基绑定——这是移植友好的设计。ESP32 上直接写 <span class="inline-code">vTaskDelay(pdMS_TO_TICKS(300))</span> 更规范（本课为直观用除法）。</p>
+
+          <h3>第四段：队列的阻塞语义</h3>
+          <p><span class="inline-code">xQueueSend(q, &amp;d, 0)</span>：第三个参数是等待时间，0 表示「满了就放弃」；<span class="inline-code">xQueueReceive(q, &amp;d, portMAX_DELAY)</span> 是阻塞式取：没数据就无限等。<strong>为什么生产者不等待、消费者无限等</strong>：传感器每秒产一条，队列深度 5 够缓冲，丢了也无妨；显示任务只关心「来一条显示一条」，空转没意义所以阻塞。<strong>这是任务间解耦的标准姿态</strong>。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-demo">七、现象演示与验证</h2>
+          <ul>
+            <li><strong>双任务并行</strong>：LED 每 300ms 闪一次（快），串口每 1s 打印一次（慢）——互不干扰。</li>
+            <li><strong>队列传输</strong>：串口每秒打印 <span class="inline-code">temp=xx.x hum=xx</span>，数值来自另一个任务。</li>
+            <li><strong>优先级实验</strong>：把 taskSensor 优先级改成 0、taskDisplay 保持 1，观察打印变稀疏/不更新——理解优先级对「被调度机会」的影响。</li>
+          </ul>
+          <p><strong>验证方法：</strong></p>
+          <ol>
+            <li>把 taskLED 的延时从 300 改成 50，LED 明显变快、打印节奏不变——验证任务独立。</li>
+            <li>把 xQueueCreate 深度从 5 改成 1，生产者快于消费者时数据被丢弃（打印变稀）——理解队列满的策略。</li>
+            <li>把任务栈从 2048 改成 512，观察程序重启/跑飞（栈溢出）——体会栈大小的代价。</li>
+          </ol>
+        </section>
+
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>程序反复重启 / 乱码</td><td>任务栈溢出</td><td>增大 xTaskCreate 栈参数（打印任务 ≥4096）</td></tr>
+              <tr><td>某个任务不执行</td><td>优先级太低被饿死 / 忙等不延时</td><td>检查优先级；任务内必须用 vTaskDelay 让路</td></tr>
+              <tr><td>队列数据丢失</td><td>Send 等待时间 0，队列满</td><td>加大深度或 Send 时给等待时间（如 10ms）</td></tr>
+              <tr><td>两个任务抢串口乱打</td><td>共享资源竞争（串口是共享的）</td><td>打印集中到一个任务；或用队列把打印串行化</td></tr>
+              <tr><td>改完代码行为不变</td><td>旧固件没擦 / 复位未生效</td><td>Arduino 上传前先「Erase Flash」或按住 BOOT 重刷</td></tr>
+              <tr><td>任务里用 delay() 卡死别人</td><td>忙等不释放 CPU</td><td>任务里一律 <span class="inline-code">vTaskDelay</span>；ISR/回调里用专用版本</td></tr>
+              <tr><td>xTaskCreate 返回失败</td><td>RAM 不足（栈申请失败）</td><td>减小栈大小 / 减少任务数 / 检查全局大数组</td></tr>
+              <tr><td>看不懂调度顺序</td><td>优先级设计混乱</td><td>画任务清单：每个任务优先级+周期+是否阻塞，先纸上推演</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（必做）</strong>：在示例 2 里加第三个任务「统计队列吞吐」（每 5s 打印一次收到的总条数），用静态变量跨调用计数。</p>
+          <p><strong>练习 2</strong>：把 <span class="inline-code">esp32-i2c.html</span> 的 AHT20 读取搬进「传感器任务」，OLED 刷新放进「显示任务」，用队列传温度——完整的多任务采集显示系统。</p>
+          <p><strong>练习 3（进阶）</strong>：结合 <span class="inline-code">esp32-ble.html</span>：BLE 收到手机指令 → 通过队列通知 LED 任务改变闪烁频率——跨任务指令分发，这是遥控器项目的核心架构。</p>
+          <p><strong>延伸学习</strong>：多任务体系掌握后，回顾 <a href="route.html">学习路线</a>：ESP32 主链（配网→MQTT→传感器→遥控器）加上 FreeRTOS 架构就是完整产品原型。STM32 侧的进阶可学 <a href="stm32-systick.html">SysTick</a> 与 RTC 组合。</p>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="esp32-ble.html" class="btn btn-outline btn-sm">← 上一篇：BLE 低功耗蓝牙</a>
+          <a href="esp32-ntp.html" class="btn btn-outline btn-sm">下一篇：NTP 网络校时 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

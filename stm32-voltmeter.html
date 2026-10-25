@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - 综合项目：STM32 数字电压表零基础</title>
+  <meta name="description" content="零基础综合项目：用电阻分压把 0~13.2V 降到 ADC 可测范围，串起 ADC 采样→换算→OLED 显示全链路，按键中断切换 1×/4× 两挡量程，做一个真能量电压的小表。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link active" aria-current="page">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>综合项目：STM32 数字电压表</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：STM32</span>
+          <span class="badge badge-orange">进阶</span>
+          <span class="badge badge-gray">更新：2026-10-24</span>
+        </div>
+
+        <p class="text-secondary mb-6">收官项目：把前面学的 ADC 采样、OLED 显示、外部中断按键三件套拼起来，做一个真能量电压的小表。本讲从零讲透电阻分压为什么能把高压降到 ADC 能测的范围、分压比怎么算、软件里为什么要乘回分压倍数，以及「ADC 采样→换算→OLED 显示」这条完整数据链路怎么串起来，最后用按键中断手动切换两挡量程。</p>
+
+        <!-- ===== 一 ===== -->
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>用两个电阻做分压网络，把 0~13.2V 被测电压降到 ADC 可测的 0~3.3V。</li>
+            <li>把 ADC 采样值按当前挡位换算成真实电压，在 OLED 上实时显示。</li>
+            <li>用外部中断按键在「1× 直测挡」和「4× 分压挡」之间切换量程。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识：</strong></p>
+          <ul>
+            <li>ADC（stm32-adc.html）：采样、换算公式 raw×3.3/4095。</li>
+            <li>OLED（stm32-i2c-oled.html）：OLED_Init、OLED_ShowChar/ShowString。</li>
+            <li>外部中断（stm32-exti.html）：HAL_GPIO_EXTI_Callback 回调切挡。</li>
+            <li>串口（stm32-usart.html）：printf 对照打印。</li>
+          </ul>
+          <p><strong>本课新名词：</strong>电阻分压、分压比、分压倍数、量程切换、数据链路、综合项目整合。</p>
+        </section>
+
+        <!-- ===== 二 ===== -->
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. 电阻分压：把大电压「缩」到小电压</h3>
+          <p><strong>生活类比</strong>：ADC 像一个只能量到 3.3V 的小量筒，你要量 12V 的大桶水，直接倒会溢出。分压电阻像一个「水龙头分流」——两个电阻串联，只让 1/4 的电压落到量筒里，再按比例乘回去就是真实电压。</p>
+          <p><strong>一句话定义</strong>：用两个电阻 R1、R2 串联，被测电压 Vin 加在两端，ADC 只接在 R2 两端。ADC 看到的电压 V_adc = Vin × R2/(R1+R2)，软件里再乘回 (R1+R2)/R2 还原 Vin。</p>
+          <p><strong>例子</strong>：本项目 R1=30kΩ、R2=10kΩ，分压比=10/(30+10)=1/4，所以 ADC 端 3.3V 对应被测端 13.2V，软件里 Vin = V_adc × 4。</p>
+
+          <h3>2. 量程切换：精度与范围的权衡</h3>
+          <p><strong>生活类比</strong>：小量程尺子精度高但量不长，大量程尺子能量长但刻度粗。电压表也一样：直接测 0~3.3V 精度高，测高压要分压但精度被稀释。</p>
+          <p><strong>一句话定义</strong>：<strong>1× 挡</strong>不分压直测 0~3.3V，每步约 0.8mV，精度高；<strong>4× 挡</strong>走分压网络测 0~13.2V，范围大但同样 12 位被摊到 4 倍范围、分辨率变粗。按键在两挡间切换。</p>
+          <p><strong>例子</strong>：测单片机电压用 1× 挡，测 12V 电池切到 4× 挡。</p>
+
+          <h3>3. 全链路：ADC→换算→显示 一条龙</h3>
+          <p><strong>生活类比</strong>：一个电压表像一条流水线：传感器（ADC）→ 计算员（换算）→ 播报员（OLED）。任何一环断掉，表就不工作。</p>
+          <p><strong>一句话定义</strong>：数据链路 = ADC 不停采 PA1 上的分压电压 → 按当前挡位倍数换算成真实电压 → sprintf 成字符串 → OLED 刷新显示。按键中断负责切换换算倍数 ratio。</p>
+          <p><strong>例子</strong>：本讲主循环每 200ms 走一遍这条流水线，OLED 三行分别显示标题、挡位、电压值。</p>
+        </section>
+
+        <!-- ===== 三 ===== -->
+        <section>
+          <h2 id="sec-principle">三、原理介绍</h2>
+          <p>这是综合篇，把 ADC、分压、OLED、EXTI 串成一个能用的表。原理重点在「为什么要分压」和「软件为什么要乘回来」。</p>
+          <p><strong>整条链路：</strong>被测 Vin → R1/R2 分压成 0~3.3V 进 ADC → 得 raw(0~4095) → 软件 ×(3.3/4095)×倍率 → 真实电压 → OLED 显示；按键中断切倍率。</p>
+
+          <h3>原理 1：电阻分压——为什么测 12V 不能直连</h3>
+          <p>ADC 输入脚只能承受 0~3.3V，超过会损坏内部 ESD 二极管。用 R1、R2 串联分压，ADC 只接 R2 两端：</p>
+          <blockquote>V_adc = Vin × R2/(R1+R2)。取 R1=30k、R2=10k → 分压比 1/4 → Vin = V_adc × 4，量程扩到 0~13.2V。</blockquote>
+          <p>本质是两个电阻分走电流、按比例分走电压。<strong>代价是精度换量程</strong>：分压后 12V 被压到 3V 采，12 位 4096 级摊到 13.2V，每级约 3.2mV；而直测 3.3V 挡每级只有 0.8mV——所以高精度小信号用 1× 挡、测电池用 4× 挡。</p>
+          <p><strong>教材必考点：分压电阻不能贪大。</strong>ADC 内部采样靠一颗小电容对外部电压「充电采样」（采样保持），如果 R1+R2 等效内阻太大（比如取 900k+100k=1MΩ），采样时间内电容充不到真实电压，读数就偏低且随源阻抗漂移。经验是分压等效阻抗控制在 <strong>10kΩ 量级</strong>（本项目 30k+10k≈40k 偏大但可接受，最好把 ADC Sample Time 调到 55.5 周期）；既减小功耗又别让源阻抗过高——这是课程设计里「分压比算对了却量不准」的隐藏原因。</p>
+
+          <h3>原理 2：软件为什么必须「乘回倍率」</h3>
+          <p>ADC 看到的只是 R2 两端电压，不是原始 Vin。读数还原要把分压「除回去」：<span class="inline-code">Vin = raw × 3.3 / 4095 × ratio</span>。ratio=1.0 是直测挡、=4.0 是分压挡。漏乘 ratio，4× 挡测 12V 会显示成 3V——这是电压表最典型的错。超量程保护：raw≥4095 说明输入顶格，应显示 OVER 而不是死算。</p>
+
+          <h3>原理 3：双挡切换——为什么用中断切而不主循环扫</h3>
+          <p>挡位切换是异步事件，用 EXTI0 按键中断把 ratio 从 1.0 切到 4.0（或反向），主循环只管「按当前 ratio 换算→显示」。中断里只改 ratio 这一个全局变量、不做耗时刷新，避免抖动和阻塞——这正是前面 EXTI 篇「中断只置标志」原则的落地。</p>
+          <blockquote>记忆点：高压必须先 R1/R2 分压（这里 ÷4），ADC 只认 0~3.3V；还原时 Vin=raw×3.3/4095×ratio，漏乘倍率必错；1× 挡精度高、4× 挡量程大；换挡用中断改 ratio，主循环只管换算显示。</blockquote>
+        </section>
+
+        <!-- ===== 四 ===== -->
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <table>
+            <thead>
+              <tr><th>模块引脚</th><th>单片机引脚</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>被测电压正极</td><td>→ R1(30kΩ) → PA1(ADC1_IN1)</td><td>高压必须先过 R1 分压，禁止直连</td></tr>
+              <tr><td>R2(10kΩ) 两端</td><td>PA1 ↔ GND</td><td>R2 下端接地，PA1 上的电压 = Vin/4</td></tr>
+              <tr><td>被测电压负极</td><td>GND</td><td>必须和单片机共地</td></tr>
+              <tr><td>挡位按键一脚</td><td>PA0（GPIO_EXTI0，下降沿上拉）</td><td>按下切量程</td></tr>
+              <tr><td>OLED SCL / SDA</td><td>PB6 / PB7</td><td>复用上一篇软件 I2C 接法</td></tr>
+              <tr><td>OLED VCC / GND</td><td>3.3V / GND</td><td>供电共地</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么这样接：</strong></p>
+          <ul>
+            <li><strong>为什么 R1 在上、R2 在下？</strong> 被测高压先经 R1 降到中间点（PA1），再经 R2 到地。分压比 = R2/(R1+R2)，R1 越大降压越多。接反了分压比就错了。</li>
+            <li><strong>为什么必须共地？</strong> 被测电源和单片机必须共享同一个 0V 参考，否则分压比例没有基准，读数完全错。</li>
+            <li><strong>为什么高压禁止直连 PA1？</strong> ADC 输入超 3.3V 不仅顶格饱和，还可能损坏引脚。分压网络就是保护壳。</li>
+          </ul>
+          <div class="tip-info mt-4"><span class="tip-label">CubeMX 配置要点</span>
+            ADC1 开 IN1 单通道轮询（或 DMA 循环）；PA0 配 GPIO_EXTI0 + Falling edge + Pull-up 并使能 NVIC；PB6/PB7 配开漏输出给软件 I2C；USART1 可选保留做调试。</div>
+        </section>
+
+        <!-- ===== 五 ===== -->
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p>下面代码把 ADC、OLED、按键切挡串起来：主循环读 ADC → 按 ratio 换算 → OLED 三行显示 → 串口对照打印；中断回调里切换 ratio。</p>
+          <pre><code class="language-c">/* main.c：ADC + OLED + 按键切挡 的电压表主流程（零基础注释版） */
+#include &lt;stdio.h&gt;
+
+ADC_HandleTypeDef hadc1;
+
+float ratio = 1.0f;                 /* 当前分压倍数：1.0=直测, 4.0=分压挡 */
+const char *range_name = "0-3.3V";  /* 挡位文字 */
+
+int main(void)
+{
+  HAL_Init();
+  SystemClock_Config();
+  MX_GPIO_Init();
+  MX_ADC1_Init();
+  MX_USART1_UART_Init();
+
+  OLED_Init();                 /* 初始化 OLED 屏 */
+
+  char buf[24];
+
+  while (1)
+  {
+    /* 1. 启动并读取一次 ADC */
+    HAL_ADC_Start(&amp;hadc1);
+    HAL_ADC_PollForConversion(&amp;hadc1, 10);
+    uint16_t raw = HAL_ADC_GetValue(&amp;hadc1);
+
+    /* 2. 按当前挡位换算真实电压：raw*3.3/4095 再乘挡位倍数 */
+    float vin = raw * 3.3f / 4095.0f * ratio;
+
+    /* 3. 刷新 OLED 三行：标题 / 挡位 / 电压值 */
+    OLED_ShowString(0, 0, "= STM32 VOLTMETER =");
+    sprintf(buf, "Range: %s", range_name);
+    OLED_ShowString(0, 2, buf);
+    sprintf(buf, "Vin: %.2f V", vin);
+    OLED_ShowString(0, 4, buf);
+
+    /* 4. 同时从串口打印一份，方便对照 */
+    printf("range=%s  raw=%d  Vin=%.3f V\r\n", range_name, raw, vin);
+
+    HAL_Delay(200);
+  }
+}
+
+/* 按键中断：在 1x 与 4x 挡之间切换 */
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+  if (GPIO_Pin == GPIO_PIN_0)
+  {
+    HAL_Delay(20);
+    if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_RESET)
+    {
+      if (ratio == 1.0f)          /* 现在是直测挡，切到分压挡 */
+      {
+        ratio = 4.0f;
+        range_name = "0-13.2V";
+      }
+      else                        /* 现在是分压挡，切回直测挡 */
+      {
+        ratio = 1.0f;
+        range_name = "0-3.3V";
+      }
+    }
+  }
+}</code></pre>
+          <p><span class="inline-code">OLED_ShowString</span> 是基于上一篇 <span class="inline-code">OLED_ShowChar</span> 循环调用拼出来的字符串显示函数，原理就是逐字符调用字模表。</p>
+          <p><strong>进阶片段（封装换算 + 超量程保护）：</strong> 把换算抽成一个函数方便复用，并在 ADC 读数顶格（4095，说明输入超量程）时显示 OVERRANGE，避免把饱和值误当真实电压。</p>
+          <pre><code class="language-c">/* 进阶：封装换算函数 + 超量程饱和保护 */
+float adc_to_voltage(uint16_t raw, float ratio)
+{
+  return raw * 3.3f / 4095.0f * ratio;   /* 与主流程同一公式，封装后随处复用 */
+}
+
+/* 在主循环里替换原来的换算与显示两步 */
+float vin = adc_to_voltage(raw, ratio);
+if (raw &gt;= 4095) {                     /* ADC 顶格 4095 = 输入已超量程 */
+  OLED_ShowString(0, 4, "Vin: OVERRANGE");
+} else {
+  sprintf(buf, "Vin: %.2f V", vin);
+  OLED_ShowString(0, 4, buf);
+}</code></pre>
+        </section>
+
+        <!-- ===== 六 ===== -->
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第 1 段：ADC 读数与换算</h3>
+          <p><strong>在做什么：</strong> Start → PollForConversion 等转换 → GetValue 读回 raw，再 <span class="inline-code">raw*3.3/4095*ratio</span> 换算成真实电压。</p>
+          <p><strong>为什么这么写：</strong> 这是全项目核心——前半段 raw*3.3/4095 是 ADC 端电压，后半段乘 ratio 才是被测端真实电压。ratio 随挡位在 1.0/4.0 间变。</p>
+          <p><strong>不写会怎样：</strong> 漏乘 ratio，4×挡测 5V 只会显示 1.25V（没乘回 4 倍）——本项目最经典的错。</p>
+
+          <h3>第 2 段：OLED 三行刷新</h3>
+          <p><strong>在做什么：</strong> 第一行写标题，第二行 sprintf 当前挡位文字，第三行 sprintf 电压值（保留两位小数）。</p>
+          <p><strong>为什么这么写：</strong> 用 sprintf 把 float 和字符串拼成固定格式，再交给 OLED_ShowString 显示。三行页号 0/2/4 错开避免字符重叠。</p>
+          <p><strong>不写会怎样：</strong> 不 sprintf 直接传 float 给 OLED_ShowString 是不行的——OLED 只能显示字符串，必须先把数字格式化成文本。</p>
+
+          <h3>第 3 段：按键中断切挡</h3>
+          <p><strong>在做什么：</strong> EXTI 回调里消抖后，把 ratio 在 1.0/4.0 间翻转，同时改 range_name 文字。</p>
+          <p><strong>为什么这么写：</strong> 切挡是异步事件，用中断最及时。改 ratio 后，主循环下一次换算自动用新倍数，OLED 挡位文字也跟着变。</p>
+          <p><strong>不写会怎样：</strong> 没有切挡逻辑，量程固定；或忘了消抖，按一次切好几挡。</p>
+        </section>
+
+        <!-- ===== 七 ===== -->
+        <section>
+          <h2 id="sec-demo">七、现象演示说明</h2>
+          <ul>
+            <li>上电后 OLED 第一行显示标题，第二行显示当前挡位 <span class="inline-code">Range: 0-3.3V</span>，第三行实时显示被测电压。</li>
+            <li><strong>1× 挡</strong>：把 PA1 直接接到 3.3V，应显示约 <span class="inline-code">3.30 V</span>；接 GND 显示 0.00V。</li>
+            <li><strong>4× 挡</strong>：把 5V（USB 供电）经过 R1/R2 分压网络接 PA1，OLED 应显示约 <span class="inline-code">5.00 V</span>；接 12V 时应显示约 <span class="inline-code">12.00 V</span>。</li>
+            <li>按一次 PA0 按键，第二行挡位文字在两挡间切换，第三行读数自动按新倍数重新换算。</li>
+          </ul>
+          <p><strong>可量化的验证方法：</strong></p>
+          <ul>
+            <li><strong>万用表校准</strong>：用真万用表量同一被测电压，OLED 读数应与万用表接近（误差几分贝）。差很多说明分压比或公式错了。</li>
+            <li><strong>验证分压倍数</strong>：4×挡测 USB 5V，OLED 应显示约 5.00V。若只显示 1.25V，说明 ratio 没乘对（还停在 1.0）。</li>
+            <li><strong>切挡验证</strong>：按一次按键，第二行在 0-3.3V 和 0-13.2V 间切换；同一被测电压在两挡下数值应差约 4 倍。</li>
+          </ul>
+        </section>
+
+        <!-- ===== 八 ===== -->
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>测高压读数反而偏小好几倍</td><td>分压倍数搞反了，软件里乘了 R2/(R1+R2) 而不是倒数</td><td>软件里 Vin = ADC电压 × (R1+R2)/R2 = ×4；硬件确认 R1 在上、R2 在下</td></tr>
+              <tr><td>4× 挡测 5V 显示 1.25V</td><td>挡位倍数没切过来，还停在 1×</td><td>按按键确认挡位文字切换；或代码里 ratio 初始值改对</td></tr>
+              <tr><td>OLED 上数字叠影、越写越糊</td><td>每次刷新没清掉旧字符，长短字符串重叠</td><td>写新内容前先在该区域填空格清屏，或整屏清一次</td></tr>
+              <tr><td>读数跳到 4095 / 显示 13.2V 顶格</td><td>输入电压超量程，ADC 饱和了</td><td>切到对应大挡位；4× 挡最大测 13.2V，再高要重新设计分压比</td></tr>
+              <tr><td>换挡按键无反应</td><td>EXTI NVIC 没开，或回调函数名写错</td><td>CubeMX 勾 EXTI line0；回调严格写 HAL_GPIO_EXTI_Callback</td></tr>
+              <tr><td>公式全对但和万用表总有固定偏差（教材校准坑）</td><td>代码里按 Vref=3.3V 算，但实际 VDDA 不是精确 3.3V（LDO 有误差、USB 供电其实 5V 经稳压略偏）</td><td>用万用表量实际 VDDA，把代码里 3.3f 换成实测值（如 3.28）做单点校准；或用 ST 内部 1.2V 参考电压(ADC 内部通道)反推真实 Vref，做自校准</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <!-- ===== 九 ===== -->
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（扩大量程）：</strong> 把分压比改成 1/10（R1=90k、R2=10k），最大测 33V，软件 ratio 改成 10.0f。提示：同步改 range_name 量程文字。</p>
+          <p><strong>练习 2（自动换挡）：</strong> 当 1×挡 raw 超过 3800（接近 3V）时自动切到 4×挡，避免超量程。提示：在主循环换算前判断 raw，超过阈值自动改 ratio。</p>
+          <p><strong>练习 3（加内阻报警）：</strong> 测到 13.2V 顶格或读数 4095 时，在 OLED 第三行显示 "OVER" 提示超量程。提示：if(raw>=4090) 显示警告字符串。</p>
+          <p><strong>延伸学习：</strong></p>
+          <ul>
+            <li><a href="#xxx" data-placeholder>回顾 ADC 模拟采集（stm32-adc.html）</a></li>
+            <li><a href="#xxx" data-placeholder>加 RTC 时钟：电压表同时显示时间</a></li>
+            <li><a href="#xxx" data-placeholder>ESP32 物联网：把电压数据上传到云端</a></li>
+          </ul>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="stm32-exti.html" class="btn btn-outline btn-sm">← 上一篇：外部中断</a>
+          <a href="stm32-clock.html" class="btn btn-outline btn-sm">下一篇：系统时钟树与 RCC 配置 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

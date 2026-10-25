@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - STM32 定时器与 PWM 输出（呼吸灯）零基础</title>
+  <meta name="description" content="零基础学 STM32 PWM：什么是占空比与频率、定时器预分频 PSC 与自动重装 ARR、比较值 CCR 如何决定亮度，用 TIM3 通道 1 在 PA6 输出 1kHz PWM 做呼吸灯。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link active" aria-current="page">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>定时器与 PWM 输出（呼吸灯）</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：STM32</span>
+          <span class="badge badge-orange">进阶</span>
+          <span class="badge badge-gray">更新：2026-10-24</span>
+        </div>
+
+        <p class="text-secondary mb-6">定时器不只会定时——它还能输出 PWM，用来调 LED 亮度、控制舵机、驱动电机。本讲从零讲透什么是占空比和频率、定时器 PSC 分频与 ARR 重装怎么配合算出 1kHz、CCR 比较值为什么能决定 LED 亮度，最后用 TIM3 通道 1 在 PA6 做出一个呼吸灯。</p>
+
+        <!-- ===== 一 ===== -->
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>说清楚 PWM 的频率和占空比是什么，为什么调占空比就能调 LED 亮度。</li>
+            <li>会用 PSC 和 ARR 两个数算出 PWM 频率，理解「为什么要 +1」。</li>
+            <li>用 HAL_TIM_PWM_Start 启动输出，用 __HAL_TIM_SET_COMPARE 改占空比做出呼吸灯。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识：</strong></p>
+          <ul>
+            <li>GPIO（stm32-gpio.html）：引脚复用概念——PWM 输出引脚要配成复用功能而不是普通推挽输出。</li>
+            <li>时钟树（stm32-env.html）：TIM3 挂在 APB1 上，时钟是 72MHz。</li>
+            <li>C 语言：for/while 循环、if 判断、自增自减。</li>
+          </ul>
+          <p><strong>本课新名词：</strong>PWM、占空比、频率、定时器 TIM、PSC 预分频、ARR 自动重装、CCR 比较值、复用推挽、呼吸灯。</p>
+        </section>
+
+        <!-- ===== 二 ===== -->
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. PWM 是什么：快速开关出来的「模拟效果」</h3>
+          <p><strong>生活类比</strong>：LED 只有「亮」和「灭」两档，但如果你以肉眼看不清的速度快速开关——开一半时间、关一半时间，因为人眼有视觉暂留，看起来就是「半亮」。这就是 PWM：用高速开关的时间比例，模拟出不同的亮度。</p>
+          <p><strong>一句话定义</strong>：PWM（脉冲宽度调制）是一种方波信号，靠改变「一个周期内高电平占的时间比例」（占空比）来输出不同的等效平均电压。占空比 0% 全灭，50% 半亮，100% 最亮。</p>
+          <p><strong>例子</strong>：本讲 PWM 频率固定 1kHz（每秒开关 1000 次，远快于人眼），只改占空比从 0% 到 100%，LED 就从暗渐变到亮。</p>
+
+          <h3>2. 频率与占空比：两个独立的旋钮</h3>
+          <p><strong>生活类比</strong>：频率像「一秒钟眨眼多少次」，占空比像「每次眨眼睁开的时间占比」。两个旋钮互相独立：频率决定有多快，占空比决定多亮。</p>
+          <p><strong>一句话定义</strong>：频率 = 每秒完整方波周期的个数（本讲 1kHz）；占空比 = 高电平时间 ÷ 整个周期 ×100%。频率太高人眼看不出闪，太低会看到肉眼可见的闪烁。</p>
+          <p><strong>例子</strong>：驱动 LED 用 1kHz 很合适；若频率只有 1Hz，你会明显看到灯在一闪一闪而不是调光。</p>
+
+          <h3>3. 定时器 PSC 与 ARR：两个「分频/计数」旋钮</h3>
+          <p><strong>生活类比</strong>：定时器像一个不知疲倦的计数器，每秒被 7200 万次地敲一下。PSC 是「每敲几下才数一个数」的减速齿轮；ARR 是「数到几就清零重来」的尺子长度。两个旋钮一起决定方波周期。</p>
+          <p><strong>一句话定义</strong>：<strong>PSC（预分频器）</strong>对 72MHz 时钟分频，写 PSC=71 实际分频 72 倍，计数器变成 1MHz（每 1μs 加 1）；<strong>ARR（自动重装值）</strong>是计数器封顶值，写 ARR=999 则数 1000 个数清零一次。注意公式里都要 +1：PWM 频率 = 72MHz ÷ (PSC+1) ÷ (ARR+1)。</p>
+          <p><strong>例子</strong>：PSC=71、ARR=999 → 72000000 ÷ 72 ÷ 1000 = 1000Hz = 1kHz。</p>
+
+          <h3>4. CCR 比较值：决定占空比的那个数</h3>
+          <p><strong>生活类比</strong>：计数器从 0 数到 ARR。CCR 是一道「切换线」——数到 CCR 之前输出高电平，过了 CCR 就拉低。CCR 越高，高电平持续越久，灯越亮。</p>
+          <p><strong>一句话定义</strong>：<strong>CCR（比较值）</strong>规定一个周期里高电平持续到哪个计数值。占空比 = CCR ÷ (ARR+1)。本讲 ARR=999，所以 CCR=0 全灭、CCR=500 半亮、CCR=1000 全亮。</p>
+          <p><strong>例子</strong>：代码里用 <span class="inline-code">__HAL_TIM_SET_COMPARE(&amp;htim3, TIM_CHANNEL_1, pwm)</span> 改 CCR，pwm 在 0~1000 间变化即调亮度。</p>
+
+          <h3>5. 呼吸灯原理：占空比缓缓来回变</h3>
+          <p><strong>生活类比</strong>：呼吸就是吸——亮起来、呼——暗下去，节奏缓慢。让 CCR 从 0 慢慢爬到 1000，再慢慢退回 0，人眼看到的就是灯柔和地「呼吸」。</p>
+          <p><strong>一句话定义</strong>：呼吸灯 = 让占空比（CCR）在 0~100% 之间缓慢、连续地来回渐变，而不是突然跳变。每步只变一点点、每步间停 2ms，渐变就平滑。</p>
+          <p><strong>例子</strong>：本讲 pwm 每次 += 5，到头掉头，配合 HAL_Delay(2)，形成柔和呼吸效果。</p>
+        </section>
+
+        <!-- ===== 三 ===== -->
+        <section>
+          <h2 id="sec-principle">三、原理介绍：PWM 是怎么被定时器「算」出来的</h2>
+          <p>呼吸灯亮度变化不是软件延时高低电平拼出来的——那样 CPU 全被占死。PWM 是定时器硬件自动产生的波形，CPU 只在开头设好参数、偶尔改一个比较值。三个机制讲透它。</p>
+          <p><strong>整条链路：</strong>72MHz 时钟 → PSC 预分频 → CNT 计数器 0~ARR 循环 → 每拍把 CNT 和 CCR 比较 → 比较结果直接翻转/输出到引脚。</p>
+
+          <h3>原理 1：定时器=一个不停自加的计数器</h3>
+          <p>TIM3 挂在 APB1 上（APB1 预分频 ≠1 时定时器时钟自动 ×2，故为 72MHz）。这个 72MHz 直接计数太快，所以前面有两级分频：</p>
+          <ul>
+            <li><strong>PSC 预分频器</strong>：把 72MHz 先粗分。写 PSC=71，真实系数 = (71+1)=72，计数时钟变成 72MHz/72 = <strong>1MHz</strong>，即每 1µs 加 1。</li>
+            <li><strong>ARR 自动重装值</strong>：CNT 从 0 数到 ARR 就清零重来。ARR=999 → 一个周期 = 1000 个数 = 1000µs = <strong>1kHz</strong>。</li>
+          </ul>
+          <blockquote>PWM 频率 = 72MHz / (PSC+1) / (ARR+1)。本例 72000000/72/1000 = 1000Hz。</blockquote>
+          <p><strong>为什么所有数都要 +1</strong>：计数器从 0 开始数，写 0 就是 1 个计数（不分频/1 个数一周期）。PSC=71 才是 ÷72、ARR=999 才是 1000 个数——记住「代码写的值 +1 = 真实系数」，这是定时计算最易错的点。</p>
+
+          <h3>原理 2：比较匹配——CCR 怎么决定占空比</h3>
+          <p>引脚的输出电平不是软件写的，而是<strong>硬件比较器</strong>每拍做的决定：CNT 在 0~CCR 期间输出一种电平，在 CCR~ARR 期间翻成另一种。于是方波高电平所占比例就是：</p>
+          <blockquote>占空比 = CCR / (ARR+1)。CCR=0 全低、CCR=999 全高、CCR=500 即 50%。</blockquote>
+          <p>呼吸灯本质就是让 CCR 在 0↔999 之间缓慢来回扫，占空比从 0 渐变到 100% 再回来。<span class="inline-code">__HAL_TIM_SET_COMPARE(&amp;htim3, TIM_CHANNEL_1, pwm)</span> 就是改这个 CCR——硬件立刻在下一个周期按新值输出，CPU 完全不占用。</p>
+
+          <h3>原理 3：为什么用 PSC+ARR 两级分频，而不是改系统时钟</h3>
+          <p>72MHz 是全局时钟，串口波特率、SysTick、所有定时器都共用，不能为一路 PWM 单独调慢。PSC/ARR 是每个定时器<strong>自己的局部分频器</strong>：PSC 先把 72MHz 粗到合适计数速率（如 ÷72=1MHz），ARR 再定一个周期数多少个数。这样既能自由选 PWM 频率，又能在该频率下用 0~ARR 的整数 CCR 精确调占空比，互不影响全局。这就是「定时器 PWM 不占 CPU」的根本原因。</p>
+          <blockquote>记忆点：PWM 频率 = 72M/(PSC+1)/(ARR+1)，代码值都要 +1；占空比 = CCR/(ARR+1)；PSC+ARR 是每定时器局部分频，不动全局 72M；呼吸灯=硬件自动输出、CPU 只改 CCR。</blockquote>
+
+          <h3>原理 4：TIMx 寄存器 ↔ HAL 函数对照（教材查表）</h3>
+          <p>CubeMX 与 HAL 表面上把寄存器藏了起来，但野火教材强调「PWM 玩到后面一定要能对着寄存器看」。下面这张表把本讲用到的动作翻译成 RM0008 里的寄存器位：</p>
+          <table>
+            <thead><tr><th>你做的事</th><th>对应寄存器 / 位</th><th>HAL 函数 / 宏</th></tr></thead>
+            <tbody>
+              <tr><td>配置分频系数</td><td>TIMx_PSC（预分频，0~65535）</td><td>htim3.Init.Prescaler = 71</td></tr>
+              <tr><td>配置周期/重装值</td><td>TIMx_ARR（自动重装）</td><td>htim3.Init.Period = 999</td></tr>
+              <tr><td>配置比较值(占空比)</td><td>TIMx_CCR1（捕获/比较寄存器 1）</td><td>__HAL_TIM_SET_COMPARE(&amp;htim3, TIM_CHANNEL_1, pwm)</td></tr>
+              <tr><td>真正启动计数器</td><td>TIMx_CR1 的 CEN 位(bit0)=1（计数器使能）</td><td>HAL_TIM_PWM_Start()</td></tr>
+              <tr><td>开 TIM3 时钟</td><td>RCC-&gt;APB1ENR 里 TIM3EN 位</td><td>__HAL_RCC_TIM3_CLK_ENABLE()</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么 Start 单独存在</strong>：<span class="inline-code">HAL_TIM_PWM_Start()</span> 内部除了把 CCR 写好，关键一步是把 CR1 的 <strong>CEN 位置 1</strong>——计数器才真正开始计数、比较器才开始输出波形。只 Init 不 Start，CEN=0，CNT 不动，PA6 自然没波形。</p>
+        </section>
+
+        <!-- ===== 四 ===== -->
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <table>
+            <thead>
+              <tr><th>模块引脚</th><th>单片机引脚</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>LED 阳极（长脚）</td><td>PA6（经 220Ω 电阻）</td><td>TIM3_CH1 默认映射在 PA6，PWM 从这里输出</td></tr>
+              <tr><td>LED 阴极（短脚）</td><td>GND</td><td>共地</td></tr>
+              <tr><td>供电</td><td>3.3V / GND</td><td>PWM 高电平 3.3V 驱动 LED</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么这样接：</strong></p>
+          <ul>
+            <li><strong>为什么是 PA6？</strong> STM32 的引脚是「复用功能」的：TIM3_CH1 通道默认就映射在 PA6 上。在 CubeMX 里把 TIM3 通道 1 选成 PWM，PA6 会自动变成 PWM 输出脚，不用你手动配 GPIO。</li>
+            <li><strong>为什么 LED 还要串 220Ω？</strong> PWM 高电平仍是 3.3V，限流电阻和点灯那篇一样不能省，否则电流过大伤 LED 和引脚。</li>
+            <li><strong>为什么不用额外元件？</strong> 只要 PWM 频率够高（1kHz），人眼看到的就是平均亮度，不需要额外滤波电容，LED 直接接引脚即可调光。</li>
+          </ul>
+          <div class="tip-info mt-4"><span class="tip-label">CubeMX 配置要点</span>
+            Timers → TIM3，Clock Source 选 <strong>Internal Clock</strong>，Channel1 选 <strong>PWM Generation CH1</strong>；在 Parameter Settings 里把 Prescaler 填 <span class="inline-code">71</span>，Counter Period（ARR）填 <span class="inline-code">999</span>，Pulse（初始 CCR）填 0。引脚会自动分配到 PA6。</div>
+        </section>
+
+        <!-- ===== 五 ===== -->
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p>下面代码启动 TIM3 通道 1 的 PWM，主循环里让 CCR（占空比）在 0~1000 之间来回渐变，做出呼吸灯。</p>
+          <pre><code class="language-c">/* main.c：TIM3 CH1 PWM 呼吸灯，频率 1kHz（零基础注释版） */
+TIM_HandleTypeDef htim3;
+
+int main(void)
+{
+  HAL_Init();
+  SystemClock_Config();
+  MX_GPIO_Init();
+  MX_TIM3_Init();
+
+  /* 必须调用：启动 TIM3 通道 1 的 PWM 输出，不调则无波形 */
+  HAL_TIM_PWM_Start(&amp;htim3, TIM_CHANNEL_1);
+
+  uint16_t pwm = 0;
+  int8_t dir = 1;     /* 1=渐亮，-1=渐灭 */
+
+  while (1)
+  {
+    /* 改写 CCR，即改变占空比：pwm 越大灯越亮 */
+    __HAL_TIM_SET_COMPARE(&amp;htim3, TIM_CHANNEL_1, pwm);
+
+    pwm += dir * 5;              /* 每次步进 5，占空比变化约 0.5% */
+    if (pwm &gt;= 1000)             /* 到最亮就掉头变暗 */
+    {
+      pwm = 1000;
+      dir = -1;
+    }
+    if (pwm == 0)                /* 到最暗掉头回亮 */
+    {
+      dir = 1;
+    }
+    HAL_Delay(2);                /* 控制呼吸速度：数值越大呼吸越慢 */
+  }
+}</code></pre>
+          <p>如果只想让 LED 固定在某个亮度（不呼吸），把 CCR 写死即可：</p>
+          <pre><code class="language-c">HAL_TIM_PWM_Start(&amp;htim3, TIM_CHANNEL_1);
+__HAL_TIM_SET_COMPARE(&amp;htim3, TIM_CHANNEL_1, 250);  /* 固定 25% 占空比，约四分之一亮 */
+while (1) { }</code></pre>
+        </section>
+
+        <!-- ===== 六 ===== -->
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第 1 段：启动 PWM 输出</h3>
+          <p><strong>在做什么：</strong> <span class="inline-code">HAL_TIM_PWM_Start(&amp;htim3, TIM_CHANNEL_1)</span> 真正打开 TIM3 通道 1 的 PWM 输出。</p>
+          <p><strong>为什么这么写：</strong> CubeMX 只完成了寄存器初始化，PWM 输出默认是关闭的。必须显式 Start，引脚才会开始输出方波。</p>
+          <p><strong>不写会怎样：</strong> 不调 Start，PA6 上什么波形都没有，LED 永远不亮——这是 PWM 实验最常见的「配好了却没输出」原因。</p>
+
+          <h3>第 2 段：改写 CCR 调亮度</h3>
+          <p><strong>在做什么：</strong> 用 <span class="inline-code">__HAL_TIM_SET_COMPARE</span> 把当前 pwm 写进 CCR，直接改变占空比，从而改变亮度。</p>
+          <p><strong>为什么这么写：</strong> 这个宏是 HAL 提供的便捷函数，一行就改好比较值，比直接操作 CCR 寄存器地址安全好记。</p>
+          <p><strong>不写会怎样：</strong> 不改 CCR，占空比一直是 CubeMX 里填的初始值（0），LED 永远不亮。</p>
+
+          <h3>第 3 段：渐变与掉头</h3>
+          <p><strong>在做什么：</strong> pwm 每次加 dir*5（渐亮时加 5，渐灭时减 5）；到 1000（最亮）把 dir 翻成 -1，到 0（最暗）再翻成 +1，形成三角波渐变。</p>
+          <p><strong>为什么这么写：</strong> 用一个方向变量 dir 统一控制进退，比写两套 if 简洁。每步只变 5（约 0.5%）、间隔 2ms，渐变足够柔和。</p>
+          <p><strong>不写会怎样：</strong> 没有掉头逻辑，pwm 加到顶就停在最亮不再变暗；步长太大或 Delay 太短，则会变成「跳变」而非呼吸。</p>
+        </section>
+
+        <!-- ===== 七 ===== -->
+        <section>
+          <h2 id="sec-demo">七、现象演示说明</h2>
+          <ul>
+            <li>下载后，PA6 上的 LED <strong>由暗缓缓变亮，再由亮缓缓变暗</strong>，循环往复，像在「呼吸」。</li>
+            <li>整个呼吸周期约 4 秒左右：CCR 从 0 加到 1000 走 200 步 × 2ms = 0.4s 偏快——想让呼吸更慢，把 HAL_Delay(2) 改成 Delay(5)。</li>
+            <li>验证：用万用表直流电压挡量 PA6 对 GND，亮度中等时电压应在 0~3.3V 之间（约等于占空比 ×3.3V）。</li>
+          </ul>
+          <p><strong>可量化的验证方法：</strong></p>
+          <ul>
+            <li><strong>改 Delay 看呼吸速度</strong>：把 HAL_Delay(2) 改成 20，呼吸应慢约 10 倍；改成 1 则很快。延时数字直接控制呼吸节奏。</li>
+            <li><strong>改步长看平滑度</strong>：把 pwm += dir*5 改成 dir*50，渐变会变成一格一格的「台阶」感；改回 5 又平滑——直观看到占空比步进大小对渐变的影响。</li>
+            <li><strong>万用表测平均电压</strong>：固定 CCR=500（50%）时，PA6 对 GND 平均电压应约 1.65V（3.3V×50%），可验证占空比与平均电压的关系。</li>
+          </ul>
+        </section>
+
+        <!-- ===== 八 ===== -->
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>PWM 完全没输出，LED 不亮也不闪</td><td>忘记调用 HAL_TIM_PWM_Start</td><td>在 main 里启动 PWM 前加 HAL_TIM_PWM_Start(&amp;htim3, TIM_CHANNEL_1)</td></tr>
+              <tr><td>PWM 频率不对（LED 高速抖动或一直亮）</td><td>PSC / ARR 算错</td><td>套用公式 72MHz/(PSC+1)/(ARR+1)，本例 PSC=71、ARR=999 得 1kHz</td></tr>
+              <tr><td>呼吸灯是「跳变」而不是渐变</td><td>占空比步进太大或 Delay 太短，肉眼分辨不出连续</td><td>步长改小（如 2~5），Delay 保持 1~5ms</td></tr>
+              <tr><td>改了 CCR 但输出不变</td><td>用错了通道宏（CubeMX 配 CH1，代码却写 TIM_CHANNEL_2）</td><td>对照 CubeMX：通道 1 对应 TIM_CHANNEL_1，引脚 PA6</td></tr>
+              <tr><td>LED 始终最亮不会变暗</td><td>接线接成推挽输出而不是 PWM 复用，或 CCR 初值一直写死 999</td><td>确认 CubeMX 里 PA6 是 TIM3_CH1 的 PWM，代码里 pwm 确实在 0~999 变化</td></tr>
+              <tr><td>定时/PWM 频率总是差一倍（教材高频坑）</td><td>把 TIM2~TIM4 当成用 APB1 总线时钟 36MHz 来算 PSC/ARR，忘了「APB1 预分频≠1 时定时器时钟自动 ×2」这条硬件规则</td><td>TIM2~TIM4 在 PPRE1=÷2（PCLK1=36MHz）时，内部计数时钟其实是 36MHz×2=<strong>72MHz</strong>。算 PSC 一律按 72MHz 代入（本讲正是 72M/(PSC+1)/(ARR+1)）。只有 TIM1/TIM8 在 APB2(72MHz) 上不 ×2</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <!-- ===== 九 ===== -->
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（改呼吸速度）：</strong> 让呼吸周期变慢一倍。提示：把 HAL_Delay(2) 改成 4，或把步长从 5 减到 2.5（用 float pwm 并四舍五入）。</p>
+          <p><strong>练习 2（固定亮度档）：</strong> 改成三档亮度循环：灭 → 25% → 75% → 灭，每档保持 1 秒。提示：不用渐变，直接在主循环里 SET_COMPARE 写 0/250/750，配 HAL_Delay(1000)。</p>
+          <p><strong>练习 3（改频率）：</strong> 把 PWM 频率改成 2kHz（即 PSC=71、ARR=499），观察 LED 呼吸是否仍平滑。提示：ARR 改成 499 后，占空比范围变成 0~500，pwm 的上下限也要同步改。</p>
+          <p><strong>延伸学习：</strong></p>
+          <ul>
+            <li><a href="#xxx" data-placeholder>ADC 模拟采集：用旋钮调占空比（stm32-adc.html）</a></li>
+            <li><a href="#xxx" data-placeholder>用 PWM 控制舵机：50Hz、0.5~2.5ms 脉宽</a></li>
+            <li><a href="#xxx" data-placeholder>定时器中断：用 TIM 做精确 1ms 节拍</a></li>
+          </ul>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="stm32-usart.html" class="btn btn-outline btn-sm">← 上一篇：USART 串口通信</a>
+          <a href="stm32-adc.html" class="btn btn-outline btn-sm">下一篇：ADC 模拟采集 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

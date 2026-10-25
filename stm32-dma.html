@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - DMA 直接存储器访问</title>
+  <meta name="description" content="STM32 DMA 零基础教程：DMA 是什么、为什么能解放 CPU、通道与请求映射，串口 DMA 收发与回调函数，理解数据搬运不占 CPU 的原理。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link active" aria-current="page">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>DMA 直接存储器访问</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：STM32</span>
+          <span class="badge badge-orange">进阶</span>
+          <span class="badge badge-gray">更新：2026-10-25</span>
+        </div>
+
+        <p class="text-secondary mb-6">串口收 100 字节、ADC 采 500 个点、SPI 搬 4KB 数据——如果都靠 CPU 逐字节搬，主循环就被「搬砖」占死了。DMA（直接存储器访问）就是芯片里的「专职搬运工」：设定好「从哪搬到哪、搬多少」，它自己搬完，CPU 全程只负责下命令。本课把 DMA 讲透，并给出串口 DMA 收发的最常用写法。</p>
+
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>说清 DMA 是什么、为什么能解放 CPU、和中断有什么分工。</li>
+            <li>看懂 DMA 的「源地址 / 目的地址 / 传输长度」三要素和通道映射。</li>
+            <li>用 HAL 完成串口 DMA 发送与接收，并理解回调函数。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识（对应学习路线阶段 4）：</strong></p>
+          <ul>
+            <li>串口基础（stm32-usart.html）：DMA 最常见的搭档就是串口。</li>
+            <li>存储器地址（stm32-register.html）：DMA 就是在「地址之间」搬数据。</li>
+            <li>中断与回调（stm32-exti.html）：DMA 完成时会触发中断，回调函数写法与 EXTI 类似。</li>
+          </ul>
+          <p><strong>本课会出现的新名词：</strong>DMA、通道/请求映射、源/目的地址、传输计数、半传输/传输完成中断、循环模式、<span class="inline-code">HAL_UART_Receive_DMA</span>、DMA 回调。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. 为什么需要 DMA：别让 CPU 当快递员</h3>
+          <p><strong>生活类比</strong>：老板（CPU）有一批文件要搬去仓库（外设/内存）。如果老板亲自一趟趟跑，一趟一字节，几百趟下来别的活全耽误了。正确做法：雇一个专职快递员（DMA），告诉他「从 1 号柜搬到 2 号柜、搬 100 件」，老板转头去干别的，快递员搬完自己汇报。</p>
+          <p><strong>一句话定义</strong>：DMA 是一种不经过 CPU 内核、直接在存储器与外设之间搬运数据的硬件模块。CPU 只需配置一次「从哪搬、搬到哪、搬多少」，DMA 自动完成，搬完用中断通知。</p>
+          <p><strong>例子</strong>：串口要发 1KB 数据：不用 DMA 时 CPU 一个字节一个字节写 SBUF；用 DMA 后 CPU 设好源地址（内存数组）和目标（USART 数据寄存器），1KB 自动发完，CPU 去算别的。</p>
+
+          <h3>2. 通道与请求映射：快递员的「专属线路」</h3>
+          <p><strong>生活类比</strong>：DMA 有多个通道（F103 共 2 个控制器、7+5 个通道），每个通道像一条专属快递线路：串口发送走 4 号线、ADC 走 1 号线、SPI 接收走 2 号线——不能乱走。</p>
+          <p><strong>一句话定义</strong>：每个外设的 DMA 请求（如 USART1_TX、ADC1、SPI1_RX）都对应固定的 DMA 通道。CubeMX 里勾选外设的 DMA 后自动分配通道；手册里的「DMA 请求映射表」规定了谁走哪个通道，乱配则不工作。</p>
+          <p><strong>例子</strong>：USART1_TX 固定在 DMA1 通道 4，USART1_RX 在 DMA1 通道 5——CubeMX 勾选后自动生成，但你要知道「为什么是这个通道」。</p>
+
+          <h3>3. 源地址 / 目的地址 / 传输长度：三要素</h3>
+          <p><strong>一句话定义</strong>：DMA 配置的核心三要素：<strong>源地址</strong>（数据从哪来：内存数组 或 外设数据寄存器）、<strong>目的地址</strong>（数据到哪去）、<strong>传输长度</strong>（搬多少字节/半字/字）。外设侧地址一般固定（如 &amp;huart1.Instance-&gt;DR），内存侧地址由你给。方向决定源和目的的角色。</p>
+          <p><strong>例子</strong>：串口发送 DMA：源 = 你的数组 <span class="inline-code">buf</span>，目的 = <span class="inline-code">USART1-&gt;DR</span>，方向 = 内存→外设。</p>
+
+          <h3>4. 循环模式与单次模式</h3>
+          <p><strong>一句话定义</strong>：<strong>单次模式</strong>：搬完指定长度就停（发一次数据）；<strong>循环模式</strong>：搬完自动从头再搬，适合持续接收（串口收流、ADC 连续采样）。CubeMX 里 DMA Mode 选 Normal（单次）或 Circular（循环）。</p>
+          <p><strong>例子</strong>：串口「发一条数据」用 Normal；「持续接收上位机发来的不定长数据」常配合 Circular + 空闲中断（进阶话题）。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-principle">三、原理介绍：一次 DMA 串口发送的完整过程</h2>
+          <p>DMA 是芯片里独立于 CPU 的「搬运工」：你只配一次「从哪搬到哪、搬多少」，它就在硬件里搬完一整批才叫你一声。</p>
+          <p><strong>整条链路：</strong>CPU 配好源/目的/长度 → 启动 DMA → 外设请求一来 DMA 自动搬一字节 → 搬完触发完成中断 → CPU 只在最后被叫一次。</p>
+
+          <h3>原理 1：三要素——一次搬运要告诉 DMA 哪三件事</h3>
+          <p>DMA 通道必须先配三个参数：<strong>源地址</strong>（内存 buf 或外设 DR）、<strong>目的地址</strong>（外设 DR 或内存）、<strong>传输长度</strong>（字节数）。以串口发为例：源=内存 buf、目的=USART1->DR、长度=len。CPU 调一次 <span class="inline-code">HAL_UART_Transmit_DMA()</span> 就立刻返回，主循环照跑，搬运全由 DMA 硬件做。</p>
+          <p><strong>教材必补：数据宽度必须两端对齐（PAR/MAR size）。</strong>DMA 每个通道有两组「数据宽度」配置——外设寄存器侧(PAR)和存储器侧(MAR)，可选字节(8 位)/半字(16 位)/字(32 位)。UART 的 DR 是 8 位、ADC 的 DR 是 16 位，所以：串口 DMA 两端都选 <strong>Byte</strong>；ADC+DMA 采集 uint16_t 数组必须选 <strong>Half-Word</strong>。<strong>经典坑</strong>：ADC 是 16 位结果，你却把 DMA 宽度配成 Byte，DMA 会按字节拆着搬，uint16_t 数组里高/低字节错位，读出来的值全是错的（且不报错）；反之把 8 位串口数据按 Word 搬，会把相邻内存也当数据一起搬走。CubeMX 里 Peripheral Data Size 与 Memory Data Size 要和外设寄存器真实位宽一致。</p>
+
+          <h3>原理 2：为什么 DMA 比逐字节中断快</h3>
+          <p>中断模式每收发一字节就打断 CPU 一次——压栈、跳转、读寄存器、出栈，一次几十个周期。发 100 字节就被打断 100 次。DMA 则是「搬完一整批才中断一次」。<strong>数据量越大差距越明显</strong>，而且搬运期间 CPU 可同时干别的（这就是 ADC+DMA 边采集边算、CPU 不被拖慢的原因）。</p>
+
+          <h3>原理 3：Normal vs Circular——为什么接收常用环形</h3>
+          <p>Normal 模式搬完预设长度就<strong>停下</strong>，再来字节直接丢——适合「发固定长度命令」。<strong>Circular 循环模式</strong>搬到末尾后指针<strong>自动绕回开头</strong>接着搬，永不停止。串口这种「一直在发、不知何时结束」的场景用 Circular：DMA 后台持续填缓冲、主循环随时读最新数据，既不丢字节，也不必每字节约一次中断——这就是不定长接收省 CPU 的关键。</p>
+          <blockquote>记忆点：DMA 三要素=源/目的/长度，CPU 配一次、搬一批、才中断一次；比逐字节中断快在「少打断」；Normal 搬完停、Circular 指针绕回永不停止，串口接收用 Circular。</blockquote>
+        </section>
+
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <p>DMA 是芯片内部功能，无需额外接线。硬件上只需：</p>
+          <table>
+            <thead>
+              <tr><th>模块</th><th>接线</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>USB 转 TTL 模块</td><td>TX→PA10(RX1)、RX→PA9(TX1)、GND 共地</td><td>串口 1 接电脑，观察 DMA 收发</td></tr>
+              <tr><td>LED（可选）</td><td>PC13 或板载</td><td>演示「发送完成回调」时翻转</td></tr>
+              <tr><td>按键（可选）</td><td>PA0 接 GND</td><td>触发一次 DMA 发送</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么不需要给 DMA 接线</strong>：DMA 在芯片内部连接存储器和外设，物理上没有任何外部引脚——它只是「搬运路径」，外设（串口）的引脚接线不变。这也是 DMA 好用的原因：软件配置，零硬件成本。</p>
+          <div class="tip-warn mt-4"><span class="tip-label">避坑</span>
+            CubeMX 里勾了 DMA 后，工程会多出 <span class="inline-code">MX_DMA_Init()</span>，且它必须在 <span class="inline-code">MX_USART1_Init()</span> <strong>之前</strong>调用（生成代码已排好序，别乱改 main.c 的顺序）。</div>
+        </section>
+
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p>CubeMX 配置要点：USART1 波特率 115200；在 DMA Settings 里给 USART1_TX 加 DMA（Normal 模式）。核心代码：</p>
+          <p><strong>示例 1：DMA 发送 + 按键触发 + 完成回调翻灯</strong></p>
+          <pre><code class="language-c">/* DMA 串口发送：主循环不阻塞，发送完成回调翻转 LED */
+#include "main.h"
+
+extern UART_HandleTypeDef huart1;
+
+uint8_t msg[] = "Hello DMA, CPU is free now!\r\n";
+
+/* DMA 发送完成回调：HAL 自动调用（不可改函数名与签名） */
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
+{
+    if (huart == &amp;huart1) {
+        HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);   /* 每发完一次翻一次 LED */
+    }
+}
+
+int main(void)
+{
+    HAL_Init();
+    SystemClock_Config();
+    MX_GPIO_Init();
+    MX_DMA_Init();              /* 必须先于外设初始化 */
+    MX_USART1_Init();           /* 内含 DMA 句柄绑定 */
+
+    while (1) {
+        if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_RESET) {
+            /* 启动 DMA 发送：此函数立即返回，不阻塞主循环 */
+            HAL_UART_Transmit_DMA(&amp;huart1, msg, sizeof(msg) - 1);
+            HAL_Delay(100);     /* 简单消抖 */
+        }
+        /* 主循环还能干别的事，发送由 DMA 在后台完成 */
+    }
+}</code></pre>
+          <p><strong>示例 2：DMA 固定长度接收（接收 10 字节后自动处理）</strong></p>
+          <pre><code class="language-c">/* DMA 接收：提前启动，收满 10 字节回调处理 */
+#include "main.h"
+
+extern UART_HandleTypeDef huart1;
+
+uint8_t rx_buf[10];
+uint8_t rx_done = 0;            /* 置 1 表示已收满一批 */
+
+/* 接收完成回调：HAL 自动调用 */
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+    if (huart == &amp;huart1) {
+        rx_done = 1;            /* 标记：这批数据可用 */
+        /* 再次启动接收，准备下一批（循环接收的标准写法） */
+        HAL_UART_Receive_DMA(&amp;huart1, rx_buf, 10);
+    }
+}
+
+int main(void)
+{
+    HAL_Init();
+    SystemClock_Config();
+    MX_GPIO_Init();
+    MX_DMA_Init();
+    MX_USART1_Init();
+
+    /* 先启动接收：DMA 在后台等数据，来一个存一个 */
+    HAL_UART_Receive_DMA(&amp;huart1, rx_buf, 10);
+
+    while (1) {
+        if (rx_done) {
+            rx_done = 0;
+            /* 此时 rx_buf[0..9] 是刚收到的 10 字节，处理它 */
+            HAL_UART_Transmit_DMA(&amp;huart1, rx_buf, 10);  /* 原样回显 */
+        }
+    }
+}</code></pre>
+        </section>
+
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第一段：TxCpltCallback——DMA 完成的「汇报」</h3>
+          <p>HAL 库规定回调函数<strong>名字和签名不能改</strong>（框架按名字找它）。参数 <span class="inline-code">huart</span> 告诉你哪个串口完成了。<strong>为什么先判断 huart==&amp;huart1</strong>：工程可能开了多个串口，判断是哪个完成的，避免误处理。<strong>不写会怎样</strong>：不写回调 = 发送照样完成，只是没有「完成后动作」——很多新手以为必须写，其实它是可选的，按需用。</p>
+
+          <h3>第二段：Transmit_DMA 与普通 Transmit 的区别</h3>
+          <p><span class="inline-code">HAL_UART_Transmit(&amp;huart1, ...)</span> 是<strong>阻塞式</strong>：函数不返回，直到发完；<span class="inline-code">HAL_UART_Transmit_DMA(...)</span> 是<strong>异步式</strong>：函数立刻返回，搬运交给 DMA。<strong>什么时候用哪个</strong>：要立刻回数据且数据短 → 阻塞式简单；数据长或主循环不能等 → DMA。<strong>注意坑</strong>：DMA 传输期间不能修改源数组 <span class="inline-code">msg</span>，否则发出去的是改后的数据。</p>
+
+          <h3>第三段：Receive_DMA 的「提前启动」逻辑</h3>
+          <p>接收 DMA 必须<strong>先开再等</strong>：<span class="inline-code">HAL_UART_Receive_DMA(&amp;huart1, rx_buf, 10)</span> 一启动，DMA 就在后台等数据，收满 10 字节自动触发回调。<strong>为什么回调里要再次启动</strong>：单次（Normal）模式收满就停了，想继续收下一批必须重新启动——「收一批 → 处理 → 再收一批」是接收的标准循环。</p>
+
+          <h3>第四段：rx_done 标志的意义</h3>
+          <p>回调发生在<strong>中断上下文</strong>，主循环在<strong>普通上下文</strong>——两者不能直接共享复杂逻辑，用 <span class="inline-code">rx_done</span> 标志「交接」：中断里置位，主循环看到再处理。<strong>为什么不用直接在主循环轮询缓冲</strong>：你无法知道 DMA 什么时候写满，轮询会漏或重复处理；标志位是中断与主循环通信的最简方式。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-demo">七、现象演示与验证</h2>
+          <ul>
+            <li><strong>发送实验</strong>：按一次按键，串口助手收到 <span class="inline-code">Hello DMA, CPU is free now!</span>，同时板载 LED 翻转一次。</li>
+            <li><strong>接收实验</strong>：串口助手发 10 字节，收到原样回显的 10 字节（回调里再次启动后继续收）。</li>
+          </ul>
+          <p><strong>验证方法：</strong></p>
+          <ol>
+            <li>在 <span class="inline-code">HAL_UART_Transmit_DMA</span> 下一行放断点，单步后主循环立即返回——证明函数非阻塞。</li>
+            <li>发送期间立刻改 <span class="inline-code">msg[0]</span> 的值再观察串口——体会「DMA 传的是地址指向的数据」。</li>
+            <li>把 Receive 的长度改成 5，串口助手发 5 字节回显、发 8 字节只回显前 5——验证固定长度接收的边界。</li>
+          </ol>
+        </section>
+
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>DMA 发送没反应</td><td>MX_DMA_Init 顺序错 / 通道没绑对</td><td>确认 DMA_Init 在外设 Init 前；CubeMX 重新生成，核对 DMA 请求</td></tr>
+              <tr><td>发送内容乱码或不全</td><td>传输期间改了源数组 / 长度给错</td><td>发送完成前别改数组；长度 = 实际字节数（不含 \0）</td></tr>
+              <tr><td>接收不到数据</td><td>没提前启动 Receive_DMA</td><td>初始化后立刻 <span class="inline-code">HAL_UART_Receive_DMA(...)</span></td></tr>
+              <tr><td>回调不执行</td><td>函数名写错 / 没判断 huart</td><td>对照头文件核对 <span class="inline-code">HAL_UART_TxCpltCallback</span> 拼写</td></tr>
+              <tr><td>收完一批后不再收</td><td>Normal 模式收完即停</td><td>回调里重新启动 Receive_DMA（标准循环）</td></tr>
+              <tr><td>和 ADC/SPI 同时用 DMA 冲突</td><td>通道被占用（如 ADC1 与 TIM 冲突）</td><td>查 DMA 请求映射表，改用另一个通道/控制器</td></tr>
+              <tr><td>ADC+DMA 采进 uint16_t 数组，数值高低字节错位、全是错值（教材宽度坑）</td><td>DMA 数据宽度配成了 Byte(8 位)，而 ADC DR 是 16 位；半字/全字宽度与外设寄存器位宽不一致</td><td>CubeMX DMA Settings 里把 Peripheral/Memory Data Size 都设为 <strong>Half Word(16 位)</strong> 配 ADC；串口 DR 8 位则两端都设 Byte。宽度配错不报错，只会静默搬错</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（必做）</strong>：把示例 1 的 LED 翻转改到接收回调里（收满 10 字节翻一次），打通「DMA 收 → 处理 → DMA 发」全链路。</p>
+          <p><strong>练习 2</strong>：结合 <a href="stm32-adc.html">ADC 教程</a>，给 ADC 加 DMA 连续采集（Circular 模式），采集 100 个点求平均——感受 DMA 对采样系统的提速。</p>
+          <p><strong>练习 3（进阶）</strong>：实现不定长接收：DMA Circular 接收 + <span class="inline-code">__HAL_UART_GET_FLAG(&amp;huart1, UART_FLAG_IDLE)</span> 空闲中断，处理任意长度数据（教材串口进阶必练）。</p>
+          <p><strong>延伸学习</strong>：DMA 是「让系统不被数据拖死」的手段。下一课学 <a href="stm32-iwdg.html">独立看门狗 IWDG</a>——程序跑飞时的最后防线，嵌入式系统稳定性的第一课。</p>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="stm32-spi.html" class="btn btn-outline btn-sm">← 上一篇：SPI 通信与 W25Q64</a>
+          <a href="stm32-iwdg.html" class="btn btn-outline btn-sm">下一篇：独立看门狗 IWDG →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

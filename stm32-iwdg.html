@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - 独立看门狗 IWDG</title>
+  <meta name="description" content="STM32 看门狗零基础教程：什么是看门狗、为什么程序跑飞需要它、IWDG 独立看门狗原理（LSI 时钟/预分频/重载值）、喂狗函数与避坑，以及窗口看门狗对比。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link active" aria-current="page">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>独立看门狗 IWDG</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：STM32</span>
+          <span class="badge badge-orange">进阶</span>
+          <span class="badge badge-gray">更新：2026-10-25</span>
+        </div>
+
+        <p class="text-secondary mb-6">程序「跑飞」——死循环、指针错乱、堆栈溢出——嵌入式系统里一旦发生，设备就变砖头，直到人手动断电。看门狗就是芯片内置的「自动重启保安」：你必须在规定时间内向它报到（喂狗），一旦超过时间它没等到，就强制复位整个芯片。本课讲透 IWDG 的时钟、预分频、重载值与喂狗写法。</p>
+
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>说清看门狗的原理：为什么「没喂狗就复位」能救程序。</li>
+            <li>算清 IWDG 的超时时间：LSI 40kHz × 预分频 × 重载值。</li>
+            <li>写出带看门狗的 main 循环：初始化、喂狗、避坑（不能喂太早/太晚）。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识（对应学习路线阶段 4）：</strong></p>
+          <ul>
+            <li>时钟概念（stm32-clock.html）：IWDG 用独立的低速时钟 LSI，不依赖系统时钟。</li>
+            <li>寄存器操作（stm32-register.html）：IWDG 的预分频/重载都是寄存器配置。</li>
+            <li>基本主循环结构（任意一篇外设教程）：看门狗就嵌在主循环里喂。</li>
+          </ul>
+          <p><strong>本课会出现的新名词：</strong>看门狗、喂狗（Kick/Reload）、IWDG、LSI 时钟、预分频、重载寄存器、超时时间、窗口看门狗 WWDG、独立 vs 窗口。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. 看门狗是什么：芯片的「自动重启保安」</h3>
+          <p><strong>生活类比</strong>：养了一条必须定时投喂的狗——你每隔一段时间必须喂它一次（喂狗），如果超时没喂，它就狂吠并触发「按重启键」（复位芯片）。程序正常时主循环一路顺畅，每次循环都喂得到；程序卡死在某个角落，喂狗语句执行不到，狗就咬下重启。</p>
+          <p><strong>一句话定义</strong>：看门狗（Watchdog）是芯片内部的独立计数器：程序必须在设定时间内周期性「喂狗」（重载计数），否则计数器溢出触发<strong>系统复位</strong>。它是程序跑飞、死循环时自动恢复的硬件保险。</p>
+          <p><strong>例子</strong>：产品现场的工控板若程序死锁，没人去断电——看门狗会在 1 秒后自动复位，设备自己缓过来。</p>
+
+          <h3>2. IWDG 的两个关键参数：预分频与重载值</h3>
+          <p><strong>生活类比</strong>：IWDG 计数器像一个倒计时沙漏：预分频决定「一粒沙代表多久」（分频倍数），重载值决定「沙漏里有多少沙」。两者相乘 = 超时时间。</p>
+          <p><strong>一句话定义</strong>：IWDG 用独立低速时钟 <strong>LSI</strong>（约 40kHz，不依赖主时钟、独立供电，主时钟挂了它还能跑）。<strong>超时时间 = LSI 周期 × 预分频 × 重载值</strong>。例：预分频 64、重载值 625 → 40kHz/64 = 625Hz → 每计数一次 1.6ms → 625 × 1.6ms ≈ 1 秒超时。</p>
+          <p><strong>例子</strong>：<span class="inline-code">IWDG-&gt;PR = IWDG_PRESCALER_64; IWDG-&gt;RLR = 625;</span> 得到约 1 秒的喂狗期限。</p>
+
+          <h3>3. 喂狗函数：向保安报到</h3>
+          <p><strong>一句话定义</strong>：喂狗 = 把重载值重新写进计数器，让倒计时从头开始。HAL 写法：<span class="inline-code">HAL_IWDG_Refresh(&amp;hiwdg)</span>（等价于 <span class="inline-code">IWDG-&gt;KR = 0xAAAA</span>）。喂狗点应该放在主循环里「一定能执行到」的位置——通常是主循环开头或结尾，且喂狗周期必须小于超时时间。</p>
+          <p><strong>例子</strong>：超时 1 秒，主循环每圈耗时 100ms，那就每圈喂一次（安全余量 10 倍，非常稳）。</p>
+
+          <h3>4. 独立看门狗 vs 窗口看门狗</h3>
+          <p><strong>一句话定义</strong>：<strong>IWDG</strong>（独立看门狗）：独立时钟、超时范围大（几十 ms~几 s）、只管「别超时」，简单可靠，入门首选；<strong>WWDG</strong>（窗口看门狗）：挂 APB1 时钟，要求<strong>必须在特定时间窗口内</strong>喂（太早太晚都复位），能检测「程序跑得太快」的异常，更严格但难调。</p>
+          <p><strong>例子</strong>：产品防死机用 IWDG 就够；对时序要求苛刻的场景（如主循环频率必须稳定）才需要 WWDG。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-principle">三、原理介绍：IWDG 的工作过程与初始化步骤</h2>
+          <p>看门狗是一个「你不喂它、它就把芯片复位」的独立倒计时器。它的全部设计都围绕一个目的：程序跑飞时能自己救回来。</p>
+          <p><strong>整条链路：</strong>LSI 40kHz → 经 PR 预分频 → 喂狗时把 RLR 装入递减计数器 → 数到 0 没等到下一次喂狗 → 触发系统复位。</p>
+
+          <h3>原理 1：递减计数器——超时时间怎么算</h3>
+          <p>IWDG 内部是一个从 RLR 往 0 数的递减计数器，时钟来自独立的 <strong>LSI ≈40kHz</strong>，再经 PR 预分频。超时 = (1/LSI) × 预分频 × (RLR+1)。<span class="inline-code">HAL_IWDG_Refresh()</span>（写 KR=0xAAAA）就是把 RLR 重新装回计数器、把倒计时「清零重来」——这就是「喂狗」。程序若正常，主循环每圈都喂、计数器永远数不到 0；若死循环卡死，没人喂，数到 0 就复位。</p>
+
+          <h3>原理 2：为什么用独立 LSI，而不挂主时钟</h3>
+          <p>看门狗的使命是在<strong>主程序连主时钟都可能挂掉</strong>时仍能复位芯片。若它也挂在 PLL/HSE 上，晶振一停它自己也停，就失去「最后防线」意义。LSI 是芯片内部 RC 振荡器，独立于主时钟——哪怕 PLL 跑飞、HSE 停振，它照样倒计时、照样复位。这就是「独立看门狗」名字里「独立」二字的含义。</p>
+
+          <h3>原理 3：写保护与喂狗位置——为什么参数改不动、喂在哪</h3>
+          <p>IWDG 的 PR/RLR 默认写保护，要先写 KR=0x5555 解锁才能配；启动用 0xCCCC。<strong>为什么要写保护</strong>：看门狗一旦启动几乎不能关（只有复位才重配），写保护防止代码某处误改超时参数，让它要么失效、要么立刻复位——这是刻意的「反悔困难」。喂狗点要放在<strong>所有主循环必经路径</strong>上、间隔小于超时；但<strong>不能在阻塞操作内部喂</strong>，否则那个阻塞卡死时照样喂狗，看门狗就形同虚设、把 bug 掩盖了。</p>
+          <blockquote>记忆点：IWDG=LSI 40k 独立倒计时，超时=(1/40k)×预分频×(RLR+1)；0xCCCC 启动、0x5555 解锁、0xAAAA 喂狗；用独立时钟=主时钟挂了它还能救；喂狗在主循环必经、不能在阻塞里喂。</blockquote>
+
+          <h3>原理 4：IWDG 寄存器 ↔ HAL 函数对照（教材查表）</h3>
+          <table>
+            <thead><tr><th>你做的事</th><th>对应寄存器 / 键值</th><th>HAL 函数</th></tr></thead>
+            <tbody>
+              <tr><td>启动看门狗</td><td>KR 写 0xCCCC（关键字启动）</td><td>HAL_IWDG_Init() 内部自动启动</td></tr>
+              <tr><td>解锁写保护</td><td>KR 写 0x5555（允许改 PR/RLR）</td><td>HAL_IWDG_Init 内部解锁</td></tr>
+              <tr><td>设预分频</td><td>PR 寄存器（0=/4, 1=/8 … 6=/256）</td><td>hiwdg.Init.Prescaler = IWDG_PRESCALER_64</td></tr>
+              <tr><td>设重载值</td><td>RLR 寄存器（0~0xFFF）</td><td>hiwdg.Init.Reload = 625</td></tr>
+              <tr><td>喂狗（重载计数器）</td><td>KR 写 0xAAAA（重装 RLR）</td><td>HAL_IWDG_Refresh(&amp;hiwdg)</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么 IWDG 不挂 APB1：</strong>它由独立的 LSI(≈40kHz) 驱动，不属于任何 AHB/APB 总线外设，所以不需要 RCC 里的 APB 时钟使能位——这也是它「主时钟挂了还能跑」的硬件基础。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <p>IWDG 是芯片内部功能，无需外部接线。需要的硬件只有观察手段：</p>
+          <table>
+            <thead>
+              <tr><th>模块</th><th>接线</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>LED（验证复位）</td><td>板载 LED（如 PC13）</td><td>上电翻转一次，观察「复位后 LED 状态变化」</td></tr>
+              <tr><td>串口（可选）</td><td>PA9/PA10</td><td>打印复位原因与喂狗状态</td></tr>
+              <tr><td>按键（可选）</td><td>PA0 接 GND</td><td>模拟「卡死」场景（进入死循环）</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么不需要给看门狗接线</strong>：IWDG 完全在芯片内部（独立时钟 + 计数器 + 复位逻辑），没有引脚。接线只是用来「观察现象」：LED 上电翻转一次 → 若复位发生，LED 状态会再次变化（如灭 → 亮 → 灭），串口可打印 <span class="inline-code">__HAL_RCC_GET_FLAG(RCC_FLAG_IWDGRST)</span> 确认是看门狗复位。</p>
+          <div class="tip-warn mt-4"><span class="tip-label">避坑</span>
+            Keil 调试（仿真）时看门狗会真实计时，断点停住不喂狗也会触发复位，导致「单步调试时程序莫名重启」——调试带看门狗的工程时，要么先禁用 IWDG，要么加快喂狗频率，这是教材反复提示的调试坑。</div>
+        </section>
+
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p>CubeMX 配置要点：勾选 IWDG，Prescaler = 64、Reload = 625（约 1 秒超时）。示例 1 标准喂狗；示例 2 故意不喂演示复位。</p>
+          <p><strong>示例 1：带看门狗的主循环（正常喂狗）</strong></p>
+          <pre><code class="language-c">/* IWDG 看门狗：主循环周期喂狗，程序卡死自动复位 */
+#include "main.h"
+
+extern IWDG_HandleTypeDef hiwdg;
+
+void main_loop_work(void)
+{
+    /* 假设这里是真正的工作：读传感器、更新显示等，耗时约 100ms */
+    HAL_Delay(100);
+}
+
+int main(void)
+{
+    HAL_Init();
+    SystemClock_Config();
+    MX_GPIO_Init();
+    MX_IWDG_Init();             /* 启动看门狗：超时约 1 秒（PR=64, RLR=625） */
+
+    while (1)
+    {
+        main_loop_work();       /* 正常工作 */
+
+        /* 喂狗：必须在超时（1 秒）内执行到 */
+        HAL_IWDG_Refresh(&amp;hiwdg);
+    }
+}</code></pre>
+          <p><strong>示例 2：模拟程序卡死（演示看门狗复位）</strong></p>
+          <pre><code class="language-c">/* 演示：卡死 + 不喂狗 → 1 秒后 IWDG 复位芯片 */
+#include "main.h"
+
+extern IWDG_HandleTypeDef hiwdg;
+
+int main(void)
+{
+    HAL_Init();
+    SystemClock_Config();
+    MX_GPIO_Init();
+    MX_IWDG_Init();
+
+    /* 上电动作：翻转 LED 一次（可观察复位后的再次翻转） */
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+    HAL_Delay(300);
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
+
+    /* 故意卡死：进死循环，永不喂狗 */
+    while (1)
+    {
+        /* 什么都不做 —— 约 1 秒后看门狗超时，芯片自动复位，
+           程序回到 main 开头重新跑，LED 又翻转一次 */
+    }
+}</code></pre>
+        </section>
+
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第一段：MX_IWDG_Init 到底配置了什么</h3>
+          <p>CubeMX 生成的 <span class="inline-code">MX_IWDG_Init()</span> 内部：<span class="inline-code">hiwdg.Instance = IWDG; hiwdg.Init.Prescaler = IWDG_PRESCALER_64; hiwdg.Init.Reload = 625;</span> 然后 <span class="inline-code">HAL_IWDG_Init(&amp;hiwdg)</span>——它做了「启动 + 解锁 + 写 PR/RLR + 重载」全套。<strong>为什么 Prescaler=64、Reload=625</strong>：LSI≈40kHz ÷64 = 625Hz → 每个计数 1.6ms → 625 次计数 = 1.0 秒超时。改参数就是改超时时间，公式记牢。</p>
+
+          <h3>第二段：喂狗点放在主循环「尾部」</h3>
+          <p><span class="inline-code">HAL_IWDG_Refresh(&amp;hiwdg)</span> 放在每圈工作之后。<strong>为什么放尾部而不是开头</strong>：放开头意味着「上一圈哪怕卡死在工作里，这一圈也喂了」——不，实际上卡死就进不了下一圈，开头尾部没区别；真正重要的是<strong>它必须在所有路径的必经点</strong>。放尾部只是习惯，确保「工作做完才喂」。</p>
+
+          <h3>第三段：示例 2 的观察逻辑</h3>
+          <p>LED 上电先灭 300ms 再亮，然后程序卡死。<strong>为什么这样能看到复位</strong>：1 秒后 IWDG 复位，程序回到 main 开头，又执行「灭 300ms → 亮」——于是 LED 出现「亮 → 灭 → 亮」的重复，肉眼可见地「自己重启了」。<strong>验证方法</strong>：在 Keil 里加断点于 main 开头，每次复位都会命中断点。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-demo">七、现象演示与验证</h2>
+          <ul>
+            <li><strong>示例 1 正常现象</strong>：LED 无异常，程序稳定运行（每 100ms 工作 + 喂狗）。</li>
+            <li><strong>示例 2 复位现象</strong>：LED 亮起后约 1 秒熄灭再亮——芯片被看门狗复位，程序自动重启。</li>
+          </ul>
+          <p><strong>验证方法：</strong></p>
+          <ol>
+            <li>串口打印 <span class="inline-code">__HAL_RCC_GET_FLAG(RCC_FLAG_IWDGRST)</span>，复位后应为 SET——确认是 IWDG 复位而非上电复位。</li>
+            <li>把 Reload 从 625 改成 3125（约 5 秒超时），观察复位间隔从 1 秒变 5 秒——验证超时公式。</li>
+            <li>把喂狗间隔故意加大（主循环 HAL_Delay(1500) 超过 1 秒），示例 1 也会不断复位——理解「喂得太慢 = 会被咬」。</li>
+          </ol>
+        </section>
+
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>程序一上电就反复重启</td><td>初始化后没喂狗 / 超时太短（如 50ms）</td><td>主循环里及时 Refresh；Reload 与分频按需加大</td></tr>
+              <tr><td>单步调试时程序莫名重启</td><td>断点停住时看门狗在计时</td><td>调试时先注释 IWDG_Init，或用仿真器禁狗功能</td></tr>
+              <tr><td>喂狗了还重启</td><td>喂狗点不在所有路径上 / 某分支耗时超时</td><td>把 Refresh 移到循环必经点；检查最长分支耗时 &lt; 超时</td></tr>
+              <tr><td>改了 PR/RLR 但没效果</td><td>没解锁（KR=0x5555）或改错寄存器</td><td>用 HAL_IWDG_Init 配置，别直接写寄存器；核对 CubeMX 参数</td></tr>
+              <tr><td>看门狗无法关闭</td><td>IWDG 一旦使能只能复位后重配</td><td>想关：烧录时用「不初始化 IWDG」的工程覆盖即可</td></tr>
+              <tr><td>掉电重启后状态不对</td><td>复位原因没区分（上电 vs 看门狗）</td><td>用 RCC 复位标志区分，异常复位时做数据恢复</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（必做）</strong>：用公式算三组超时时间（PR=16/RLR=100、PR=64/RLR=625、PR=128/RLR=1000），分别烧录验证复位间隔。</p>
+          <p><strong>练习 2</strong>：在示例 1 的 main_loop_work 里人为写一个 <span class="inline-code">while (1);</span> 死循环，观察看门狗 1 秒后复位——亲手制造并观察「程序跑飞自救」。</p>
+          <p><strong>练习 3（进阶）</strong>：读一下 <a href="stm32-clock.html">RCC 时钟教程</a> 的复位标志，写一段代码区分「上电复位 / 看门狗复位 / 按键复位」，串口打印原因，做一个工业级的启动诊断。</p>
+          <p><strong>延伸学习</strong>：看门狗是稳定性第一课。STM32 教材体系至此补完（时钟/寄存器/SPI/DMA/看门狗）。下一阶段进阶方向：FreeRTOS 实时操作系统、CAN 总线、USB。也可以回看 <a href="route.html">学习路线</a> 里阶段 4 的完整知识地图。</p>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="stm32-dma.html" class="btn btn-outline btn-sm">← 上一篇：DMA 直接存储器访问</a>
+          <a href="stm32-systick.html" class="btn btn-outline btn-sm">下一篇：SysTick 系统定时器 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

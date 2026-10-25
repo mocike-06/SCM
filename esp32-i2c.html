@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - ESP32 I2C 通信与 OLED 显示</title>
+  <meta name="description" content="ESP32 I2C 零基础教程：SDA/SCL 两线总线、7 位从机地址、Wire 库、SSD1306 OLED 显示、AHT20 温湿度传感器读取，与 51 软件模拟 I2C 对比。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link active" aria-current="page">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>I2C 通信与 OLED 显示</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：ESP32</span>
+          <span class="badge badge-orange">进阶</span>
+          <span class="badge badge-gray">更新：2026-10-25</span>
+        </div>
+
+        <p class="text-secondary mb-6">OLED 屏、温湿度传感器、陀螺仪、EEPROM——物联网设备里一半的外设都挂在 I2C 总线上：只占两根线，却能挂几十个器件。本课在 ESP32 上用 Arduino 的 Wire 库驱动 SSD1306 OLED 显示 + AHT20 温湿度读取，并对照 51 里手搓的软件 I2C，把「两线总线」彻底看懂。</p>
+
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>说清 I2C 总线机制：两根线、7 位地址、主从关系、应答位。</li>
+            <li>用 Wire 库往 OLED 写数据、从 AHT20 读数据。</li>
+            <li>看懂器件 datasheet 的寄存器表，自己读任意 I2C 传感器。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识（对应学习路线阶段 5）：</strong></p>
+          <ul>
+            <li>GPIO（esp32-gpio.html）：SDA/SCL 就是两根 GPIO 的复用。</li>
+            <li>串口（esp32-bluetooth.html 或 stm32-usart.html）：了解「总线 + 协议」的通信思维。</li>
+            <li>可选：51 的软件模拟 I2C（mcu51-i2c-eeprom.html）对照学习。</li>
+          </ul>
+          <p><strong>本课会出现的新名词：</strong>I2C 总线、SDA/SCL、7 位从机地址、起始/停止条件、应答 ACK/NACK、Wire 库、SSD1306、寄存器地址、AHT20。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. I2C 是什么：一条「门牌号总线」</h3>
+          <p><strong>生活类比</strong>：I2C 像小区里一条共享通道：每个器件（从机）有门牌号（7 位地址），主机喊「3 号楼，把窗户打开」（写地址+命令），器件应答并执行。所有器件共用两根线（SDA 数据线、SCL 时钟线），靠地址区分彼此。</p>
+          <p><strong>一句话定义</strong>：I2C 是 <strong>两线制同步串行总线</strong>：主机用 SCL 产生时钟、SDA 传数据，通过 <strong>7 位从机地址</strong> 选目标器件，每次传输以「起始条件→地址→数据→停止条件」组织，接收方回 <strong>应答位</strong> 确认。</p>
+          <p><strong>例子</strong>：SSD1306 OLED 的 I2C 地址常见 0x3C，AHT20 温湿度是 0x38——不同器件地址不同，地址表写在各芯片 datasheet。</p>
+
+          <h3>2. 为什么 SDA/SCL 要接上拉电阻</h3>
+          <p><strong>一句话定义</strong>：I2C 是 <strong>开漏输出</strong>：器件只能把线拉低，拉高靠外接 <strong>上拉电阻</strong>（4.7kΩ 常见）。多主机/多从机才能安全共享同一根线。ESP32 开发板的 I2C 引脚（默认 GPIO21=SDA、GPIO22=SCL）一般已带上拉。</p>
+          <p><strong>例子</strong>：如果 SDA 电压一直被拉低、波形像一条平线——大概率漏接上拉（或线序接反）。</p>
+
+          <h3>3. Wire 库：Arduino 封装好的 I2C 工具箱</h3>
+          <p><strong>一句话定义</strong>：<span class="inline-code">Wire</span> 是 Arduino 官方 I2C 库：<span class="inline-code">Wire.begin()</span> 初始化、<span class="inline-code">Wire.beginTransmission(addr)</span> 开始发、<span class="inline-code">Wire.write()</span> 写字节、<span class="inline-code">Wire.endTransmission()</span> 发送、<span class="inline-code">Wire.requestFrom(addr, n)</span> 向从机要 n 字节、<span class="inline-code">Wire.read()</span> 读。五六个函数就能和任意 I2C 器件对话。</p>
+          <p><strong>例子</strong>：给 OLED 发一个命令：beginTransmission(0x3C) → write(0x00) → write(0xAE) → endTransmission。</p>
+
+          <h3>4. 寄存器：和器件说话先查「地址簿」</h3>
+          <p><strong>一句话定义</strong>：每个 I2C 器件内部有一组 <strong>寄存器</strong>（编号地址），写入特定寄存器=发命令，读取特定寄存器=拿数据。数据手册的寄存器表就是「地址簿」：AHT20 先写 0xBE 触发测量、再等 80ms、读 6 个字节（湿度 20bit + 温度 20bit）。</p>
+          <p><strong>例子</strong>：读 OLED 不需要（纯显示器件只写不读）；读 AHT20 要「写命令→延时→读数据」三步——教材「读传感器」都是这个套路。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-principle">三、原理介绍：一次 I2C 读写的完整时序</h2>
+          <p>I2C 只用两根线（SDA 数据、SCL 时钟）就能挂多个器件，是最简单的「板上总线」。它的精髓在于<strong>开漏线 + 地址寻址 + 每字节应答</strong>三件事——理解了，扫描器和 OLED/AHT20 的代码就都通了。</p>
+          <p>一次读传感器的链路：起始条件 → 发 7 位地址+读写位 → 从机 ACK → 发寄存器命令 → 重起始 → 读回数据字节 → 停止条件。</p>
+
+          <h3>原理 1：开漏线与上拉——为什么 SDA/SCL 都要上拉电阻</h3>
+          <p>I2C 的两根线都是<strong>开漏</strong>：任何设备都只能把线拉低，不能主动输出高电平——平时的高电平全靠 4.7kΩ 上拉电阻拉到 3.3V。好处是<strong>线与</strong>：任何设备拉低，整根线就变低，不会出现两个器件一个输出高、一个输出低互相打架的情况。这就是「一条总线挂多个器件」能成立的硬件基础——也是为什么 OLED 和 AHT20 模块上必须看到上拉、裸板不接就不通。</p>
+
+          <h3>原理 2：起始/停止条件与 ACK——协议怎么框住一帧</h3>
+          <p>I2C 靠两个特殊电平变化框住一次传输：<strong>起始条件</strong>是 SCL 高电平时 SDA 从高跳低，<strong>停止条件</strong>是 SCL 高电平时 SDA 从低跳高——这两种跳变在正常数据传输里不会出现，所以是明确的「开始/结束」信号。每发完 8 位（1 字节），接收方必须在第 9 个时钟把 SDA 拉低回 <strong>ACK</strong>；没拉低（NACK）就说明没这个地址或传输出错。<strong>这就是 I2C 扫描器的原理</strong>：从 0 扫到 127，挨个发地址，谁回 ACK 谁就在线上。</p>
+          <p><strong>I2C 关键时序参数（教材波形口径）：</strong></p>
+          <table>
+            <thead>
+              <tr><th>条件</th><th>SCL 状态</th><th>SDA 动作</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>起始 START</td><td>高电平期间</td><td>SDA 由高→低（唯一允许的跳变）</td></tr>
+              <tr><td>停止 STOP</td><td>高电平期间</td><td>SDA 由低→高</td></tr>
+              <tr><td>数据位有效</td><td>高电平期间</td><td>SDA 必须稳定（此时跳变=START/STOP）</td></tr>
+              <tr><td>应答 ACK</td><td>第 9 个时钟高电平</td><td>接收方把 SDA 拉低</td></tr>
+            </tbody>
+          </table>
+          <p>教材判读要点：<strong>「SCL 高电平时 SDA 不允许变化」是数据位的铁律</strong>——只有 START/STOP 例外。SDA 上的数据必须在 SCL 低电平期间改变（建立时间），等 SCL 变高再被采样（保持时间），这就是「建立时间/保持时间」的由来。</p>
+
+          <h3>原理 3：读传感器为什么要「先写命令、再读数据」</h3>
+          <p>传感器内部有很多寄存器（温度寄存器、湿度寄存器、配置寄存器……）。主机不能直接读温度——得<strong>先告诉器件「我要读哪个寄存器」</strong>：发地址（写）→ 发寄存器号 → 再发「重起始 + 地址（读）」→ 器件才把对应寄存器的值放到 SDA 上。这套「写命令→等转换→读数据」的三步事务是所有 I2C 传感器的通用模式——OLED 的初始化（写一堆命令字节）、AHT20 的读温湿度，底层都是它。ESP32 有硬件 I2C 外设，Wire 库把这些时序全替你做了；51 没硬件 I2C，只能 GPIO 软件翻转模拟——但协议思维完全一样。</p>
+          <blockquote>记忆点：I2C=两线开漏总线（SDA/SCL 都靠上拉到 3.3V，线与不打架）；起始=SCL 高时 SDA 高→低、停止=低→高；每字节后第 9 时钟回 ACK（扫描器就是挨个试地址）；读传感器=先发寄存器命令再读数据；地址查 datasheet（0x3C=OLED、0x38=AHT20）。</blockquote>
+        </section>
+
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <table>
+            <thead>
+              <tr><th>模块</th><th>接线</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>SSD1306 OLED</td><td>VCC→3V3、GND→GND、SCL→GPIO22、SDA→GPIO21</td><td>默认 I2C 引脚；地址 0x3C</td></tr>
+              <tr><td>AHT20 模块</td><td>VCC→3V3、GND→GND、SCL→GPIO22、SDA→GPIO21</td><td>与 OLED 共用总线（同地址才冲突，它们不同地址）</td></tr>
+              <tr><td>（可选）0.96 寸 OLED 四针</td><td>同上</td><td>1.3 寸地址可能 0x3D，先扫描</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么多个器件能并在一起</strong>：I2C 总线共享：只要地址不同，挂多少器件都行（受总线电容限制，一般 ≤8 个）。OLED 0x3C 和 AHT20 0x38 不冲突，可以直接并联。</p>
+          <p><strong>怎么确认地址</strong>：第一次接新器件先跑「I2C 扫描」例程（Arduino 自带 i2c_scanner），串口打印出所有在线地址——<strong>这是排查一切 I2C 问题的第一动作</strong>。</p>
+          <div class="tip-warn mt-4"><span class="tip-label">避坑</span>
+            板子上有些 OLED 模块 VCC 标 5V 也写着能兼容，但<strong>优先接 3V3</strong>；接 5V 时确认模块带电平转换（很多模块只有稳压没有双向电平转换，长期使用可能烧 ESP32 引脚）。</div>
+        </section>
+
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p><strong>示例 1：I2C 设备扫描（新手必跑）</strong></p>
+          <pre><code class="language-cpp">/* I2C 扫描：打印总线上所有设备的 7 位地址 */
+#include &lt;Wire.h&gt;
+
+void setup() {
+  Serial.begin(115200);
+  Wire.begin();                // 默认 GPIO21(SDA) / GPIO22(SCL)
+  Serial.println("\nI2C Scanner");
+}
+
+void loop() {
+  byte error, address;
+  int nDevices = 0;
+
+  Serial.println("Scanning...");
+  for (address = 1; address &lt; 127; address++) {
+    Wire.beginTransmission(address);
+    error = Wire.endTransmission();
+    if (error == 0) {          // 0 = 有器件 ACK
+      Serial.print("Found at 0x");
+      if (address &lt; 16) Serial.print("0");
+      Serial.println(address, HEX);
+      nDevices++;
+    }
+  }
+  Serial.print("Done. Found ");
+  Serial.println(nDevices);
+  delay(2000);
+}</code></pre>
+          <p><strong>示例 2：OLED 显示 + AHT20 温湿度（需要安装 Adafruit_SSD1306 库与 Adafruit_AHTX0 库）</strong></p>
+          <pre><code class="language-cpp">/* OLED 实时显示温湿度 */
+#include &lt;Wire.h&gt;
+#include &lt;Adafruit_SSD1306.h&gt;
+#include &lt;Adafruit_AHTX0.h&gt;
+
+#define OLED_ADDR 0x3C
+
+Adafruit_SSD1306 oled(128, 64, &amp;Wire, -1);   // 128x64，软复位
+Adafruit_AHTX0 aht;
+
+void setup() {
+  Serial.begin(115200);
+  Wire.begin();                       // 同一总线上挂 OLED + AHT20
+
+  if (!oled.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) {
+    Serial.println("OLED init fail");
+    while (1);                        // OLED 失败就停在这
+  }
+  oled.clearDisplay();
+  oled.setTextSize(1);
+  oled.setTextColor(SSD1306_WHITE);
+  oled.display();
+
+  if (!aht.begin()) {
+    Serial.println("AHT20 init fail");
+    while (1);
+  }
+  Serial.println("Sensors OK");
+}
+
+void loop() {
+  /* 读 AHT20：getEvent 读取一次传感器并返回是否成功（true=读到有效数据） */
+  sensors_event_t hum, temp;
+  if (aht.getEvent(&amp;hum, &amp;temp)) {
+
+    /* OLED 显示两行文字 */
+    oled.clearDisplay();
+    oled.setCursor(0, 0);
+    oled.print("Temp: ");
+    oled.print(temp.temperature);
+    oled.println(" C");
+    oled.setCursor(0, 16);
+    oled.print("Hum : ");
+    oled.print(hum.relative_humidity);
+    oled.println(" %");
+    oled.display();
+  }
+  delay(1000);                        // 每秒刷新一次
+}</code></pre>
+        </section>
+
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第一段：扫描器的 error==0 判断</h3>
+          <p><span class="inline-code">Wire.endTransmission()</span> 返回一个状态码：0 表示有器件 ACK（在线）、2 表示 NACK（无器件）。<strong>为什么先跑扫描</strong>：接线错、地址记错、器件坏了——扫描器一次性暴露所有 I2C 问题。看到打印的地址再去查 datasheet 对不对，是标准排障流程。</p>
+
+          <h3>第二段：Adafruit 库的封装逻辑</h3>
+          <p><span class="inline-code">Adafruit_SSD1306 oled(128, 64, &amp;Wire, -1)</span> 构造时指定尺寸、总线、复位脚（-1 表示不接复位）。<span class="inline-code">oled.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)</span> 完成初始化。<strong>为什么库函数里已经包含「写寄存器」</strong>：库把「发 0x00 控制字节 + 命令/数据」全封装了，你看到的是高层 API——但底层仍是 <span class="inline-code">beginTransmission/write/endTransmission</span> 那套。</p>
+
+          <h3>第三段：getEvent 拿到的是结构体</h3>
+          <p><span class="inline-code">sensors_event_t</span> 是 Adafruit 统一传感器格式：<span class="inline-code">temp.temperature</span> 与 <span class="inline-code">hum.relative_humidity</span> 直接是 float 摄氏度与百分比。<strong>为什么不用自己拼字节</strong>：AHT20 的 20bit 原始数据换算公式（湿度=raw/2²⁰×100）库已经算好——<strong>理解换算存在</strong>，但日常开发直接用库。想亲手抠原始字节，参考 51 课的 DHT11/I2C 思路。</p>
+
+          <h3>第四段：oled.print 与 C++ 重载</h3>
+          <p><span class="inline-code">oled.print(temp.temperature)</span> 直接把 float 打印上屏——Arduino 的 <span class="inline-code">print</span> 是重载函数，整数、浮点、字符串都能打。<strong>为什么先 clearDisplay 再 setCursor</strong>：OLED 不清屏会叠字；cursor 定位到 (0,0) 和 (0,16) 两行，对应屏幕两行文字。</p>
+        </section>
+
+          <h3>第五段：寄存器 ↔ 时序 ↔ Wire 库三层对照</h3>
+          <p>教材要求看懂「硬件外设 ↔ 软件模拟 ↔ 库」三层：</p>
+          <table>
+            <thead>
+              <tr><th>你写的 Arduino 函数</th><th>底层方式</th><th>最底层</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><span class="inline-code">Wire.beginTransmission(0x3C)</span></td><td>ESP32 硬件 I2C 外发起始+地址</td><td>I2C 外设数据/命令寄存器</td></tr>
+              <tr><td><span class="inline-code">Wire.write(0x00)</span></td><td>硬件移位寄存器发 1 字节</td><td>I2C 数据寄存器</td></tr>
+              <tr><td>51 里的软件模拟 I2C</td><td>GPIO 翻转 SDA/SCL 模拟时序</td><td>纯软件延时位操作，无硬件外设</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么重要</strong>：ESP32 有硬件 I2C 外设定时发 SCL，所以你只调 Wire 库函数；51 没硬件 I2C，要自己用 GPIO 翻转模拟同样的 START/STOP/ACK 时序——协议本身一样，只是「硬件帮你做」还是「软件手搓」的区别。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-demo">七、现象演示与验证</h2>
+          <ul>
+            <li><strong>扫描</strong>：串口打印 <span class="inline-code">Found at 0x38</span>（AHT20）与 <span class="inline-code">Found at 0x3C</span>（OLED）。</li>
+            <li><strong>显示</strong>：OLED 显示 <span class="inline-code">Temp: 26.5 C</span>、<span class="inline-code">Hum : 55.2 %</span>，每秒刷新。</li>
+            <li><strong>响应</strong>：手指捏住传感器，温度读数升高、湿度变化。</li>
+          </ul>
+          <p><strong>验证方法：</strong></p>
+          <ol>
+            <li>拔掉 AHT20 单独跑 OLED——OLED 仍正常（总线断一个器件不影响另一个）。</li>
+            <li>把 OLED 地址从 0x3C 改成 0x3D（部分屏实际地址），观察 begin 失败提示——理解地址的重要性。</li>
+            <li>只接 OLED 不接 AHT20 跑完整例程：aht.begin() 返回 false，串口报错不卡死——理解初始化失败的容错写法。</li>
+          </ol>
+        </section>
+
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>扫描不到任何设备</td><td>接线错 / 没共地 / 上拉缺失</td><td>核对 SDA/SCL/VCC/GND；确保与板子共地；补 4.7k 上拉</td></tr>
+              <tr><td>扫到地址但 OLED 黑屏</td><td>地址/尺寸参数不对，或 Reset 引脚接了 -1 但模块需要</td><td>试 0x3D；构造改 64/128 尺寸；接上复位引脚</td></tr>
+              <tr><td>温度读数恒定不变</td><td>AHT20 初始化失败 / 读取时序没等够</td><td>查 aht.begin() 返回；库版本升级；换例程对照</td></tr>
+              <tr><td>接了 OLED 后 AHT20 也失效</td><td>两个器件地址相同（罕见）或总线被占</td><td>扫描确认地址不同；不同地址还冲突就查 VCC 电压</td></tr>
+              <tr><td>编译报错 Wire.h 找不到</td><td>ESP32 板卡包没装好</td><td>工具→开发板→ESP32 包重装；确认选对开发板</td></tr>
+              <tr><td>OLED 显示乱码/闪烁</td><td>供电不足 / SDA SCL 线太长</td><td>独立供电、缩短杜邦线；SCL/SDA 分别接 10k 上拉</td></tr>
+              <tr><td>5V 模块烧板</td><td>电平不匹配</td><td>换 3V3 供电或加电平转换模块</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（必做）</strong>：跑扫描例程，确认你手头所有 I2C 器件的真实地址，并记录到注释里。</p>
+          <p><strong>练习 2</strong>：不用 Adafruit_AHTX0 库，改用 Wire 原始函数（beginTransmission/write/requestFrom）读 AHT20 原始字节并自己换算——动手前先查 AHT20 datasheet 寄存器表。</p>
+          <p><strong>练习 3（进阶）</strong>：把 OLED 从 Adafruit 库换成「裸 Wire 驱动」（网上有 SSD1306 裸驱动代码），看懂它的命令序列——彻底告别「只会用库」。</p>
+          <p><strong>延伸学习</strong>：I2C 通信会了，下一课学 <a href="esp32-ble.html">BLE 低功耗蓝牙</a>——从「板上总线」到「无线连接」，手机 App 与 ESP32 通信的核心。</p>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="esp32-deepsleep.html" class="btn btn-outline btn-sm">← 上一篇：Deep Sleep 低功耗</a>
+          <a href="esp32-ble.html" class="btn btn-outline btn-sm">下一篇：BLE 低功耗蓝牙 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

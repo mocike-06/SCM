@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - Keil MDK 环境搭建（STM32F103）零基础</title>
+  <meta name="description" content="零基础搭建 STM32F103 开发环境：Keil MDK-ARM 是什么、CubeMX 图形化配置、HAL 库工程结构、时钟树 72MHz、3.3V 与 5V 区别、ST-Link SWD 烧录全流程。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link active" aria-current="page">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>Keil MDK 环境搭建（STM32F103）</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：STM32</span>
+          <span class="badge badge-green">入门</span>
+          <span class="badge badge-gray">更新：2026-10-24</span>
+        </div>
+
+        <p class="text-secondary mb-6">学 STM32 的第一步不是写代码，而是把开发环境跑通。本讲从零讲清楚 Keil MDK、STM32CubeMX、HAL 库各自是干什么的，CubeMX 生成的工程文件夹里每个文件是什么，时钟树为什么必须配到 72MHz，3.3V 和 5V 有什么区别，以及 ST-Link 怎么用 SWD 把第一个程序烧进芯片。装好这一套，后面 7 篇实验都不用再动环境。</p>
+
+        <!-- ===== 一、本课目标与前置知识 ===== -->
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>说清楚 Keil MDK、STM32CubeMX、HAL 库三件套各自负责什么，不再把它们混成一个软件。</li>
+            <li>独立完成「CubeMX 选芯片 → 配时钟 → 生成工程 → Keil 编译 → ST-Link 下载」完整流程。</li>
+            <li>让 PA5 上的 LED 以 1Hz 闪烁，证明整条「写代码—编译—烧录—运行」链路通畅。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识：</strong></p>
+          <ul>
+            <li>C 语言基础（阶段 1）：认识 main 函数、头文件、while 循环——本讲代码非常短，能读懂即可。</li>
+            <li>51 单片机基础（阶段 2）：知道什么是编译、烧录、单片机最小系统——STM32 概念类似，只是工具链更现代。</li>
+          </ul>
+          <p><strong>本课会出现的新名词（下面逐一讲解）：</strong>Keil MDK、CubeMX、HAL 库、器件包 DFP、工程结构（main.c / stm32f1xx_hal_msp.c）、时钟树、HSE/PLL、72MHz、3.3V 电平、SWD、ST-Link。</p>
+        </section>
+
+        <!-- ===== 二、基础概念铺垫 ===== -->
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. Keil MDK：写代码、编译、下载的「总工作台」</h3>
+          <p><strong>生活类比</strong>：Keil MDK 就像 Word——你在里面写稿子（C 代码），点一下「打印」（编译），它把稿子排版印成成品（可烧录的 hex），再通过一根线送到打印机（ST-Link 烧进芯片）。</p>
+          <p><strong>一句话定义</strong>：Keil MDK-ARM（μVision）是 ARM 单片机的集成开发环境（IDE），集编辑器、编译器、下载调试器于一身，你最终双击打开的那个 <span class="inline-code">.uvprojx</span> 工程文件就归它管。</p>
+          <p><strong>例子</strong>：本讲最后我们在 Keil 里按 F7 编译、按 F8 下载，用的就是 MDK。它本体只带编译器，不认识具体芯片，所以要装下一条讲的器件包。</p>
+
+          <h3>2. STM32CubeMX：点鼠标配引脚的「图形化说明书」</h3>
+          <p><strong>生活类比</strong>：CubeMX 像汽车的「中控大屏」——以前配单片机要翻几百页手册、手算寄存器地址（像老车拧机械旋钮），现在在图上点一下 PA9 选成串口发送，它就自动帮你写好初始化代码。</p>
+          <p><strong>一句话定义</strong>：STM32CubeMX 是 ST 官方免费的图形化配置工具，你在芯片引脚图上点选功能、在时钟树图上拖参数，它自动生成一套 HAL 初始化 C 工程骨架，交给 Keil 编译。</p>
+          <p><strong>例子</strong>：本讲我们在 CubeMX 里选 STM32F103C8T6、把时钟配到 72MHz、把 PA5 设为输出，点 GENERATE CODE 就生成了整个工程。</p>
+
+          <h3>3. HAL 库：带说明书的「遥控器」</h3>
+          <p><strong>生活类比</strong>：直接操作寄存器像每个电器都弯腰去墙上拔插头；HAL 库像客厅里的万能遥控器，每个按钮（函数）背后已经接好了对应电路。</p>
+          <p><strong>一句话定义</strong>：HAL 库（Hardware Abstraction Layer，硬件抽象层）是 ST 官方提供的一组 C 函数，把「往某个寄存器地址写某个数」封装成好记的函数，如 <span class="inline-code">HAL_GPIO_TogglePin()</span>、<span class="inline-code">HAL_Init()</span>。</p>
+          <p><strong>例子</strong>：本讲代码里那句 <span class="inline-code">HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5)</span> 就是 HAL 函数，它背后自动去操作 GPIOA 的 ODR 寄存器，我们不用记地址。</p>
+
+          <h3>4. 工程结构：生成的一堆文件都是啥</h3>
+          <p><strong>生活类比</strong>：CubeMX 生成的工程像一套精装修房——你只住客厅（main.c 里的用户代码区），厨房、水电（外设初始化）都已经装好，别乱拆。</p>
+          <p><strong>一句话定义</strong>：CubeMX 生成的工程里，<span class="inline-code">Core/Src/main.c</span> 是你唯一要写代码的地方（且只能写在 <span class="inline-code">USER CODE BEGIN/END</span> 注释之间）；<span class="inline-code">stm32f1xx_hal_msp.c</span> 放底层引脚初始化；<span class="inline-code">stm32f1xx_it.c</span> 放中断服务函数；<span class="inline-code">system 时钟</span>在 <span class="inline-code">main.c</span> 的 <span class="inline-code">SystemClock_Config()</span> 里。</p>
+          <p><strong>例子</strong>：本讲我们只动 main.c 的 while 循环；以后学中断时再去 it.c；千万不要在 USER CODE 区之外手写代码，否则下次重新生成工程会被 CubeMX 覆盖掉。</p>
+
+          <h3>5. 时钟树：芯片的「心跳频率」</h3>
+          <p><strong>生活类比</strong>：晶振是芯片的心脏，时钟树是血管网络——心跳多快（时钟频率），所有外设（串口、定时器）跟着按同一个节拍数拍子。心跳错了，大家对拍子就全乱。</p>
+          <p><strong>一句话定义</strong>：STM32F103 有两个时钟源：内部 <strong>HSI 8MHz</strong>（RC 振荡，上电默认、精度差）和外部 <strong>HSE 8MHz</strong>（晶振，精确）。系统时钟 SYSCLK 由 PLL 把 HSE 9 倍频得到：<span class="inline-code">SYSCLK = HSE × PLLMUL(×9) = 72MHz</span>。这个频率决定了串口波特率、HAL_Delay 延时是否准确。</p>
+          <p><strong>教材式分频链路（野火/正点原子时钟树章节）：</strong>SYSCLK=72MHz 先经 <strong>AHB 预分频（HPRE）</strong>分频系数=1 → <strong>HCLK(AHB 总线)=72MHz</strong>；HCLK 再经 <strong>APB1 预分频（PPRE1）</strong>÷2 → <strong>PCLK1(APB1 总线)=36MHz</strong>（注意 APB1 上限就是 36MHz，超了死机）；经 <strong>APB2 预分频（PPRE2）</strong>÷1 → <strong>PCLK2(APB2 总线)=72MHz</strong>。这些分频位都写在 <span class="inline-code">RCC_CFGR</span> 寄存器里（HPRE[7:4]、PPRE1[10:8]、PPRE2[13:11]）。</p>
+          <p><strong>易错点（教材高频考点）：</strong>挂在 APB1 上的定时器（TIM2~TIM4），当 PPRE1 分频系数≠1（这里=2，PCLK1=36MHz）时，定时器内部时钟会<strong>自动 ×2</strong> 变成 72MHz——所以即使 APB1 只有 36MHz，TIM2 的计数时钟仍是 72MHz，算定时初值时要用 72MHz 而不是 36MHz，否则定时时间差一倍。</p>
+          <p><strong>例子</strong>：CubeMX 时钟树里把 HCLK 填 72 回车，它自动算出 HSE×9=72MHz，并按 HPRE/PPRE1/PPRE2 填好 RCC_CFGR。若偷懒用了内部 HSI 8MHz，后面串口 115200 就会因为时钟不准而全是乱码。</p>
+
+          <h3>6. 3.3V 与 5V 的区别</h3>
+          <p><strong>生活类比</strong>：5V 是「高个子标准」，3.3V 是 STM32 这个「矮个子」的承受极限。把 5V 硬塞进它的输入脚，像让矮个子硬扛高个子的担子——会受伤。</p>
+          <p><strong>一句话定义</strong>：STM32F103 是 <strong>3.3V 系统</strong>：供电 3.3V，IO 高电平约 3.3V；而经典 51 单片机是 5V 系统。STM32 的引脚不能直接耐受 5V 输入。</p>
+          <p><strong>例子</strong>：本讲 ST-Link 给板子供电选 3.3V；接 USB 转串口模块时也要用 3.3V 电平档，不要用 5V 档。</p>
+
+          <h3>7. SWD 下载：几根线把程序送进芯片</h3>
+          <p><strong>生活类比</strong>：SWD 像一条「两车道专用数据线」——比老式 JTAG 的「八车道」省引脚，只要两根（SWDIO 数据 + SWCLK 时钟）就能完成烧录和在线调试。</p>
+          <p><strong>一句话定义</strong>：SWD（串行线调试）是 ARM 的两线下载调试接口，对应 STM32 的 PA13(SWDIO)、PA14(SWCLK) 两个引脚，配合 ST-Link 调试器把编译好的程序写入芯片内部 Flash。</p>
+          <p><strong>例子</strong>：本讲硬件接线就是把 ST-Link 的 SWDIO/SWCLK/GND 接到最小系统板对应焊点，Keil 里 Port 选 SW 而非 JTAG。</p>
+
+          <h3>8. 存储器映射与启动：程序到底从哪开始跑</h3>
+          <p><strong>生活类比</strong>：存储器映射像城市的「门牌号总表」——芯片把 Flash、RAM、寄存器都编在一条地址大街上，CPU 按门牌号找东西，谁住几号是固定死的。</p>
+          <p><strong>一句话定义（野火教材「存储器映射」章节）：</strong>STM32F103C8T6 的地址空间按区域固定划分：片内 <strong>Flash（存程序）起始地址 0x08000000</strong>（C8 容量 128KB）；片内 <strong>SRAM（运行内存）起始地址 0x20000000</strong>（容量 20KB）；<strong>系统存储器 0x1FFFF000</strong> 是 ST 出厂固化的 Bootloader（串口 ISP 下载用）。复位后 CPU 默认从 0x08000000 取指。</p>
+          <p><strong>启动文件与中断向量表（教材必考）：</strong>工程里 <span class="inline-code">startup_stm32f10x_md.s</span>（C8T6 属中容量密度）就是启动文件，它干两件事：① 把「初始栈指针 SP」放在向量表第 1 项、「复位 Reset_Handler」放在第 2 项；② 把 .data 从 Flash 拷到 SRAM、清零 .bss，再跳进 main。<strong>关键规则：中断向量表里每个 ISR 的函数名（如 <span class="inline-code">USART1_IRQHandler</span>）必须和启动文件里写死的名字一字不差</strong>，否则即使你写了同名函数，链接时也不会被装进向量表，中断永远进不去——这是教材里「中断写了却不进」的经典坑。</p>
+        </section>
+
+        <!-- ===== 三、原理介绍 ===== -->
+        <section>
+          <h2 id="sec-principle">三、原理介绍</h2>
+          <p>本讲不是教你点哪几个按钮，而是先把「Keil、CubeMX、HAL 库、ST-Link 各管哪一层」讲清楚——理解了分层，环境问题自己就能定位。</p>
+          <p><strong>整条链路：</strong>你写 main.c → CubeMX 生成的 HAL 初始化代码配置好芯片 → Keil 编译链接成固件 → ST-Link 经 SWD 把固件写进内部 Flash → 复位后 CPU 从 Flash 0x08000000 启动跑你的程序。</p>
+
+          <h3>原理 1：HAL 的三层结构——为什么不直接写寄存器</h3>
+          <p>STM32 程序分三层，越往下越贴硬件：<strong>用户层</strong>（你写的 main.c）→ <strong>HAL 驱动层</strong>（stm32f1xx_hal_*.c，把操作封装成函数）→ <strong>寄存器层</strong>（对 0x40010800 这些地址直接读写）。你调 <span class="inline-code">HAL_GPIO_TogglePin</span>，HAL 内部再去写 BSRR 寄存器。好处是不用记几百个寄存器地址；代价是多一层间接。CubeMX 干的就是「按你的勾选，替你把 HAL 初始化代码写出来」——所以你只能在 USER CODE BEGIN/END 之间写，否则下次重新生成会被覆盖。</p>
+
+          <h3>原理 2：器件包 DFP——Keil 凭什么认识 STM32F103</h3>
+          <p>Keil MDK 本体只是一个通用 ARM 编译器 + IDE，它<strong>不认识任何具体芯片</strong>：不知道 F103 有哪些寄存器、启动文件叫什么、内部 Flash 怎么烧。DFP 包（<span class="inline-code">Keil.STM32F1xx_DFP</span>）就是把这份「芯片说明书 + 烧录算法 + 启动文件」装进 Keil。不装它，新建工程根本选不到 STM32F103、Flash Download 页也没有对应的编程算法——这就是「装好了用不了」最常见的根因。</p>
+
+          <h3>原理 3：时钟启动链——为什么一上电默认慢、要配到 72MHz</h3>
+          <p>芯片上电默认跑内部 HSI（8MHz），这是个「保底频率」。要跑满性能必须手动切到外部 8MHz 晶振 HSE → 经 PLL 9 倍频 → 得到 72MHz 主时钟，再经 AHB/APB 分频分给各总线。CubeMX 的 SystemClock_Config 就是按「先稳 HSE、再开 PLL、最后切源」的顺序写好的。<strong>为什么这步错了全乱</strong>：USART 波特率、HAL_Delay 时长都由这个 72MHz 推算，主频偏了，串口必乱码、延时必不准。</p>
+
+          <h3>原理 4：SWD 烧录——两线怎么把程序送进 Flash</h3>
+          <p>SWD 只用两根：SWDIO（数据）、SWCLK（时钟），对应 PA13/PA14。ST-Link 按 SWD 协议先<strong>整片擦除内部 Flash</strong>，再按页把固件逐个写入，最后回读校验。勾上 Reset and Run，写完硬件自动复位，CPU 从 0x08000000 开始执行——所以「下载成功但 LED 不闪」多半是没勾 Reset and Run，程序其实在跑，只是没被复位启动。</p>
+
+          <p><strong>保姆级安装顺序（照着点即可）：</strong></p>
+          <ol>
+            <li><strong>装 Keil MDK-ARM</strong>：双击官方安装包，一路 Next，注意安装路径别带中文和空格；装完先别打开，记好装在哪。</li>
+            <li><strong>装器件包 DFP</strong>：打开 Keil → 点工具栏 <span class="inline-code">Pack Installer</span>（盒子图标）→ 左侧 Devices 展开 STMicroelectronics → 选 <span class="inline-code">STM32F1 Series</span> → 右侧找到 <span class="inline-code">Keil::STM32F1xx_DFP</span> 点 <strong>Install</strong>，进度条走完变对勾即成功。</li>
+            <li><strong>装 STM32CubeMX</strong>：运行 ST 官网的 CubeMX 安装包，一路下一步；若提示缺 Java，按它给的链接先装 JRE 再回来继续。</li>
+            <li><strong>装 ST-Link 驱动</strong>：用 USB 线把 ST-Link 插到电脑 → 右键「此电脑→管理→设备管理器」→ 在「通用串行总线设备」或「调试器」里应看到 <span class="inline-code">ST-Link Debugger</span>；若带黄色感叹号，去 ST 官网下 ST-Link 驱动重装。</li>
+          </ol>
+          <blockquote>记忆点：三层=你写用户代码→HAL 函数→寄存器；DFP=Keil 认识芯片的前提；默认 HSI 8M 偏慢，必须切 HSE×9=72MHz，错了串口乱码延时不准；SWD=SWDIO/SWCLK 两线擦+写 Flash，勾 Reset and Run 才自动跑。</blockquote>
+        </section>
+
+        <!-- ===== 四、硬件接线说明 ===== -->
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <p>把 STM32F103C8T6 最小系统板通过 ST-Link 接到电脑。一共 4~5 根线，按表接好即可。</p>
+          <table>
+            <thead>
+              <tr><th>模块引脚（ST-Link）</th><th>单片机引脚（最小系统板）</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>SWDIO</td><td>SWDIO（PA13）</td><td>数据线，必须接对</td></tr>
+              <tr><td>SWCLK</td><td>SWCLK（PA14）</td><td>时钟线，必须接对</td></tr>
+              <tr><td>GND</td><td>GND</td><td>共地，否则通信不稳</td></tr>
+              <tr><td>3.3V</td><td>3.3V</td><td>用 ST-Link 给板子供电时接；板子自供电可不接</td></tr>
+              <tr><td>RST（可选）</td><td>NRST</td><td>不接也能烧，接了可在线复位调试</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么这样接：</strong></p>
+          <ul>
+            <li><strong>为什么 SWDIO/SWCLK 不能接反？</strong> 这两根是烧录的专用通道，数据线和时钟线各有分工，接反了 ST-Link 根本识别不到芯片（报 No target connected）。板子上一般印了丝印，对着接最稳。</li>
+            <li><strong>为什么必须共地？</strong> ST-Link 和板子各自的「0V」必须是同一个参考点，否则高低电平判断没有基准，通信会乱。GND 这根线哪怕用 ST-Link 供电也要接。</li>
+            <li><strong>为什么用 3.3V 而不是 5V？</strong> STM32F103 是 3.3V 器件，最小系统板通常自带稳压，你只需给它供 3.3V（或用 5V 经板上稳压）。千万别把 5V 直接接到 3.3V 引脚排针上。</li>
+          </ul>
+          <div class="tip-info mt-4"><span class="tip-label">CubeMX 配置要点</span>
+            新建工程搜索并选择 <span class="inline-code">STM32F103C8T6</span>；在 Clock Configuration 里把 HSE 设为 Crystal/Ceramic Resonator，PLLMUL 选 ×9，HCLK 输入 72 回车让 CubeMX 自动算满 72MHz；把 PA5 设为 <span class="inline-code">GPIO_Output</span>；Project Manager 里选工具链 MDK-ARM V5，点 GENERATE CODE 生成工程。</div>
+        </section>
+
+        <!-- ===== 五、完整代码 ===== -->
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p>工程生成后用 Keil 打开 <span class="inline-code">MDK-ARM/Project.uvprojx</span>。我们只在 <span class="inline-code">main.c</span> 的用户代码区写几行：让 PA5 每隔 500ms 翻转一次，用来验证「编译—烧录—运行」整条链路是通的。PA5 需在 CubeMX 里配成 <span class="inline-code">GPIO_Output</span>。</p>
+          <pre><code class="language-c">/* main.c 用户代码区：验证环境的最小程序（零基础注释版） */
+int main(void)
+{
+  HAL_Init();               /* 1. 初始化 HAL 库本身 */
+  SystemClock_Config();     /* 2. CubeMX 自动生成：HSE 8M + PLL×9 = 72MHz */
+  MX_GPIO_Init();           /* 3. 初始化 GPIO（PA5 推挽输出） */
+
+  while (1)
+  {
+    HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);  /* 翻转 PA5：亮变灭、灭变亮 */
+    HAL_Delay(500);                          /* 阻塞延时 500ms */
+  }
+}</code></pre>
+          <p><strong>编译下载设置：</strong> Keil 点 <span class="inline-code">Options for Target</span>（魔术棒）→ Debug 选 ST-Link Debugger → Settings 里 Port 选 <strong>SW</strong>、Max Clock 降到 4MHz；Flash Download 页勾选 <strong>Reset and Run</strong>，并确认编程算法列表里有 <span class="inline-code">STM32F10x Med-density Flash</span>。</p>
+          <p>如果想改闪烁快慢，把延时数字调一下即可：</p>
+          <pre><code class="language-c">HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);  /* 翻转 PA5 */
+HAL_Delay(200);                          /* 改成 200ms：闪得更快，约 2.5Hz */</code></pre>
+        </section>
+
+        <!-- ===== 六、代码逐段讲解 ===== -->
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第 1 段：初始化三连（main 开头三行）</h3>
+          <p><strong>在做什么：</strong> <span class="inline-code">HAL_Init()</span> 初始化 HAL 库底层；<span class="inline-code">SystemClock_Config()</span> 把主频配到 72MHz；<span class="inline-code">MX_GPIO_Init()</span> 把你在 CubeMX 点的「PA5 输出」写进寄存器。</p>
+          <p><strong>为什么这么写：</strong> 这三句是 STM32 HAL 工程的固定开场白。不先配时钟，芯片跑在默认低速；不初始化 GPIO，引脚还是上电默认状态，写电平无效。</p>
+          <p><strong>不写会怎样：</strong> 漏掉 <span class="inline-code">MX_GPIO_Init()</span>，PA5 保持默认浮空输入，LED 怎么都不亮——这是最常见的「代码没错但没现象」原因。</p>
+
+          <h3>第 2 段：主循环翻转 + 延时</h3>
+          <p><strong>在做什么：</strong> <span class="inline-code">HAL_GPIO_TogglePin</span> 翻转 PA5 电平，<span class="inline-code">HAL_Delay(500)</span> 阻塞等 500 毫秒。翻转一次等 500ms，再翻转一次又等 500ms，所以一个完整亮灭周期是 1 秒，约 1Hz 闪烁。</p>
+          <p><strong>为什么这么写：</strong> 这是验证环境最简单的程序。若 LED 能闪，说明 Keil 编译、器件包、CubeMX、ST-Link 驱动、下载算法全部通畅，再叠加任何实验都好排查。</p>
+          <p><strong>不写会怎样：</strong> 如果不先写这个最小程序，直接上复杂实验，一旦没现象，你无法区分是环境没装好还是代码写错了——先让灯闪是最佳排错起点。</p>
+
+          <h3>第 3 段：编译下载设置（魔术棒）</h3>
+          <p><strong>在做什么：</strong> 选 ST-Link 调试器、Port 改 SW、勾 Reset and Run、确认 Flash 算法。</p>
+          <p><strong>为什么这么写：</strong> Keil 默认 Port 可能是 JTAG（要 5 根线），我们只用 SWD 两线；不勾 Reset and Run，下载完芯片不自动跑，得手动按复位；没有 Flash 算法则根本写不进芯片。</p>
+          <p><strong>不写会怎样：</strong> Port 不改 SW 会连不上；不勾 Reset and Run 会出现「下载成功但 LED 不闪」，要手动复位才跑。</p>
+        </section>
+
+        <!-- ===== 七、现象演示说明 ===== -->
+        <section>
+          <h2 id="sec-demo">七、现象演示说明</h2>
+          <p>正常结果分三步验证：</p>
+          <ul>
+            <li><strong>编译通过</strong>：点 Build（F7），左下角显示 <span class="inline-code">0 Error(s)</span>。</li>
+            <li><strong>下载成功</strong>：点 Download（F8），提示 <span class="inline-code">Application Program Done</span> 或 <span class="inline-code">Flash Load finished</span>。</li>
+            <li><strong>运行现象</strong>：接在 PA5 上的 LED 以约 1Hz 频率亮灭闪烁。板载 LED 若接在 PC13，把代码里的 GPIO_PIN_5 改成 GPIO_PIN_13、端口改 GPIOC 即可。</li>
+          </ul>
+          <p><strong>可量化的验证方法：</strong></p>
+          <ul>
+            <li><strong>数闪烁周期</strong>：手机秒表计时，LED 应约每秒翻转一次（亮 0.5 秒、灭 0.5 秒）。10 次翻转约 5 秒——若明显偏快或偏慢，多半是时钟没配到 72MHz，HAL_Delay 就不准。</li>
+            <li><strong>改延时看变化</strong>：把 HAL_Delay(500) 改成 100，闪烁应立刻快 5 倍。如果改了没变化，说明烧进去的不是你刚编译的程序（没下载成功）。</li>
+            <li><strong>万用表量电平</strong>：LED 亮时 PA5 对 GND 约 3.3V，灭时接近 0V——可确认输出电平正确。</li>
+          </ul>
+          <p>看到 LED 闪，说明 Keil、器件包、CubeMX、ST-Link 驱动、下载算法全部就位，可以进入下一篇 GPIO 实验。</p>
+        </section>
+
+        <!-- ===== 八、常见报错排查方案 ===== -->
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>下载时报 No target connected / 找不到器件</td><td>SWDIO/SWCLK 接错、没共地、ST-Link 驱动没装</td><td>核对 SWDIO↔SWDIO、SWCLK↔SWCLK、GND↔GND；安装 ST-Link 驱动；魔术棒 Settings 里 Port 改 SW</td></tr>
+              <tr><td>新建工程选不到 STM32F103C8T6，编译报 Device not found</td><td>没装 Keil.STM32F1xx_DFP 器件包</td><td>打开 Keil 的 Pack Installer，找到 Keil::STM32F1xx_DFP 点 Install，装完重启 Keil</td></tr>
+              <tr><td>Error: L6218E: Undefined symbol main</td><td>工程里没把 main.c 加进去，或 CubeMX 没生成用户代码</td><td>回到 CubeMX 重新 GENERATE CODE，确认 main.c 在 Application/User 分组下</td></tr>
+              <tr><td>下载成功但程序不运行 / LED 不闪</td><td>时钟树配错（用了内部 HSI）或没勾选 Reset and Run</td><td>CubeMX 时钟树确认 HCLK=72MHz；下载设置里勾 Reset and Run，重新上电</td></tr>
+              <tr><td>Flash Download 页没有 STM32F10x 下载算法</td><td>器件包未正确安装，算法缺失</td><td>Pack Installer 重装 DFP；或手动 Add 选 STM32F10x Med-density Flash</td></tr>
+              <tr><td>配完时钟后芯片直接「死机」、下载不进、调试连不上（教材常见坑）</td><td>PLL 倍频配过头，SYSCLK 超过 72MHz 上限（如把 HSE 8MHz ×16=128MHz），或 APB1 超过 36MHz</td><td>STM32F103 额定最高就是 72MHz，PLLMUL 最大只能 ×9；APB1 分频后不得超过 36MHz。擦除芯片重新烧：魔术棒 Debug→Settings→Flash Download 勾 Erase Full Chip，或按住 BOOT0 接 3.3V 用串口 ISP 救回</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <!-- ===== 九、课后练习与延伸 ===== -->
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（改闪烁速度）：</strong> 把 HAL_Delay(500) 改成 1000，LED 应变成约 0.5Hz（亮 1 秒、灭 1 秒）。提示：直接改数字重新编译下载即可，不需要动 CubeMX。</p>
+          <p><strong>练习 2（换板载灯）：</strong> 如果你的最小系统板板载灯在 PC13 且低电平点亮，把代码改成 <span class="inline-code">HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_13)</span> 并在 CubeMX 里把 PC13 配成 GPIO_Output。提示：注意板载灯常是低电平点亮，现象可能和外接灯相反。</p>
+          <p><strong>练习 3（数周期验证时钟）：</strong> 用秒表测 10 个完整亮灭周期，记录总时长。若接近 10 秒说明时钟正确；若明显偏离，回头检查时钟树是否真的到了 72MHz。</p>
+          <p><strong>延伸学习：</strong></p>
+          <ul>
+            <li><a href="#xxx" data-placeholder>STM32 GPIO 输入输出：点灯与按键（stm32-gpio.html）</a></li>
+            <li><a href="#xxx" data-placeholder>了解 STM32 时钟树全貌与 HSE/HSI 区别</a></li>
+            <li><a href="#xxx" data-placeholder>ST-Link 在线调试：打断点看变量</a></li>
+          </ul>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <span></span>
+          <a href="stm32-gpio.html" class="btn btn-outline btn-sm">下一篇：STM32 GPIO 输入输出 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

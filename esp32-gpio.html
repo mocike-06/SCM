@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - ESP32 GPIO 控制（零基础）</title>
+  <meta name="description" content="零基础学 ESP32 GPIO：pinMode / digitalWrite / digitalRead、INPUT_PULLUP 内部上拉、3.3V 电平、启动引脚避坑（GPIO6-11 禁用、GPIO0/2/15），Arduino 完整代码点亮板载与外部 LED 并读取按键。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link active" aria-current="page">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>ESP32 GPIO 控制：点亮 LED 与按键输入</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：ESP32</span>
+          <span class="badge badge-green">入门</span>
+          <span class="badge badge-gray">更新：2026-10-25</span>
+        </div>
+
+        <p class="text-secondary mb-6">掌握 ESP32 最基础的 IO 能力：用 pinMode / digitalWrite 驱动板载与外部 LED，用 INPUT_PULLUP 读取一个独立按键。本讲从零讲清 OUTPUT/INPUT 是什么、内部上拉怎么用、为什么 ESP32 只认 3.3V、以及哪些引脚不能乱接，为后续所有外设打下地基。</p>
+
+        <!-- ===== 一、本课目标与前置知识 ===== -->
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>看懂 setup() / loop() 结构，会用 pinMode、digitalWrite、digitalRead 三个函数。</li>
+            <li>独立接线：外部 LED（带限流电阻）和按键（用内部上拉，不用外部电阻）。</li>
+            <li>避开 ESP32 的「坑引脚」（GPIO6-11 禁用、GPIO0/2/15 影响启动），会选安全引脚。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识（对应学习路线阶段 4~5 前两篇）：</strong></p>
+          <ul>
+            <li>STM32 或 51 的 GPIO 概念（阶段 2/4）：高低电平、输出/输入、按键抖动——ESP32 里思路完全一样，只是 API 换成 Arduino 风格。</li>
+            <li>环境搭建（esp32-env.html）：Arduino IDE 装好 ESP32 开发板包、能烧录、会开串口监视器。</li>
+            <li>C 语言基础（阶段 1）：变量、if 判断、函数定义。</li>
+          </ul>
+          <p><strong>本课会出现的新名词（下面逐一讲解）：</strong>GPIO、pinMode / digitalWrite / digitalRead、INPUT_PULLUP、3.3V 电平、LED_BUILTIN、启动引脚（GPIO0/2/15）、按键抖动。</p>
+        </section>
+
+        <!-- ===== 二、基础概念铺垫 ===== -->
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. GPIO 与方向配置：pinMode</h3>
+          <p><strong>生活类比</strong>：GPIO 引脚像一个双通道对讲机，同一个孔既能「喊话」也能「听声」，但用之前必须先拨开关选好今天是当喇叭（输出）还是当麦克风（输入）。</p>
+          <p><strong>一句话定义</strong>：<span class="inline-code">pinMode(引脚号, 模式)</span> 把某个 GPIO 引脚配置成指定方向，模式用 <span class="inline-code">OUTPUT</span>（输出）或 <span class="inline-code">INPUT</span>（输入）等常量。</p>
+          <p><strong>例子</strong>：<span class="inline-code">pinMode(4, OUTPUT)</span> 把 GPIO4 配成输出，之后才能用 digitalWrite 驱动 LED。</p>
+
+          <h3>2. 输出电平：digitalWrite 与 HIGH / LOW</h3>
+          <p><strong>生活类比</strong>：digitalWrite 像拉开关——拉上（HIGH）电灯亮，拉下（LOW）电灯灭。</p>
+          <p><strong>一句话定义</strong>：<span class="inline-code">digitalWrite(引脚, HIGH)</span> 让引脚输出高电平（ESP32 为 3.3V），<span class="inline-code">digitalWrite(引脚, LOW)</span> 输出低电平（0V）。</p>
+          <p><strong>例子</strong>：<span class="inline-code">digitalWrite(4, HIGH)</span> 后 GPIO4 对外是 3.3V，外接 LED 亮；写 LOW 灭。注意：<strong>输出高电平只有 3.3V，不是 5V</strong>，直接驱动 5V 外设会损坏引脚。</p>
+
+          <h3>3. 读输入：digitalRead 与悬空问题</h3>
+          <p><strong>生活类比</strong>：一根悬空的绳随风乱摆——引脚处于输入且没接任何东西时，电压是「浮空」的，读出来一会 1 一会 0，完全随机。</p>
+          <p><strong>一句话定义</strong>：<span class="inline-code">digitalRead(引脚)</span> 返回该引脚当前电平（HIGH 或 LOW）；输入引脚必须有确定的电平来源，否则结果不可信。</p>
+          <p><strong>例子</strong>：按键一端接引脚、另一端接 GND，引脚平时被上拉为 HIGH，按下被短接到 GND 变 LOW，digitalRead 才能稳定读到两种确定状态。</p>
+
+          <h3>4. 内部上拉：INPUT_PULLUP</h3>
+          <p><strong>生活类比</strong>：上拉电阻像给悬空绳子加一根「默认拉向上方」的橡皮筋——没人拽它时它稳稳在高处，有人拽（按键接地）才下来。</p>
+          <p><strong>一句话定义</strong>：<span class="inline-code">pinMode(引脚, INPUT_PULLUP)</span> 在芯片内部给引脚接一个约 45kΩ 的电阻到 3.3V，让引脚默认电平为高，省掉外部电阻。</p>
+          <p><strong>例子</strong>：<span class="inline-code">pinMode(15, INPUT_PULLUP)</span> 后，GPIO15 未按下时读到 HIGH，按下接地时读到 LOW。如果用普通 <span class="inline-code">INPUT</span>（浮空），读数会乱跳。</p>
+
+          <h3>5. 启动引脚避坑：GPIO6-11、GPIO0/2/15</h3>
+          <p><strong>生活类比</strong>：有些引脚是「多面手」，出厂就兼职别的工作——你把它们接外设，相当于让值班员同时干两份活，上电时就会出错。</p>
+          <p><strong>一句话定义</strong>：ESP32 的 <strong>GPIO6~GPIO11 被内部 Flash 芯片占用</strong>，严禁外接；<strong>GPIO0、GPIO2、GPIO15 与启动模式（下载模式选择）有关</strong>，烧录时若外接强驱动设备可能导致无法进入下载、反复重启。</p>
+          <p><strong>例子</strong>：本课选 GPIO4（LED）和 GPIO15（按键）作为演示引脚；GPIO15 属于启动相关引脚，做输入（高阻、靠上拉）通常没大问题，但若烧录异常，先拔掉 GPIO0/2/15 上的外设再烧。更稳的选择是 GPIO4 / GPIO16 / GPIO17。</p>
+          <h3>6. GPIO 矩阵 vs IO_MUX：为什么 ESP32 引脚「怎么引都行」</h3>
+          <p><strong>生活类比</strong>：老款单片机（51）像固定工位流水线，每个外设的线只能焊死在指定引脚上；ESP32 像一台电话交换机——内部有一张「GPIO 矩阵（GPIO Matrix）」开关网络，你想把任意外设信号接到任意空闲引脚，都能在软件里配通。</p>
+          <p><strong>一句话定义</strong>：ESP32 的引脚路由分两条路——<strong>IO_MUX</strong> 是固定功能的快速通道（某引脚原生就是某外设脚，路径最短、延迟最低）；<strong>GPIO Matrix</strong> 是可任意映射的交换矩阵，能把任何外设输入/输出信号接到任何 GPIO。Arduino 的 <span class="inline-code">pinMode</span> / <span class="inline-code">digitalWrite</span> 默认走 GPIO Matrix。</p>
+          <p><strong>例子</strong>：你可以把 LEDC PWM 输出绑到 GPIO4（<span class="inline-code">ledcAttachPin(4,0)</span>），也可以绑到 GPIO16——这就是 GPIO Matrix 在起作用；而 UART 的 TX/RX 走 IO_MUX 高速通道时最稳，所以串口默认固定在 GPIO1/GPIO3。</p>
+        </section>
+
+        <!-- ===== 三、原理介绍 ===== -->
+        <section>
+          <h2 id="sec-principle">三、原理介绍</h2>
+          <p>ESP32 的每个 GPIO 引脚内部都是一组可配置的模拟开关：设成输出时接到「推挽驱动器」，设成输入时驱动器断开、变成高阻探头。理解这两层电路，才能解释「为什么按键悬空会乱跳、为什么要用 INPUT_PULLUP、为什么 GPIO2 上电瞬间不能乱接」。</p>
+          <p>一次按键控制 LED 的完整链路：pinMode 配置方向 → 内部寄存器把引脚接到推挽驱动器或高阻态 → loop 里 digitalRead 读电平、digitalWrite 改变输出。</p>
+
+          <h3>原理 1：推挽输出——为什么 digitalWrite 能稳稳点亮 LED</h3>
+          <p>「推挽」是一对互补 MOS 管：上管（PMOS）把引脚连到 3.3V，下管（NMOS）把引脚连到 GND。<span class="inline-code">digitalWrite(HIGH)</span> 只开上管、<span class="inline-code">digitalWrite(LOW)</span> 只开下管——任何时刻引脚都被<strong>有源地</strong>连到某个电平，输出电阻只有几十 Ω，所以即使串了 LED 限流电阻也能稳稳驱动。对比：如果两个管子都关（高阻态），引脚电平就「飘」了——那就是输入态。</p>
+          <p><strong>关键数值</strong>：ESP32 GPIO 高电平 = 3.3V（不是 5V！），每脚最大输出/吸收电流约 12mA——这就是为什么 LED 要串 220~330Ω 限流电阻、为什么 GPIO 不能直接驱动继电器/电机（得加三极管或光耦）。</p>
+
+          <h3>原理 2：高阻输入与上拉电阻——为什么悬空电平会乱跳</h3>
+          <p>设成 INPUT 后，两个 MOS 管都关，引脚变成<strong>高阻态</strong>（几乎不取电流），内部只接一个电压比较探头去读电平。问题来了：高阻引脚什么都不接时，周围的电磁干扰、人体感应会在引脚上感应出随机电压——探头读到的就是忽高忽低的噪声，这叫「浮空」。</p>
+          <p><strong>上拉电阻的实质</strong>：在引脚与 3.3V 之间接一颗几十 kΩ 电阻，把悬空电平<strong>强行拉到确定的高电平</strong>；按键另一端接 GND，按下时才把引脚「拽低」。ESP32 内部集成了约 45kΩ 的可编程上拉，<span class="inline-code">pinMode(btnPin, INPUT_PULLUP)</span> 就是把它打开——所以本课按键不用外接电阻。<strong>这解释了为什么按下是 LOW</strong>：内部上拉平时维持 HIGH，按下接通 GND 才变 LOW。</p>
+
+          <h3>原理 3：启动引脚——为什么 GPIO0/2/15 上电瞬间不能乱动</h3>
+          <p>ESP32 上电时，ROM Bootloader 要靠几个引脚的<strong>上电电平</strong>决定启动模式：GPIO0 低 = 下载模式、高 = 正常启动；GPIO2、GPIO15 等也会被采样。这些脚内部只是弱上拉/下拉，若外接电路在程序跑起来之前就把电平拉偏（比如 LED 一直拉低），芯片可能误进下载模式或启动异常。<strong>这就是避坑表「避开 GPIO0/2/15、GPIO6~11」的根因</strong>——不是它们不能用，而是<strong>上电那一瞬间</strong>外部不能改变其电平；程序跑起来之后再用通常没事。</p>
+          <blockquote>记忆点：输出=推挽（上管接3.3V/下管接GND，有源驱动，3.3V/12mA）；输入=高阻探头，悬空必乱飘；上拉=把悬空强拉到高电平（内部45kΩ）；GPIO0/2/15/6~11 是启动/Flash 引脚，上电瞬间别接电路。</blockquote>
+        </section>
+
+        <!-- ===== 四、硬件接线说明 ===== -->
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <p>除板载 LED 外，再外接一颗 LED 与一个独立按键，按下表连接。</p>
+          <table>
+            <thead>
+              <tr><th>模块引脚</th><th>单片机引脚</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>外接 LED 正极（长脚）</td><td>GPIO4（经 220Ω 电阻）</td><td>电阻用于限流，约 5~10mA</td></tr>
+              <tr><td>外接 LED 负极（短脚）</td><td>GND</td><td>共地</td></tr>
+              <tr><td>按键一端</td><td>GPIO15</td><td>使用内部上拉，无需外部电阻</td></tr>
+              <tr><td>按键另一端</td><td>GND</td><td>按下时把 GPIO15 短接到地</td></tr>
+              <tr><td>板载 LED</td><td>LED_BUILTIN（默认 GPIO2）</td><td>板上已焊好，无需接线</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么这样接：</strong></p>
+          <ul>
+            <li><strong>为什么 LED 要串 220Ω 电阻？</strong> ESP32 输出 3.3V，LED 压降约 2V，电阻两端约 1.3V，串 220Ω 电流约 6mA，安全又够亮。不串电阻电流可超 20mA，损坏 LED 和引脚。</li>
+            <li><strong>为什么按键不用外部电阻？</strong> GPIO15 开了内部上拉（INPUT_PULLUP），芯片内部已经帮你接好「默认拉高」的电阻，省一颗 10kΩ。若用 INPUT 浮空，读数会乱跳。</li>
+            <li><strong>为什么必须共地？</strong> 所有回路（LED、按键）都要回到 ESP32 的 GND，否则电流无回路、信号不可靠。</li>
+          </ul>
+          <div class="tip-warn">
+            <span class="tip-label">避坑</span>
+            GPIO6~GPIO11 被内部 Flash 占用，严禁外接；GPIO0、GPIO2、GPIO15 与启动模式有关，烧录时若外接设备可能导致无法下载，建议优先使用 GPIO4 / GPIO16 / GPIO17 这类安全引脚。
+          </div>
+        </section>
+
+        <!-- ===== 五、完整代码 ===== -->
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p>下面是一个可直接烧录的完整 sketch：板载 LED 持续闪烁，按键按下时点亮外部 LED。Arduino 程序 = setup()（只跑一次）+ loop()（反复执行）。</p>
+          <pre><code class="language-cpp">/* ESP32 GPIO 演示：板载 LED 闪烁 + 按键控制外部 LED（零基础注释版） */
+const int ledPin = 4;        // 外部 LED 接 GPIO4（经 220Ω 限流电阻）
+const int btnPin = 15;       // 按键接 GPIO15，另一端接 GND（用内部上拉）
+
+void setup() {
+  pinMode(LED_BUILTIN, OUTPUT);    // 板载 LED 配成输出
+  pinMode(ledPin, OUTPUT);         // 外部 LED 配成输出
+  pinMode(btnPin, INPUT_PULLUP);   // 按键配成输入 + 内部上拉：按下为 LOW
+  Serial.begin(115200);            // 打开串口，波特率 115200
+  Serial.println("GPIO 测试就绪");
+}
+
+void loop() {
+  // --- 1) 板载 LED 以约 1Hz 闪烁（每 500ms 翻转一次） ---
+  digitalWrite(LED_BUILTIN, HIGH);
+  delay(500);
+  digitalWrite(LED_BUILTIN, LOW);
+  delay(500);
+
+  // --- 2) 读按键：按下点亮外部 LED，松开熄灭 ---
+  if (digitalRead(btnPin) == LOW) {      // 上拉输入下，LOW = 按下
+    digitalWrite(ledPin, HIGH);          // 点亮外部 LED
+    Serial.println("按键按下 -&gt; 外部 LED 亮");
+  } else {
+    digitalWrite(ledPin, LOW);           // 松开熄灭
+  }
+}</code></pre>
+          <p><strong>第二个实例：呼吸灯——用 GPIO4 输出「渐变亮度」（LEDC 软 PWM 预告，后续 PWM 课会细讲）</strong>：</p>
+          <pre><code class="language-cpp">/* GPIO 变体：呼吸灯（PWM 渐变，可单独新建一个草图烧录） */
+const int ledPin = 4;        // LED 接 GPIO4
+
+void setup() {
+  ledcSetup(0, 5000, 8);        // 配置通道0：5kHz、8位分辨率(0~255)
+  ledcAttachPin(ledPin, 0);     // 把 GPIO4 绑定到通道0
+}
+
+void loop() {
+  for (int d = 0; d &lt;= 255; d++) {   // 渐亮：占空比 0→255
+    ledcWrite(0, d);
+    delay(5);
+  }
+  for (int d = 255; d &gt;= 0; d--) {   // 渐灭：占空比 255→0
+    ledcWrite(0, d);
+    delay(5);
+  }
+}</code></pre>
+          <p>想把按键改成「按一下翻转一次」？在 loop 里检测到 LOW 后加 <span class="inline-code">delay(20)</span> 消抖、再读一次确认，然后用 <span class="inline-code">digitalWrite(ledPin, !digitalRead(ledPin))</span> 翻转，并等待松开——思路和 STM32 那篇完全一致。</p>
+        </section>
+
+        <!-- ===== 六、代码逐段讲解 ===== -->
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第 1 段：setup() 初始化（第 4~9 行）</h3>
+          <p><strong>在做什么：</strong> 程序上电后只执行一次：把三个引脚配好方向（两个输出、一个输入上拉），再打开串口。</p>
+          <p><strong>为什么这么写：</strong> Arduino 规定必须把「一次性初始化」放在 setup()：引脚方向必须在用之前确定，否则 digitalWrite 对没配方向的引脚无效；Serial.begin 不写的话串口打印会乱码或没输出。</p>
+          <p><strong>不写会怎样：</strong> 漏掉 pinMode，LED 不亮、按键读数乱跳；漏掉 Serial.begin，串口监视器收不到任何数据。</p>
+
+          <h3>第 2 段：板载 LED 闪烁（第 12~16 行）</h3>
+          <p><strong>在做什么：</strong> loop() 里先把板载 LED 点亮 500ms、熄灭 500ms，再继续往下执行按键逻辑。</p>
+          <p><strong>为什么这么写：</strong> 闪烁是验证「输出通路 + 下载链路」是否正常的快速手段；放在按键逻辑前面，即使按键没接好，也能先确认板子本身在正常工作。</p>
+          <p><strong>不写会怎样：</strong> 只有按键逻辑时，如果灯不亮你分不清是按键问题还是输出问题——先让一个灯规律闪烁是排错的好习惯。</p>
+
+          <h3>第 3 段：按键读输入（第 19~26 行）</h3>
+          <p><strong>在做什么：</strong> <span class="inline-code">digitalRead(btnPin) == LOW</span> 判断按键是否按下（上拉输入下按下=接地=LOW），按下点亮外部 LED 并打印，松开熄灭。</p>
+          <p><strong>为什么这么写：</strong> 按键另一端接 GND + 内部上拉，构成「平时高、按下低」的确定逻辑，digitalRead 结果可信；串口打印让你在电脑上看到按键事件，方便排错。</p>
+          <p><strong>不写会怎样：</strong> 如果用 INPUT 浮空模式，按键没按时引脚悬空，digitalRead 随机返回 HIGH/LOW，外部 LED 会无缘无故闪。</p>
+
+          <h3>第 4 段：loop() 的循环特性</h3>
+          <p><strong>在做什么：</strong> loop() 里的代码执行完会立即从头再执行，无限循环。</p>
+          <p><strong>为什么这么写：</strong> 这是 Arduino 的约定框架，相当于 51/STM32 里的 while(1)；用户只需写「一轮要做的事」，框架负责循环。</p>
+          <p><strong>不写会怎样：</strong> 不需要你写循环——但要意识到每个 delay(500) 都会阻塞 500ms，如果按键按得很快、正好撞在 delay 期间，可能要等半秒才响应，这是入门阶段可以接受的代价。</p>
+          <h3>第 5 段：寄存器 ↔ 驱动 API ↔ Arduino 函数三层对照（教材视角）</h3>
+          <p>ESP32 是「SDK 封装架构」——你写的 Arduino 函数底下，是乐鑫的 ESP-IDF 驱动层 API，再底下才是真刀真枪的硬件寄存器。教材要求看懂这三层关系：</p>
+          <table>
+            <thead>
+              <tr><th>你写的 Arduino 函数</th><th>底层 ESP-IDF 驱动 API</th><th>最终操作的硬件寄存器</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><span class="inline-code">pinMode(4, OUTPUT)</span></td><td><span class="inline-code">gpio_set_direction(GPIO_NUM_4, GPIO_MODE_OUTPUT)</span></td><td>GPIO 使能输出寄存器 + IO_MUX 功能选择位</td></tr>
+              <tr><td><span class="inline-code">digitalWrite(4, HIGH)</span></td><td><span class="inline-code">gpio_set_level(GPIO_NUM_4, 1)</span></td><td><span class="inline-code">GPIOn_OUT</span> 输出数据寄存器对应位置 1</td></tr>
+              <tr><td><span class="inline-code">digitalRead(15)</span></td><td><span class="inline-code">gpio_get_level(GPIO_NUM_15)</span></td><td><span class="inline-code">GPIOn_IN</span> 输入数据寄存器读位</td></tr>
+              <tr><td><span class="inline-code">pinMode(15, INPUT_PULLUP)</span></td><td><span class="inline-code">gpio_set_pull_mode(GPIO_NUM_15, GPIO_PULLUP_ONLY)</span></td><td>GPIO 上下拉使能寄存器对应位</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么这层对照重要</strong>：课程设计或面试被问「digitalWrite 到底干了什么」，标准答案就是「框架调 gpio_set_level，它去写 GPIOn_OUT 寄存器」。理解后，遇到 Arduino 函数不够用的场景，你知道可以直接调 ESP-IDF 的 <span class="inline-code">gpio_set_drive_capability</span> 等 API 去拧驱动强度。</p>
+        </section>
+
+        <!-- ===== 七、现象演示说明 ===== -->
+        <section>
+          <h2 id="sec-demo">七、现象演示说明</h2>
+          <ul>
+            <li><strong>现象 1</strong>：板载 LED 持续、均匀地以约 1Hz 闪烁，不受按键影响。</li>
+            <li><strong>现象 2</strong>：按住外接按键时，GPIO4 上的外部 LED 点亮；松手即灭。</li>
+            <li><strong>现象 3</strong>：打开串口监视器（115200），每次按下按键会打印一行 “按键按下 -&gt; 外部 LED 亮”。</li>
+          </ul>
+          <p><strong>可量化的验证方法：</strong></p>
+          <ul>
+            <li><strong>数闪烁</strong>：用手机秒表数板载 LED 10 次亮灭周期，应为约 10 秒（每次 500ms 亮 + 500ms 灭）。偏差大说明代码或烧录版本不是当前文件。</li>
+            <li><strong>改参数看变化</strong>：把两个 delay(500) 改成 delay(100)，闪烁应明显加快（约 5Hz）；改回 1000 则变慢——验证延时生效。</li>
+            <li><strong>验证输入</strong>：按 10 次按键，串口监视器应恰好打印 10 行 “按键按下” ——若一次打印多行，说明按键抖动，需要在 if 内加 <span class="inline-code">delay(20)</span> 消抖或用 <span class="inline-code">millis()</span> 判断稳定时长。</li>
+            <li><strong>万用表量电平</strong>：GPIO4 输出高时对 GND 约 3.3V、低时接近 0V；GPIO15 松开时约 3.3V、按下时约 0V。</li>
+          </ul>
+        </section>
+
+        <!-- ===== 八、常见报错排查方案 ===== -->
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>LED 完全不亮</td><td>正负极接反 / 限流电阻太大 / 引脚选错 / 没写 pinMode</td><td>对调 LED 长短脚；确认阳极经电阻接到 GPIO；万用表测引脚电压是否 3.3V；确认 setup 里有 pinMode(ledPin, OUTPUT)</td></tr>
+              <tr><td>LED 一直微亮不熄灭</td><td>输出模式配错或引脚悬空</td><td>检查 pinMode 是否为 OUTPUT；确认阴极确实接到 GND</td></tr>
+              <tr><td>按键读数一直乱跳</td><td>没开 INPUT_PULLUP 也没外部上下拉，引脚悬空</td><td>pinMode 改为 INPUT_PULLUP，或外接 10kΩ 上拉到 3.3V</td></tr>
+              <tr><td>按一次键串口打印好几行</td><td>机械按键抖动</td><td>检测到 LOW 后加 20ms 延时再读一次，或记录上次状态只在跳变时动作</td></tr>
+              <tr><td>烧录后板子反复重启 / 进不了程序</td><td>外接设备占用了 GPIO0 / GPIO2 / GPIO15 等启动引脚</td><td>烧录前把这些引脚上的外设拔掉，烧完再接回；或改用 GPIO4 / GPIO16 / GPIO17</td></tr>
+              <tr><td>串口打印乱码</td><td>波特率不匹配 / 串口被占用</td><td>串口监视器右下角波特率选 115200 与代码一致；关闭其他占用该 COM 口的软件</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <!-- ===== 九、课后练习与延伸 ===== -->
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（改引脚）：</strong> 把外部 LED 从 GPIO4 改到 GPIO16，按键从 GPIO15 改到 GPIO17。提示：只改代码里 <span class="inline-code">const int ledPin = 4;</span> 和 <span class="inline-code">const int btnPin = 15;</span> 两行，接线同步换，注意 GPIO6-11 不能用。</p>
+          <p><strong>练习 2（改功能）：</strong> 改成「按一下外部 LED 状态翻转、再按再翻」，而不是按住才亮。提示：加 20ms 消抖 + 确认后 <span class="inline-code">digitalWrite(ledPin, !digitalRead(ledPin))</span> + 等待松开的循环，三段缺一不可。</p>
+          <p><strong>练习 3（扩展功能）：</strong> 用按键控制板载 LED 的闪烁速度（每按一次，delay 在 200/500/1000 之间切换一档）。提示：用一个全局变量记录当前档位，按键有效后改变 delay 值。</p>
+          <p><strong>延伸学习：</strong></p>
+          <ul>
+            <li><a href="#xxx" data-placeholder>WiFi 连接 STA 模式：让 ESP32 上网（esp32-wifi.html）</a></li>
+            <li><a href="#xxx" data-placeholder>蓝牙串口透传：手机无线控制 LED（esp32-bluetooth.html）</a></li>
+            <li><a href="#xxx" data-placeholder>用 millis() 做非阻塞延时（占位）</a></li>
+          </ul>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="esp32-env.html" class="btn btn-outline btn-sm">← 上一篇：Arduino IDE 环境搭建</a>
+          <a href="esp32-wifi.html" class="btn btn-outline btn-sm">下一篇：WiFi 连接 STA 模式 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - I2C 总线与 24C02 掉电存储</title>
+  <meta name="description" content="51 I2C 通信零基础教程：SCL/SDA 时序、起始停止条件、应答、从机地址，软件 I2C 读写 24C02 EEPROM 实现掉电保存。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link active" aria-current="page">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>I2C 总线与 24C02 掉电存储</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：51 单片机</span>
+          <span class="badge badge-orange">进阶</span>
+          <span class="badge badge-gray">更新：2026-10-25</span>
+        </div>
+
+        <p class="text-secondary mb-6">教材「串行总线扩展」章节重点：I2C 只用 SCL、SDA 两根线就能挂几十颗芯片。本课以 24C02 EEPROM 为例，把起始/停止、应答、从机地址、读写时序讲透，实现「断电不丢数据」的掉电保存。</p>
+
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>看懂 I2C 的起始/停止条件、应答位、7 位从机地址的构成。</li>
+            <li>写出软件 I2C 的起始、停止、写字节、读字节四个基础函数。</li>
+            <li>用 24C02 实现「写一个字节 → 断电 → 重新上电读出来」，理解掉电存储。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识（对应学习路线阶段 2）：</strong></p>
+          <ul>
+            <li><a href="mcu51-led.html">IO 口方向与电平</a>：SDA 既输出又输入，需要切换方向。</li>
+            <li><a href="c-bitwise-macro.html">位运算</a>：移位收发、拼地址。</li>
+            <li><a href="mcu51-ds18b20.html">DS18B20 单总线</a>（可选）：本课是另一种「串行总线」的对照。</li>
+          </ul>
+          <p><strong>本课会出现的新名词：</strong>I2C、SCL/SDA、起始/停止条件、应答 ACK/NACK、7 位从机地址、EEPROM、页写、随机读。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. I2C 的两根线：时钟线与数据线</h3>
+          <p><strong>生活类比</strong>：SCL 是「节拍器」（时钟，规定什么时候说话），SDA 是「传话的线」（数据）。所有芯片听同一个节拍器，在规定的拍点上放数据或取数据，就不会乱。</p>
+          <p><strong>一句话定义</strong>：I2C（Inter-Integrated Circuit）用两根线：<strong>SCL</strong>（时钟，由主机控制）和 <strong>SDA</strong>（数据，双向）。两者都要接上拉电阻（如 4.7kΩ 到 VCC）——因为 I2C 也是开漏结构，高电平靠上拉。一根总线上最多挂 128 个从机（7 位地址）。</p>
+          <p><strong>例子</strong>：24C02、OLED(SSD1306)、温湿度传感器都常用 I2C——学一次 I2C，后面这些都能玩。</p>
+
+          <h3>2. 起始与停止条件：数据有效窗口</h3>
+          <p><strong>一句话定义</strong>：<strong>起始条件</strong>：SCL 高电平时，SDA 由高变低（先 SDA 后 SCL 的下降沿组合）；<strong>停止条件</strong>：SCL 高电平时，SDA 由低变高。这两个「特殊组合」告诉总线上所有器件：通信开始了 / 结束了。<strong>数据有效性</strong>：SDA 上的数据必须在 SCL 高电平期间保持稳定，只在 SCL 低电平时才能变化。</p>
+          <p><strong>例子</strong>：起始后先发从机地址 + 写位，地址对上的从机才回应答——这是寻址的第一步。</p>
+
+          <h3>3. 应答 ACK：每发 8 位，听一声回应</h3>
+          <p><strong>生活类比</strong>：你说一句话，对方应一声「嗯」表示听到了——每传完 8 个数据位，接收方要拉低 SDA 一个时钟周期作为<strong>应答</strong>（ACK）。主机发完地址/数据后，从机应答；主机读数据时，主机用 ACK 表示「继续读」、NACK 表示「读完了，结束」。</p>
+          <p><strong>一句话定义</strong>：第 9 个时钟周期是应答位：接收方拉低 = ACK（正常），保持高 = NACK（异常或结束）。代码里 <span class="inline-code">i2c_ack()</span> 释放 SDA 后采样，读到 0 表示应答成功。</p>
+
+          <h3>4. 从机地址：总线上的「门牌号」</h3>
+          <p><strong>一句话定义</strong>：每个 I2C 器件有固定 7 位地址 + 可配置引脚。24C02 的地址是 <span class="inline-code">1010 A2 A1 A0</span>（A2/A1/A0 是器件引脚电平，一般接地为 0），所以 24C02 默认地址 = <span class="inline-code">0xA0</span>（写方向：地址左移 1 位补 0）。读方向用 <span class="inline-code">0xA1</span>。</p>
+          <p><strong>例子</strong>：<span class="inline-code">0xA0</span> = <span class="inline-code">1010 000 0</span>：前 4 位器件类型、中间 3 位引脚地址、最后 1 位读写方向。记住「写 A0、读 A1」就够入门。</p>
+
+          <h3>5. EEPROM 与掉电存储</h3>
+          <p><strong>一句话定义</strong>：RAM 断电丢数据；EEPROM（电可擦除可编程只读存储器）<strong>断电保存</strong>，适合存配置、计数值。24C02 容量 2Kbit = 256 字节，内部按 8 字节一页组织，支持<strong>页写</strong>（一次写 8 字节）和<strong>随机读</strong>。写入后需要等待 5ms 左右的内部写周期才能再操作。</p>
+          <p><strong>例子</strong>：把秒表的计数存在 24C02，断电重启后读回继续数——这就是「记忆功能」。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-principle">三、原理介绍：I2C 只用两根线，怎么既同步时钟又区分收发双方</h2>
+          <p>24C02 是 I2C 接口的 EEPROM（2Kbit=256 字节，断电保存）。51 没有硬件 I2C，用普通 IO 按时序手动翻转 SCL/SDA 即可。</p>
+          <p><strong>写一字节到 0x10：</strong>起始 → 0xA0(地址+写) → ACK → 内存地址0x10 → ACK → 数据 → ACK → 停止 → 等≥5ms 内部写周期。</p>
+          <p><strong>随机读 0x10：</strong>起始→0xA0→ACK→发0x10→ACK（伪写定位地址）→ 重起始→0xA1(读)→ACK → 读一字节→主机回NACK→停止。</p>
+
+          <h3>原理 1：为什么 I2C 是两根线、还都要上拉——开漏总线</h3>
+          <p>I2C 只用两根线：<strong>SCL（时钟线，主机统一产生）</strong>和 <strong>SDA（数据线，双向）</strong>。和单总线一样，两根线都是<strong>开漏结构</strong>——任何器件（主机或从机）都只能把线拉低，高电平全靠外接 4.7kΩ 上拉电阻。<strong>这就是「多设备挂同一条总线不打架」的原因</strong>：大家都只会拉低、没人硬推高，绝不可能两个器件一个推高一个拉低造成短路。想传 1 就「松手」让上拉拉高，想传 0 就拉低——这是 I2C 和单总线共同的物理基础，也是两根线都必须接上拉的原因。</p>
+
+          <h3>原理 2：起始/停止条件为什么要「SCL 高电平期间动 SDA」</h3>
+          <p>I2C 规定：<strong>SCL 高电平期间，SDA 必须稳定不动</strong>（这时 SDA 上的电平才是有效数据）；唯一例外是两种特殊信号：</p>
+          <ul>
+            <li><strong>起始条件(START)</strong>：SCL 还是高电平时，SDA 从高拉到低——这一下告诉所有从机「要开始了」。</li>
+            <li><strong>停止条件(STOP)</strong>：SCL 高电平时，SDA 从低拉到高——告诉从机「通信结束，总线释放」。</li>
+          </ul>
+          <p><strong>为什么要这样规定</strong>：把「SCL 高电平期间 SDA 变动」专门保留给开始/结束信号，正常数据传输就约定「SCL 高电平期间 SDA 不许动」——两者泾渭分明，从机不会把数据跳变误认成起始/停止。这和 LCD1602「E 高脉冲沿锁存」是同一种「约定采样时刻」的同步思想。</p>
+
+          <h3>原理 3：每发完一个字节为什么要等一个 ACK</h3>
+          <p>I2C 每传完 8 位，主机在第 9 个时钟<strong>释放 SDA</strong>，让接收方来回答：从机收到这一字节后，必须在第 9 个时钟把 SDA <strong>拉低</strong>——这就是 <strong>ACK（应答）</strong>。主机靠「第 9 拍读到 SDA 低」确认：这个从机在线、听懂了、接收到了。<strong>没收到 ACK</strong>（SDA 仍为高）说明从机没应答——地址错了或线没接好，主机应立即发 STOP 退出。<strong>读的时候反过来</strong>：主机读完一个字节，若还想再读就回 ACK 说「继续」；读完了就回 <strong>NACK</strong>（不拉低）告诉从机「读完了、别再发」——这就是随机读末尾主机发 NACK 的原因。</p>
+
+          <h3>原理 4：随机读为什么要先「伪写」一次</h3>
+          <p>读 EEPROM 得先告诉它「读内部哪个地址」。但读指令帧本身不带内存地址，怎么办？I2C 的办法是<strong>先做一次伪写</strong>：发起始+写地址+内存地址 0x10（其实一个字节都不写），把 24C02 内部的「地址指针」挪到 0x10；然后<strong>不发停止、直接重起始</strong>，补发读方向 0xA1，24C02 就从指针指向的 0x10 往外吐数据。<strong>为什么中间不能发停止再重来</strong>：发了停止，从机会释放总线、内部指针归位；重起始(repeated start)既通知「换方向」又不结束会话，指针才保持住——这就是随机读比顺序写多一步的全部原因。</p>
+          <blockquote>记忆点：I2C 两根线(SCL时钟/SDA数据)都是开漏、都要上拉；SCL高电平期间SDA不许动，只有此时SDA跳变才算起始/停止；每字节后第9拍接收方拉低SDA=ACK，读完发NACK收尾；随机读=先伪写定位地址、再重起始切读方向。</blockquote>
+        </section>
+
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <p>24C02 有 8 个引脚，实际用到 5 个：</p>
+          <table>
+            <thead>
+              <tr><th>模块引脚</th><th>单片机引脚</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>SCL</td><td>P3.6</td><td>时钟线，接 4.7kΩ 上拉到 VCC</td></tr>
+              <tr><td>SDA</td><td>P3.7</td><td>数据线，接 4.7kΩ 上拉到 VCC（注意别与 DS18B20 同用）</td></tr>
+              <tr><td>VCC / GND</td><td>5V / GND</td><td>供电并共地</td></tr>
+              <tr><td>A0/A1/A2</td><td>接地</td><td>地址引脚全接 GND → 从机地址 0xA0</td></tr>
+              <tr><td>WP（写保护）</td><td>接地</td><td>接 GND 允许写入；接 VCC 只读</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么两根线都要上拉</strong>：和单总线一样，I2C 是开漏结构，任何器件只能主动拉低 SDA/SCL，高电平全靠上拉电阻——缺上拉，通信必然失败。这是 I2C 接线的第一原则。</p>
+          <div class="tip-warn mt-4"><span class="tip-label">避坑</span>
+            24C02 引脚顺序（常见 SOP-8）：1=A0、2=A1、3=A2、4=GND、5=SDA、6=SCL、7=WP、8=VCC。WP 悬空或接 VCC 会导致「写不进去」，务必接 GND；Proteus 里元件 <span class="inline-code">24C02C</span> 引脚含义相同。</div>
+        </section>
+
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p>软件 I2C 全套 + 24C02 写读验证：写 0x10 地址存 0x5A，读回，相同则串口打印 OK。</p>
+          <pre><code class="language-c">/* 软件 I2C 读写 24C02（串口输出验证，9600） */
+#include &lt;reg52.h&gt;
+
+sbit SCL = P3^6;                 /* 时钟线 */
+sbit SDA = P3^7;                 /* 数据线 */
+
+void delay_us(unsigned int us) { while (us--); }
+void delay_ms(unsigned int ms) {
+    unsigned int i, j;
+    for (i = 0; i &lt; ms; i++)
+        for (j = 0; j &lt; 120; j++);
+}
+
+/* ---- I2C 四个基础函数 ---- */
+void i2c_start(void) {           /* 起始：SCL=H 时 SDA 变低 */
+    SDA = 1; SCL = 1;
+    delay_us(5);
+    SDA = 0;                     /* SDA 先拉低 */
+    delay_us(5);
+    SCL = 0;                     /* 再拉低 SCL 准备传数据 */
+}
+
+void i2c_stop(void) {            /* 停止：SCL=H 时 SDA 变高 */
+    SDA = 0; SCL = 1;
+    delay_us(5);
+    SDA = 1;                     /* SDA 拉高 */
+    delay_us(5);
+}
+
+/* 发送一个字节，返回应答（0=ACK 正常） */
+unsigned char i2c_write_byte(unsigned char dat) {
+    unsigned char i, ack;
+    for (i = 0; i &lt; 8; i++) {
+        SCL = 0;
+        if (dat &amp; 0x80) SDA = 1; else SDA = 0;  /* 高位先发 */
+        delay_us(2);
+        SCL = 1;                 /* 数据在 SCL 高电平期间被采样 */
+        delay_us(2);
+        dat &lt;&lt;= 1;
+    }
+    SCL = 0;
+    SDA = 1;                     /* 释放 SDA 交给从机应答 */
+    delay_us(2);
+    SCL = 1;
+    delay_us(2);
+    ack = SDA;                   /* 采样应答位 */
+    SCL = 0;
+    return ack;
+}
+
+/* 读取一个字节；ack=0 发 ACK（继续读），ack=1 发 NACK（结束） */
+unsigned char i2c_read_byte(unsigned char ack) {
+    unsigned char i, dat = 0;
+    SDA = 1;                     /* 释放 SDA，改为输入 */
+    for (i = 0; i &lt; 8; i++) {
+        SCL = 0;
+        delay_us(2);
+        SCL = 1;
+        delay_us(2);
+        dat &lt;&lt;= 1;
+        if (SDA) dat |= 0x01;    /* 高位先收 */
+    }
+    SCL = 0;
+    if (ack) SDA = 1; else SDA = 0;   /* 发 ACK 或 NACK */
+    delay_us(2);
+    SCL = 1;
+    delay_us(2);
+    SCL = 0;
+    SDA = 1;
+    return dat;
+}
+
+/* ---- 24C02 应用层 ---- */
+/* 写一个字节到地址 addr */
+void ee_write_byte(unsigned char addr, unsigned char dat) {
+    i2c_start();
+    i2c_write_byte(0xA0);        /* 从机地址 + 写方向 */
+    i2c_write_byte(addr);        /* 内存地址 */
+    i2c_write_byte(dat);         /* 数据 */
+    i2c_stop();
+    delay_ms(6);                 /* 等待内部写周期完成 */
+}
+
+/* 从地址 addr 读一个字节（随机读） */
+unsigned char ee_read_byte(unsigned char addr) {
+    unsigned char dat;
+    i2c_start();
+    i2c_write_byte(0xA0);        /* 伪写：先定位地址 */
+    i2c_write_byte(addr);
+    i2c_start();                 /* 重起始 */
+    i2c_write_byte(0xA1);        /* 读方向 */
+    dat = i2c_read_byte(1);      /* 读一字节，NACK 结束 */
+    i2c_stop();
+    return dat;
+}
+
+void uart_init(void) {           /* 9600 @11.0592MHz */
+    SCON = 0x50;
+    TMOD |= 0x20;
+    TH1 = 0xFD; TL1 = 0xFD;
+    TR1 = 1;
+}
+
+void uart_putc(unsigned char c) {
+    SBUF = c; while (!TI); TI = 0;
+}
+
+void main(void) {
+    unsigned char w = 0x5A, r;
+    uart_init();
+    ee_write_byte(0x10, w);      /* 写入地址 0x10 */
+    r = ee_read_byte(0x10);      /* 读回 */
+    if (r == w) {
+        uart_putc('O'); uart_putc('K');
+    } else {
+        uart_putc('X');
+    }
+    while (1);
+}</code></pre>
+
+          <p><strong>第二实例：断电记忆的「开机次数计数器」</strong>。EEPROM 最大的价值是掉电不丢——这个变体把开机次数存在 24C02 地址 0x00：每次上电读出来 +1、写回去，再串口打印。拔掉电源再插上，数字会继续往上累加（存在 RAM 里的变量早就归零了）：</p>
+          <pre><code class="language-c">/* 开机计数器：断电不丢，次数存在 EEPROM 0x00 */
+/* 复用上面的 i2c_start/stop/write_byte/read_byte/ee_write_byte/ee_read_byte */
+void main(void) {
+    unsigned char cnt;
+    uart_init();
+    cnt = ee_read_byte(0x00);   /* 读上次保存的次数 */
+    cnt++;                      /* 本次开机 +1 */
+    ee_write_byte(0x00, cnt);   /* 写回保存 */
+    /* 串口把次数打印出来（个位/十位拆开，省略百位以上） */
+    uart_putc('0' + cnt / 10);
+    uart_putc('0' + cnt % 10);
+    uart_putc('\n');
+    while (1);                  /* 完成，不循环读写 */
+}</code></pre>
+          <p><strong>为什么这体现了 EEPROM 的价值</strong>：普通变量存在 RAM，每次上电都从 0 开始，永远数到 1；而这里 cnt 从 EEPROM 读出来是「上次的值」，+1 再写回，断电也累加。<strong>坑</strong>：<span class="inline-code">ee_write_byte</span> 内部已带 6ms 等待内部写周期，写完别马上读——否则可能读到旧值。这就是「存配置、存累计时间」类产品的底层模型。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第一段：起始/停止的先后顺序</h3>
+          <p>起始条件要求「SCL 高时 SDA 由高变低」，所以 <span class="inline-code">SDA=1; SCL=1; SDA=0;</span> 顺序不能乱；停止反之。<strong>为什么要有这些「特殊组合」</strong>：平时 SDA 只能在 SCL 低电平时变化，起始/停止就是故意在 SCL 高电平时动 SDA，让所有从机识别出「这不是数据，是命令」。</p>
+
+          <h3>第二段：写字节的数据采样点</h3>
+          <p>循环里先 <span class="inline-code">SCL=0</span>（此时 SDA 可以变化），放好数据位后 <span class="inline-code">SCL=1</span>，从机在 SCL 高电平时采样——<strong>先变数据、再抬时钟</strong> 的顺序保证数据稳定。8 位发完，第 9 拍释放 SDA 读应答。<span class="inline-code">ack = SDA;</span> 读到 0 表示从机「收到」。</p>
+
+          <h3>第三段：读字节的反向操作</h3>
+          <p>主机释放 SDA 变输入，每拍 SCL 高时采样 <span class="inline-code">if (SDA) dat |= 0x01;</span>，最后按参数发 ACK/NACK。<strong>为什么读最后一个字节要 NACK</strong>：发 ACK 表示「我还要读」，发 NACK 告诉从机「到此为止」——少发 NACK 会让从机一直发送或总线挂死。</p>
+
+          <h3>第四段：随机读的「伪写 + 重起始」</h3>
+          <p>读之前先写一次地址（伪写），再用<strong>重起始</strong>切到读方向 0xA1。<strong>为什么不能直接 0xA1</strong>：EEPROM 需要先知道「读哪个地址」，伪写就是去设这个地址；重起始是 I2C 标准允许的「一帧内换方向」手法。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-demo">七、现象演示与验证</h2>
+          <ul>
+            <li><strong>写入读回</strong>：串口打印 <span class="inline-code">OK</span>，说明 0x10 地址写入 0x5A 并成功读回。</li>
+            <li><strong>掉电保持</strong>：断电重新上电，程序改成只读不写（注释掉 ee_write_byte），仍打印 OK——数据还在，这就是 EEPROM 的价值。</li>
+          </ul>
+          <p><strong>验证方法：</strong></p>
+          <ol>
+            <li>把读回比较改成故意读写不同值（写 0x5A 读 0x5B），打印 X——证明比较逻辑真实有效。</li>
+            <li>把上拉电阻拔掉，通信失败打印 X——亲手验证 I2C 必须有上拉。</li>
+            <li>改 A0 引脚接 VCC（地址变 0xA2），程序仍用 0xA0 会失败——验证从机地址的作用。</li>
+          </ol>
+        </section>
+
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>写读结果不一致 / 读回全 FF</td><td>WP 接了高电平（写保护）/ 地址引脚配置与 0xA0 不符</td><td>WP 接 GND；A0~A2 接地则地址 0xA0</td></tr>
+              <tr><td>应答位一直读到 1（NACK）</td><td>从机地址错 / SDA 没上拉 / 器件没供电</td><td>核对 0xA0 与引脚；量 SDA 静态高电平；确认 VCC/GND</td></tr>
+              <tr><td>起始后总线卡死</td><td>时序顺序错：在 SCL 高时乱动 SDA</td><td>严格按「SCL=0 时才允许 SDA 变化」重写时序函数</td></tr>
+              <tr><td>写入后立刻读不到</td><td>没等内部写周期（需 ≥5ms）</td><td>写操作后加 <span class="inline-code">delay_ms(6)</span></td></tr>
+              <tr><td>读多字节时数据错乱</td><td>最后一字节没发 NACK / ACK 逻辑反了</td><td>倒数第二个字节发 ACK、最后一个发 NACK</td></tr>
+              <tr><td>与 OLED 等设备共用总线冲突</td><td>多个器件地址重复或总线被某器件拉死</td><td>确认各器件地址不同；某器件故障时逐颗断开排查</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（必做）</strong>：把 0x10 地址存的数据改成 8 字节数组（页写/循环写），验证 <span class="inline-code">ee_write_byte</span> 连续调用即可。</p>
+          <p><strong>练习 2</strong>：结合上一课秒表：每秒把计数写入 24C02，断电重启后读回继续计——完成「掉电记忆秒表」。</p>
+          <p><strong>练习 3（进阶）</strong>：把 I2C 四个基础函数封装成头文件 <span class="inline-code">i2c.h</span>，移植到 STM32（用 <a href="stm32-i2c-oled.html">STM32 I2C/OLED 教程</a> 对照硬件 I2C），对比软件/硬件 I2C 的异同。</p>
+          <p><strong>延伸学习</strong>：I2C 学会了，OLED、RTC 时钟这类 I2C 器件都能玩；接下来学 <a href="mcu51-adc.html">ADC0832 模拟量采集</a>，把「数字世界读模拟电压」补上，教材外设就集齐了。</p>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="mcu51-expansion.html" class="btn btn-outline btn-sm">← 上一篇：74HC573 总线扩展与 IO 复用</a>
+          <a href="mcu51-adc.html" class="btn btn-outline btn-sm">下一篇：ADC 模拟量采集 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

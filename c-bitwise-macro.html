@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - 位运算与宏定义（单片机核心技能）</title>
+  <meta name="description" content="C 语言位运算与宏定义零基础精讲：二进制/十六进制、与或非异或移位、置位清零翻转读位技巧、#define 宏与头文件组织。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link active" aria-current="page">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>位运算与宏定义（单片机核心技能）</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：C 语言基础</span>
+          <span class="badge badge-orange">进阶</span>
+          <span class="badge badge-gray">更新：2026-10-25</span>
+        </div>
+
+        <p class="text-secondary mb-6">单片机编程的「看家本领」：所有寄存器配置、引脚控制、数据拼接拆解都靠位运算。本课把二进制/十六进制、五个位运算符和置位/清零/翻转/读位四个经典技巧讲透，并学会用宏定义让代码像读说明书。</p>
+
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>在二进制与十六进制之间熟练换算，看懂 <span class="inline-code">0xFC</span>、<span class="inline-code">0b11110000</span> 这类写法。</li>
+            <li>写出「把某位置 1 / 清零 / 翻转 / 读出某位」的代码，并解释每步为什么。</li>
+            <li>用 <span class="inline-code">#define</span> 定义引脚和常量，写出可读性好的头文件。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识：</strong></p>
+          <ul>
+            <li>上一课：变量、数组、<span class="inline-code">for</span> 循环。</li>
+            <li>会用 <a href="tools.html">在线工具-进制转换器</a> 辅助换算（本课鼓励手算 + 工具互验）。</li>
+          </ul>
+          <p><strong>本课会出现的新名词：</strong>二进制、十六进制、位、掩码、按位与/或/异或/取反/移位、宏定义、头文件。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. 二进制、十六进制：计算机只认 0 和 1</h3>
+          <p><strong>生活类比</strong>：电灯开关只有「开/关」两种状态，8 个开关排成一排就是 8 位二进制——每一位非 0 即 1。十六进制是把 4 位二进制压缩成 1 个符号（0000~1111 → 0~F），就像把电话号码分段记，写起来短。</p>
+          <p><strong>一句话定义</strong>：单片机里 <span class="inline-code">P1</span> 端口就是 8 个引脚，对应 8 位二进制；<span class="inline-code">0xFC</span> 是十六进制写法，等于二进制 <span class="inline-code">1111 1100</span>，表示 P1.0、P1.1 输出 0（共地接法下这两颗灯亮）。<strong>换算方法</strong>：每 4 位一组，<span class="inline-code">1111</span>=F、<span class="inline-code">1100</span>=C。</p>
+          <p><strong>例子</strong>：<span class="inline-code">0xFE</span> → <span class="inline-code">1111 1110</span>（最低位 0）；<span class="inline-code">0b00001111</span> → <span class="inline-code">0x0F</span>。练熟 <span class="inline-code">0x01/0x02/0x04/0x08/0x10/0x20/0x40/0x80</span> 这 8 个「单 1」十六进制数，流水灯和寄存器操作就通了一半。</p>
+
+          <h3>2. 按位与 &amp;：两位都是 1 结果才 1</h3>
+          <p><strong>生活类比</strong>：两个安检员一起检查，只有两人都说「通过」才放行。&amp; 常用于「把某些位清零（过滤）」，即<strong>掩码</strong>。</p>
+          <p><strong>一句话定义</strong>：<span class="inline-code">a &amp; b</span> 逐位比较：都是 1 → 1，否则 → 0。经典口诀「和 1 与，保留原样；和 0 与，必得 0」。</p>
+          <p><strong>例子</strong>：<span class="inline-code">P1 &amp; 0x0F</span> 只保留低 4 位（高 4 位清零）：若 P1=0xAB，结果 0x0B。</p>
+
+          <h3>3. 按位或 |：一个为 1 结果就 1</h3>
+          <p><strong>生活类比</strong>：会议室「有一个人举手就算通过」。</p>
+          <p><strong>一句话定义</strong>：<span class="inline-code">a | b</span> 逐位比较：有一个 1 就是 1。口诀「和 1 或，必得 1；和 0 或，保留原样」，用于<strong>把某些位置 1 且不动其他位</strong>。</p>
+          <p><strong>例子</strong>：<span class="inline-code">P1 |= 0x01;</span> 把第 0 位置 1，其余位不受影响。</p>
+
+          <h3>4. 按位异或 ^ 与取反 ~</h3>
+          <p><strong>一句话定义</strong>：<span class="inline-code">a ^ b</span> 两位不同才得 1（0^1=1、1^0=1、0^0=0、1^1=0），用于<strong>翻转某位</strong>：<span class="inline-code">P1 ^= 0x01;</span> 把第 0 位 0 变 1、1 变 0。<span class="inline-code">~a</span> 把每一位取反（0 变 1、1 变 0），常配合 &amp; 做「清零某个位」：<span class="inline-code">P1 &amp;= ~0x01;</span> 把第 0 位清零且不动其他位。</p>
+          <p><strong>例子</strong>：<span class="inline-code">0xF0 ^ 0x0F</span> = 0xFF（全部翻转）；<span class="inline-code">~0x01</span> = 0xFE。</p>
+
+          <h3>5. 移位 &lt;&lt; &gt;&gt;：把位挪位置</h3>
+          <p><strong>生活类比</strong>：8 个开关整排往左挪一格，最右边空出的位补 0。左移 1 位等价「乘 2」，右移 1 位等价「除 2」（无符号数）。</p>
+          <p><strong>一句话定义</strong>：<span class="inline-code">a &lt;&lt; n</span> 所有位左移 n 位，右边补 0；<span class="inline-code">a &gt;&gt; n</span> 右移 n 位。流水灯的核心就是 <span class="inline-code">P1 = 0xFE &lt;&lt; i;</span> 让唯一一个 0 往左跑。</p>
+          <p><strong>例子</strong>：<span class="inline-code">1 &lt;&lt; 3</span> = <span class="inline-code">0x08</span>——这就是「第 3 位」的标准写法，寄存器操作到处用。</p>
+
+          <h3>6. 宏定义 #define：给常量起名字</h3>
+          <p><strong>生活类比</strong>：协议里写着「第 3 号协议」，不如直接写「登录协议」——<span class="inline-code">#define LOGIN_PROTOCOL 3</span> 就是给数字起外号，以后代码里写外号，编译器会先把外号替换回数字。</p>
+          <p><strong>一句话定义</strong>：<span class="inline-code">#define 名字 值</span> 是<strong>编译前纯文本替换</strong>，不是变量！它不占内存、没有类型。单片机里常用于：引脚别名（<span class="inline-code">#define LED P1^0</span>）、常量（<span class="inline-code">#define FOSC 11059200UL</span>）、以及「带参宏」：<span class="inline-code">#define SET_BIT(x, n) ((x) |= (1 &lt;&lt; (n)))</span>。</p>
+          <p><strong>例子</strong>：<span class="inline-code">#define LED_PIN P1^0</span> 后写 <span class="inline-code">LED_PIN = 0;</span>；但注意宏参数必须加括号，<span class="inline-code">#define MUL(a,b) a*b</span> 遇到 <span class="inline-code">MUL(1+2, 3)</span> 会变成 <span class="inline-code">1+2*3</span>=7 而不是 9——所以带参宏永远写 <span class="inline-code">((a)*(b))</span>。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-principle">三、原理介绍：为什么改寄存器的某一位，必须靠「与或非」而不是直接赋值</h2>
+          <p>51 的寄存器（TMOD/TCON/SCON…）都是<strong>一个字节 8 位、每位各管一件事</strong>：比如 TCON 第 4 位=TR0(启动定时器0)、第 5 位=TF0(溢出标志)、第 0 位=IT0……它们挤在同一个字节里共用地址。这就引出了单片机编程最核心的机制问题。</p>
+
+          <h3>原理 1：为什么绝不能 <span class="inline-code">TCON=0x10</span> 整体赋值</h3>
+          <p>你只想「启动定时器 0」（把第 4 位写成 1）。如果直接 <span class="inline-code">TCON = 0x10;</span>，意思是「把整个字节写成 00010000」——结果第 0、1、2 位(IT0/IE0 等别的功能)被你一并写成了 0，原本配好的外部中断设置全被冲掉。<strong>这就是「共享位域」的代价：一个字节是多个功能位合租的房间，你不能整张桌子掀了重摆</strong>。必须做到「只动目标那一位、其它七位原封不动」——能做到这点的，就是位运算。</p>
+
+          <h3>原理 2：&amp; | ~ 怎么做到「只动一位、保住其它位」——掩码机制</h3>
+          <p>关键在于构造一个<strong>掩码(mask)</strong>：想动第 4 位，就拿一个「只有第 4 位是 1、其它全 0」的数 <span class="inline-code">0x10</span>。然后：</p>
+          <ul>
+            <li><strong>置 1</strong>：<span class="inline-code">TCON |= 0x10;</span> —— 和 0x10 做「或」：第 4 位与 1 或必然变 1；其它位与 0 或<strong>保持原值</strong>不变。</li>
+            <li><strong>清零</strong>：<span class="inline-code">TCON &amp;= ~0x10;</span> —— <span class="inline-code">~0x10</span> 取反成「第4位0、其它位1」；和它做「与」：第4位与0必清0，其它位与1<strong>保持原值</strong>。</li>
+            <li><strong>翻转/读位</strong>：<span class="inline-code">^=</span> 翻转；<span class="inline-code">if(TCON &amp; 0x10)</span> 与 0x10 做与，只留下第 4 位看它是不是 1。</li>
+          </ul>
+          <p><strong>本质</strong>：「与 0 抹掉、与 1 保留」「或 1 置位、或 0 保留」——掩码就是靠这个特性，把操作范围精确框在某一位上。<strong>这就是寄存器操作绕不开位运算的根本原因</strong>。</p>
+
+          <h3>原理 3：宏 #define 不是变量——它是「编译前的纯文本替换」</h3>
+          <p><span class="inline-code">#define FOSC 11059200UL</span> 在<strong>真正编译之前</strong>，预处理器就把源码里所有 <span class="inline-code">FOSC</span> 直接换成那个数字——它不占 RAM、没有类型、不做运算。好处是改一处全改：以后换晶振只动一行。<strong>带参宏的坑</strong>：<span class="inline-code">#define MUL(a,b) a*b</span> 遇到 <span class="inline-code">MUL(1+2,3)</span> 会被原样替换成 <span class="inline-code">1+2*3</span>=7 而不是 (1+2)*3=9——因为它只是文本粘贴、不自动加括号。<strong>所以带参宏永远写成 <span class="inline-code">((a)*(b))</span></strong>，每个参数和整体都套括号。</p>
+          <blockquote>记忆点：寄存器一个字节8位合租一个房间，整体赋值会冲掉别位；掩码=只有目标位为1的数——置1用|mask、清零用&~mask、翻转用^mask、读位用&mask；&0抹/&1留、|1置/|0留就是机制；宏是编译前纯文本替换、不占内存，带参宏每个参数必须套括号。</blockquote>
+        </section>
+
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <p>本课用「按键 + 8 颗 LED」演示位运算效果：P1 口接 8 颗共地 LED，P3.2 接一个独立按键（按下接地读到 0）。</p>
+          <table>
+            <thead>
+              <tr><th>模块引脚</th><th>单片机引脚</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>LED1~LED8 阳极</td><td>各经 220Ω 电阻接 VCC</td><td>共地接法，写 0 亮</td></tr>
+              <tr><td>LED1~LED8 阴极</td><td>P1.0 ~ P1.7</td><td>位运算直接作用在 P1 上，现象直观</td></tr>
+              <tr><td>按键一端</td><td>P3.2</td><td>配合按键消抖，按一次触发一次位操作</td></tr>
+              <tr><td>按键另一端</td><td>GND</td><td>按下时 P3.2 读到 0</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么这样接</strong>：P1 整口输出，便于你直接观察 <span class="inline-code">P1</span> 数值变化与 LED 亮灭的对应关系；按键接 P3.2 是因为它是 INT0 外部中断引脚，下一课可无缝升级。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p>按一次按键，依次演示：整体移位流水 → 置位 → 清零 → 翻转 → 读位判断，用串口同时打印 P1 值（波特率 9600）。</p>
+          <pre><code class="language-c">/* 位运算与宏定义综合演示 */
+#include &lt;reg52.h&gt;
+
+sbit KEY = P3^2;                 /* 按键引脚 */
+
+#define LED_ON   0x00            /* 宏：8 颗灯全亮的值 */
+#define SET_BIT(x, n)  ((x) |= (1 &lt;&lt; (n)))   /* 宏：把 x 的第 n 位置 1 */
+#define CLR_BIT(x, n)  ((x) &amp;= ~(1 &lt;&lt; (n)))  /* 宏：把 x 的第 n 位清零 */
+#define TGL_BIT(x, n)  ((x) ^= (1 &lt;&lt; (n)))   /* 宏：把 x 的第 n 位翻转 */
+
+void delay_ms(unsigned int ms) {
+    unsigned int i, j;
+    for (i = 0; i &lt; ms; i++)
+        for (j = 0; j &lt; 120; j++);
+}
+
+/* 串口初始化：方式 1，波特率 9600（11.0592MHz） */
+void uart_init(void) {
+    SCON = 0x50;                 /* 0101 0000：方式 1，允许接收 */
+    TMOD |= 0x20;                /* T1 方式 2（8 位自动重装）——只改高 4 位 */
+    TH1 = 0xFD;                  /* 波特率初值：256 - (11059200/12/32/9600) */
+    TL1 = 0xFD;
+    TR1 = 1;                     /* 启动定时器 1 */
+}
+
+/* 发送单个字符 */
+void uart_putc(unsigned char c) {
+    SBUF = c;                    /* 写入发送缓冲 */
+    while (!TI);                 /* 等发送完成标志 */
+    TI = 0;                      /* 清标志 */
+}
+
+/* 把 8 位值按十六进制发送（简化版：只发高 4 位、低 4 位两个字符） */
+void uart_hex(unsigned char v) {
+    unsigned char h = (v &gt;&gt; 4) &amp; 0x0F;   /* 取高 4 位：右移 4 再与 0x0F */
+    unsigned char l = v &amp; 0x0F;          /* 取低 4 位：与 0x0F */
+    uart_putc(h &lt; 10 ? h + '0' : h - 10 + 'A');
+    uart_putc(l &lt; 10 ? l + '0' : l - 10 + 'A');
+}
+
+void main(void) {
+    unsigned char led = 0xFE;    /* 初始：最低位亮 */
+    uart_init();
+    while (1) {
+        /* 1) 移位流水：0xFE 左移，唯一一个 0 向右跑 */
+        P1 = led;
+        uart_hex(P1); uart_putc(' ');
+        delay_ms(300);
+        led = ((led &lt;&lt; 1) | 0x01) &amp; 0xFF;  /* 左移一位，最低位补 1，限制 8 位 */
+
+        /* 2) 按键触发位操作演示：按一次执行一步 */
+        if (KEY == 0) {
+            delay_ms(20);                /* 消抖 */
+            if (KEY == 0) {
+                /* 置位：把 P1 第 3 位置 1（对应 LED4 灭） */
+                SET_BIT(P1, 3);
+                delay_ms(500);
+                /* 清零：把 P1 第 3 位清零（LED4 亮） */
+                CLR_BIT(P1, 3);
+                delay_ms(500);
+                /* 翻转：第 3 位再翻一次 */
+                TGL_BIT(P1, 3);
+                delay_ms(500);
+                /* 读位：判断第 7 位 */
+                if (P1 &amp; 0x80)
+                    uart_putc('1');
+                else
+                    uart_putc('0');
+                while (KEY == 0);        /* 等松开 */
+            }
+        }
+    }
+}</code></pre>
+
+          <p><strong>第二实例：把位操作封装成「四件套」通用宏</strong>。把置 1/清零/翻转/读位写成带参宏，以后任何寄存器、任何引脚都能一行调用——这是库代码的标准写法，重点看每个参数都套了括号：</p>
+          <pre><code class="language-c">/* 通用位操作四件套：注意每个参数和整体都套括号 */
+#define SET_BIT(r, n)   ((r) |=  (1U &lt;&lt; (n)))   /* 把 r 的第 n 位置 1 */
+#define CLR_BIT(r, n)   ((r) &amp;= ~(1U &lt;&lt; (n)))   /* 把 r 的第 n 位清 0 */
+#define TGL_BIT(r, n)   ((r) ^=  (1U &lt;&lt; (n)))   /* 把 r 的第 n 位翻转 */
+#define READ_BIT(r, n)  (((r) &gt;&gt; (n)) &amp; 1U)      /* 取 r 的第 n 位，返回 0/1 */
+
+void delay_ms(unsigned int t);   /* 复用前面的延时 */
+
+void main(void) {
+    unsigned char x = 0x00;
+    SET_BIT(x, 0);    /* x=0x01：第0位置1 */
+    SET_BIT(x, 3);    /* x=0x09：第3位再置1 */
+    CLR_BIT(x, 0);    /* x=0x08：第0位清0 */
+    TGL_BIT(x, 3);    /* x=0x00：第3位翻回 */
+    P1 = x;           /* 串口/LED 可观察 */
+    if (READ_BIT(x, 3))   /* 读第3位是几 */
+        P1 = 0xFF;
+    else
+        P1 = 0x00;
+    while (1);
+}</code></pre>
+          <p><strong>为什么值得背下来</strong>：以后改 STM32/ESP32 寄存器、写传感器时序，全是这四个宏的组合。<strong>坑</strong>：<span class="inline-code">1U &lt;&lt; (n)</span> 里的 <span class="inline-code">U</span> 表示无整常量、位移不溢出；宏里每个参数必须套括号——否则 <span class="inline-code">SET_BIT(P1, 2+1)</span> 会因不括号算错位移位位置。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第一段：宏定义的写法与意义</h3>
+          <p><span class="inline-code">#define SET_BIT(x, n) ((x) |= (1 &lt;&lt; (n)))</span> 是带参宏：调用 <span class="inline-code">SET_BIT(P1, 3)</span> 时编译器原样替换成 <span class="inline-code">((P1) |= (1 &lt;&lt; (3)))</span>。<strong>为什么参数全加括号</strong>：防止替换后优先级错乱（这是宏的头号坑）；<strong>为什么用宏而不是函数</strong>：宏无调用开销、不占栈，适合这种一行小操作，Keil 里寄存器位操作几乎都用宏。</p>
+
+          <h3>第二段：移位流水灯的位运算本质</h3>
+          <p><span class="inline-code">led = ((led &lt;&lt; 1) | 0x01) &amp; 0xFF;</span> 拆开看：<span class="inline-code">led &lt;&lt; 1</span> 让唯一的 0 左移；<span class="inline-code">| 0x01</span> 把最低位补回 1（否则左边空出的位会引入 0，灯会越变越多）；<span class="inline-code">&amp; 0xFF</span> 保证结果不超 8 位。少了任何一步，流水效果都会错。</p>
+
+          <h3>第三段：串口发送里的位拆解</h3>
+          <p><span class="inline-code">uart_hex</span> 演示了最经典的「拆字节」：<span class="inline-code">v &gt;&gt; 4</span> 把高 4 位移到低 4 位，<span class="inline-code">&amp; 0x0F</span> 把其它位清零，得到高 4 位的值；<span class="inline-code">v &amp; 0x0F</span> 直接取低 4 位。<strong>这就是 ADC 数据拆分、定时器初值拆分等所有场合的标准手法</strong>，务必背下来。</p>
+
+          <h3>第四段：按键部分的四件套演示</h3>
+          <p>置位、清零、翻转三次操作同一个第 3 位，现象是 LED4 灭→亮→灭，配合读位判断第 7 位并串口打印。<strong>为什么单独写这四行</strong>：让你亲眼看到「只动一个位、其它位不动」的效果——按一次键，只有 LED4 变化，其余 7 颗灯保持原状态。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-demo">七、现象演示与验证</h2>
+          <ul>
+            <li><strong>主循环</strong>：唯一亮点从 P1.0 一路跑到 P1.7 后循环（流水灯基础效果）。</li>
+            <li><strong>按一次按键</strong>：LED4（P1.3）依次灭 → 亮 → 灭三次变化，期间其它灯完全不动；串口打印 P1 当前值的十六进制。</li>
+            <li><strong>串口监视器</strong>（9600）：每 300ms 收到一个两位十六进制数，观察与 LED 亮灭对应。</li>
+          </ul>
+          <p><strong>验证方法：</strong></p>
+          <ol>
+            <li>在串口输出中数一数：流水过程中应看到 FE FD FB F7 EF DF BF 7F 循环，与 <span class="inline-code">0xFE</span> 左移手算结果一致。</li>
+            <li>按键演示时盯着 P1 其它 7 颗灯：若它们跟着闪，说明你的位操作写法误伤了其它位（很可能整体赋值了），回去检查。</li>
+            <li>把 <span class="inline-code">SET_BIT(P1, 3)</span> 临时改成 <span class="inline-code">P1 = 0x08;</span> 烧录观察：按键后 P1 整体被改成 0x08，其它灯全灭——直观体会整体赋值 vs 位运算的区别。</li>
+          </ol>
+        </section>
+
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>带参宏展开结果不对（如 MUL(1+2,3)=7）</td><td>宏参数没加括号，优先级错乱</td><td>宏内每个参数和整体都加括号：<span class="inline-code">#define MUL(a,b) ((a)*(b))</span></td></tr>
+              <tr><td>整体赋值后其它功能失效</td><td>用 <span class="inline-code">TMOD = 0x20;</span> 这类写法冲掉了其它位</td><td>一律改位运算：<span class="inline-code">TMOD |= 0x20;</span> / <span class="inline-code">TMOD &amp;= ~0x10;</span></td></tr>
+              <tr><td>位运算结果不对 / 想置位却清零了</td><td>把 <span class="inline-code">&amp;</span>、<span class="inline-code">|</span> 与逻辑 <span class="inline-code">&amp;&amp;</span>、<span class="inline-code">||</span> 混用</td><td>位运算是单个 &amp; | ^ ~，逻辑运算是双 &amp;&amp; ||；操作寄存器用单的</td></tr>
+              <tr><td>编译报 <span class="inline-code">lvalue required</span></td><td>对常量或表达式直接赋值，如 <span class="inline-code">0x01 |= 0x02;</span></td><td>赋值目标必须是变量：<span class="inline-code">P1 |= 0x02;</span> 才对</td></tr>
+              <tr><td>移位结果溢出 / 灯越变越多</td><td>移位后没 <span class="inline-code">&amp; 0xFF</span> 限制或没补位</td><td>8 位操作养成习惯：<span class="inline-code">led = ((led &lt;&lt; 1) | 0x01) &amp; 0xFF;</span></td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（必做）</strong>：手算以下结果并用进制转换器核对：<span class="inline-code">0x55 &amp; 0x0F</span>、<span class="inline-code">0x80 | 0x0F</span>、<span class="inline-code">0xFF ^ 0x0F</span>、<span class="inline-code">1 &lt;&lt; 7</span>、<span class="inline-code">0xF0 &gt;&gt; 4</span>。</p>
+          <p><strong>练习 2</strong>：新增一个宏 <span class="inline-code">#define GET_BIT(x, n) (((x) &gt;&gt; (n)) &amp; 1)</span>，用它在代码里读按键所在位 <span class="inline-code">if (GET_BIT(P3, 2) == 0)</span> 替代原来的 <span class="inline-code">KEY == 0</span>。</p>
+          <p><strong>练习 3（进阶）</strong>：写一个函数把 8 位值按「二进制」打印到串口（8 个 0/1 字符），核心就是 <span class="inline-code">for (i = 7; i &gt;= 0; i--) uart_putc((v &gt;&gt; i) &amp; 1 ? '1' : '0');</span>——理解逐位提取。</p>
+          <p><strong>延伸学习</strong>：C 基础至此具备，可以正式进入 <a href="route.html">阶段 2：51 单片机</a>。建议先看 <a href="mcu51-minisys.html">51 最小系统电路原理</a> 了解硬件，再对照 <a href="mcu51-timer.html">定时器原理</a> 看 TMOD/TCON 是怎么用位运算配置的。Proteus 仿真教程可从 <a href="proteus-basics.html">proteus-basics.html</a> 开始，把上面的程序放进仿真验证。</p>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="c-array-pointer.html" class="btn btn-outline btn-sm">← 上一篇：数组与指针</a>
+          <a href="route.html" class="btn btn-outline btn-sm">下一篇：进入 51 单片机 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

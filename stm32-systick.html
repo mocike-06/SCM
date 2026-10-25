@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - SysTick 系统定时器与 HAL_Delay 原理</title>
+  <meta name="description" content="STM32 SysTick 零基础教程：HAL_Delay 背后的系统节拍、SysTick 结构（重载值/当前值/控制寄存器）、ms 时基的建立、精确延时的原理与替代方案。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link active" aria-current="page">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>SysTick 系统定时器与 HAL_Delay 原理</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：STM32</span>
+          <span class="badge badge-orange">进阶</span>
+          <span class="badge badge-gray">更新：2026-10-25</span>
+        </div>
+
+        <p class="text-secondary mb-6">每个 HAL 工程都在用 HAL_Delay()，但你知道它是怎么算出 1 毫秒的吗？答案藏在 SysTick——一个藏在 Cortex-M3 内核里、所有 STM32 都有的 24 位定时器。本课讲透 SysTick 的结构、HAL 的时基（Tick）机制、HAL_Delay 的源码逻辑，以及为什么在中断里调用 HAL_Delay 会出大事。</p>
+
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>说清 SysTick 是什么、HAL 用它的哪三个寄存器建立「系统时基」。</li>
+            <li>读懂 HAL_Delay 的源码：为什么它依赖中断、为什么不能在中断里用。</li>
+            <li>自己实现基于 SysTick 的精确延时（不走 HAL_Delay 的替代方案）。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识（对应学习路线阶段 4）：</strong></p>
+          <ul>
+            <li>系统时钟（stm32-clock.html）：SysTick 的计数节拍来自系统时钟 72MHz。</li>
+            <li>寄存器操作（stm32-register.html）：SysTick 也有寄存器，只是地址在内核区。</li>
+            <li>定时器基础（stm32-pwm.html）：倒计时、重载这些概念通用。</li>
+          </ul>
+          <p><strong>本课会出现的新名词：</strong>SysTick、时基（Tick）、HAL_Delay、SysTick 控制/重载/当前值寄存器、<span class="inline-code">HAL_IncTick</span>、<span class="inline-code">uwTick</span>、中断里禁 delay。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. SysTick 是什么：内核自带的「节拍器」</h3>
+          <p><strong>生活类比</strong>：每栋办公楼（芯片）都标配一个「总节拍钟」（SysTick）——不用自己买（不用占通用定时器资源），钟摆每响一次就过一个节拍。</p>
+          <p><strong>一句话定义</strong>：SysTick（系统滴答定时器）是 Cortex-M3 内核内置的 <strong>24 位倒计时定时器</strong>：从重载值（最大 16777215）开始每来一个时钟脉冲减 1，减到 0 触发中断并自动重新装载。每个 STM32 都有，专为操作系统时基和延时而生。</p>
+          <p><strong>例子</strong>：72MHz 主频下，每 1µs 减 1 次；重载值设为 71999，则 72000µs = 72ms 中断一次——不对，是 71999 次计数 = 72000 个时钟 = 1ms。等等，重载值 71999 表示计数 72000 次（含 0），= 1ms。</p>
+
+          <h3>2. 时基（Tick）：软件里的「心跳计数器」</h3>
+          <p><strong>生活类比</strong>：SysTick 是「钟」，软件还需要一个「日历」（一个不断累加的计数器）记录「今天是第几秒」。HAL 的做法：SysTick 每 1ms 中断一次，中断里执行 <span class="inline-code">HAL_IncTick()</span>，让全局变量 <span class="inline-code">uwTick</span> 加 1——这个 uwTick 就是全工程的「心跳计数器」。</p>
+          <p><strong>一句话定义</strong>：<strong>时基</strong> = 周期性中断里递增的计数器，为系统提供「当前时间」的参考。<span class="inline-code">HAL_GetTick()</span> 返回当前 uwTick（毫秒）。HAL_Delay、HAL_UART 超时判断全靠它。</p>
+          <p><strong>例子</strong>：<span class="inline-code">uint32_t t = HAL_GetTick();</span> 拿到「上电后第几毫秒」，可以用来做非阻塞延时、超时检测。</p>
+
+          <h3>3. HAL_Delay 的真相：它依赖中断</h3>
+          <p><strong>一句话定义</strong>：HAL_Delay 不是「空转等时间」，而是「记下开始时刻，循环查询 uwTick 是否到了目标时刻」。因为 uwTick 由 SysTick 中断维护，所以 <strong>HAL_Delay 必须在中断开启（且 SysTick 中断正常）时才能工作</strong>。</p>
+          <p><strong>例子</strong>：<span class="inline-code">HAL_Delay(1000)</span> = 记录 start=uwTick，然后 while (uwTick - start &lt; 1000) 空转，直到 uwTick 涨了 1000。</p>
+
+          <h3>4. 为什么中断里不能调 HAL_Delay</h3>
+          <p><strong>生活类比</strong>：你在接待重要客人（执行中断），却打开日历等 1 秒——但日历是靠「每 1 秒响一次铃」来翻页的，你正占着铃（中断优先级可能高于 SysTick），铃响不了，日历永远停在原地——于是你永远等不到 1 秒，程序卡死。</p>
+          <p><strong>一句话定义</strong>：若 SysTick 中断优先级低于当前中断，当前中断里调 HAL_Delay 时 SysTick 中断无法抢占，uwTick 不再递增，<span class="inline-code">while (uwTick - start &lt; delay)</span> 永远为真 → <strong>死循环卡死</strong>。所以中断 ISR 里禁用 HAL_Delay。</p>
+          <p><strong>例子</strong>：EXTI 回调里写 HAL_Delay(10)，中断卡死、系统假死——新手高频翻车点。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-principle">三、原理介绍：HAL 的时基是怎么建立起来的</h2>
+          <p>HAL_Delay(1000) 凭什么真的等一秒？答案藏在 SysTick 这个内核自带的小定时器和一个全局计数里。</p>
+          <p><strong>整条链路：</strong>SysTick 每 1ms 中断一次 → 中断里 uwTick++ → HAL_Delay 反复查 uwTick 差值，到点就返回。</p>
+
+          <h3>原理 1：SysTick 倒计时——1ms 节拍怎么产生</h3>
+          <p>SysTick 是 Cortex-M 内核内置的 24 位倒计时器。<span class="inline-code">HAL_Init()</span> 把它配成：72MHz 下重载值写 <strong>71999</strong>，数到 0 就触发一次中断并自动重装。<strong>为什么是 71999 不是 72000</strong>：计数器从「重载值」减到 0 才算一次，共减了「重载值+1」次。要 72000 个时钟（=1ms），重载值 = 72000−1 = 71999。这是含 0 计数的经典陷阱。</p>
+          <p><strong>教材必背：SysTick 时钟源由 CTRL 的 CLKSOURCE 位决定。</strong>CLKSOURCE=1 → 直接用内核时钟 AHB（72MHz）；CLKSOURCE=0 → 用 AHB/8（9MHz）。HAL 默认选 AHB 72MHz，所以 LOAD=71999 才是 1ms；若你手动改成 AHB/8，同样的 71999 会变成 8ms——这是教材实验里「延时莫名慢 8 倍」的隐藏原因。另外 SysTick 是 Cortex-M3 内核的一部分（三级流水线：取指→译码→执行），它的中断优先级在 SHPR 寄存器里配，默认较低；RTOS 里它就是系统节拍中断，优先级要比一般外设中断高、但不能高过必须即时响应的硬实时中断。</p>
+
+          <h3>原理 2：uwTick 心跳——uwTick++ 怎么变成时间轴</h3>
+          <p>每次 1ms 中断进 <span class="inline-code">SysTick_Handler</span>，它调 <span class="inline-code">HAL_IncTick()</span> 执行 <span class="inline-code">uwTick++</span>。于是 uwTick 就是「上电以来第多少毫秒」。任何地方调 <span class="inline-code">HAL_GetTick()</span> 读它，就拿到当前时间。<strong>HAL_Delay 本质</strong>是：记下起点 t0，while 里反复查 uwTick−t0 ≥ 等待值 就返回——它不主动「睡」，只是忙等这个差值。SysTick 一旦停（中断被关），uwTick 不涨，HAL_Delay 就永远等不到。</p>
+
+          <h3>原理 3：volatile——为什么 uwTick 必须加 volatile</h3>
+          <p>uwTick 在中断里被写、在主循环里被读。若不声明 <span class="inline-code">volatile</span>，编译器优化时可能把它读进寄存器缓存，主循环一直用缓存的旧值、看不到中断里的自增——HAL_Delay 就永远不到点。所以 HAL 把它定义成 <span class="inline-code">volatile uint32_t uwTick</span>。<strong>通用原则</strong>：凡是「中断写、主循环读」的共享变量，都要 volatile 防优化。同理，中断里绝不能调 HAL_Delay（它依赖 SysTick 中断，会互相死锁）。</p>
+          <blockquote>记忆点：SysTick=内核 24 位倒计时器，重载 71999=1ms@72M（减一因为含 0）；中断里 uwTick++ 作心跳；HAL_Delay=忙等 uwTick 差值；共享时间变量必须 volatile；中断里禁 delay。</blockquote>
+        </section>
+
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <p>SysTick 是内核内部定时器，无外部引脚。硬件只用于观察现象：</p>
+          <table>
+            <thead>
+              <tr><th>模块</th><th>接线</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>LED</td><td>板载（如 PC13）</td><td>验证 1s 精确翻转</td></tr>
+              <tr><td>串口</td><td>PA9/PA10</td><td>打印 HAL_GetTick 值验证时间轴</td></tr>
+              <tr><td>按键</td><td>PA0 接 GND</td><td>触发「中断里 delay」演示卡死</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么不需要接线</strong>：SysTick 在芯片内核里，物理上无引脚、无外部电路——你看到的延时现象全是软件行为。接线只是用来「观察现象」：LED 每 1 秒翻转一次，验证 HAL_Delay(1000) 精确。</p>
+          <div class="tip-warn mt-4"><span class="tip-label">避坑</span>
+            CubeMX 生成的工程默认用 SysTick 做时基（HAL_TICK_FREQ_1KHZ）。如果你后来把 SysTick 挪给 FreeRTOS 用，<span class="inline-code">HAL_Delay/HAL_GetTick</span> 会失效——RTOS 工程要把时基改成 TIM6/TIM7（CubeMX 里 SYS 选项卡设置），这是移植 RTOS 时必查的配置。</div>
+        </section>
+
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p><strong>示例 1：读懂 HAL 的 SysTick 与 HAL_Delay 源码</strong></p>
+          <pre><code class="language-c">/* 这是 HAL 库源码的核心逻辑（简化展示，实际在 stm32f1xx_hal.c） */
+
+/* HAL_Init 里初始化 SysTick：以系统时钟为节拍，1ms 中断一次 */
+HAL_StatusTypeDef HAL_InitTick(uint32_t TickPriority)
+{
+    /* 重载值 = 时钟频率 / 1000 - 1：72MHz → 71999 */
+    SysTick-&gt;LOAD = (SysTick-&gt;LOAD &amp; SysTick_LOAD_FMSK) |
+                    (uint32_t)(SystemCoreClock / 1000U - 1U);
+    SysTick-&gt;VAL  = 0UL;                  /* 清当前值，从 0 重新数 */
+    SysTick-&gt;CTRL = SysTick_CTRL_CLKSOURCE_Msk |  /* 使用内核时钟 */
+                    SysTick_CTRL_TICKINT_Msk   |  /* 开中断 */
+                    SysTick_CTRL_ENABLE_Msk;      /* 启动 */
+    return HAL_OK;
+}
+
+/* SysTick_Handler 在 stm32f1xx_it.c 里，每 1ms 进一次 */
+void SysTick_Handler(void)
+{
+    HAL_IncTick();                 /* uwTick++ */
+}
+
+/* HAL_IncTick 与 HAL_GetTick */
+volatile uint32_t uwTick = 0;      /* 全局心跳（毫秒） */
+void HAL_IncTick(void)  { uwTick++; }
+uint32_t HAL_GetTick(void) { return uwTick; }
+
+/* HAL_Delay 的核心：查询差值而非空等 */
+void HAL_Delay(uint32_t Delay)
+{
+    uint32_t tickstart = HAL_GetTick();     /* 记下开始时刻 */
+    while ((HAL_GetTick() - tickstart) &lt; Delay)   /* 等到差值达标 */
+    { }
+}</code></pre>
+          <p><strong>示例 2：不用 HAL_Delay 的非阻塞延时（中断里安全）</strong></p>
+          <pre><code class="language-c">/* 非阻塞延时：不空转、不依赖 HAL_Delay，中断里也安全 */
+#include "main.h"
+
+/* 检查「自 t0 起是否过了 ms 毫秒」，用 u32 无符号回绕处理 */
+uint8_t time_elapsed(uint32_t t0, uint32_t ms)
+{
+    return (uint32_t)(HAL_GetTick() - t0) &gt;= ms;
+}
+
+int main(void)
+{
+    uint32_t last = HAL_GetTick();   /* 记开始时刻 */
+    HAL_Init();
+    SystemClock_Config();
+
+    while (1)
+    {
+        if (time_elapsed(last, 1000)) {      /* 每 1 秒 */
+            HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+            last = HAL_GetTick();            /* 更新基准 */
+        }
+        /* 主循环还能做别的事——非阻塞的关键 */
+    }
+}</code></pre>
+        </section>
+
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第一段：LOAD 重载值的计算</h3>
+          <p><span class="inline-code">SystemCoreClock / 1000U - 1U</span>：72,000,000 / 1000 - 1 = 71,999。<strong>为什么减 1</strong>：SysTick 从 LOAD 数到 0 共 LOAD+1 次才中断，要 1000 次/秒（1ms），就设 LOAD = 1000 - 1。<strong>为什么是 SystemCoreClock 而不是写死 72M</strong>：主频变了（如 64MHz）自动适配——HAL 刻意不写死，这也是换时钟树后延时仍然准确的原因。</p>
+
+          <h3>第二段：CTRL 的三个位</h3>
+          <p><span class="inline-code">CLKSOURCE</span> 选内核时钟（72MHz）；<span class="inline-code">TICKINT</span> 使能中断（没有它 uwTick 不会加，HAL_Delay 永等不到）；<span class="inline-code">ENABLE</span> 启动。<strong>三个位缺一不可</strong>：缺 ENABLE 定时器不跑、缺 TICKINT 中断不触发——很多人移植时把中断关了，结果 HAL_Delay 卡死。</p>
+
+          <h3>第三段：HAL_Delay 的「差值法」</h3>
+          <p><span class="inline-code">(HAL_GetTick() - tickstart) &lt; Delay</span> 用无符号减法算差值——<strong>为什么不用 &gt;= 比较</strong>：u32 计数 49 天会回绕到 0，差值法天然处理回绕（0 - 大数 = 正确差值），而「当前值 &gt; 目标值」在回绕后会永远不成立。这是嵌入式时间的标准写法。</p>
+
+          <h3>第四段：非阻塞 time_elapsed 的意义</h3>
+          <p>示例 2 的主循环里「每 1 秒翻转」用的是查询差值，<strong>循环没有空转等 1 秒</strong>——检查时间、干活、再检查。<strong>为什么比 HAL_Delay 好</strong>：HAL_Delay 阻塞期间 CPU 只能空转，非阻塞写法让 CPU 在等待时还能处理按键、通信等任务——这是「单线程事件驱动」的核心技巧，也是中断安全的替代方案。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-demo">七、现象演示与验证</h2>
+          <ul>
+            <li><strong>精确延时</strong>：LED 每 1 秒精确翻转，用秒表对照无明显漂移（72MHz 晶振下误差 &lt;1ms/分钟）。</li>
+            <li><strong>时间轴</strong>：串口每秒打印 <span class="inline-code">tick=xxxx</span>，数值递增 1000，验证 uwTick 是毫秒心跳。</li>
+          </ul>
+          <p><strong>验证方法：</strong></p>
+          <ol>
+            <li>在 SysTick_Handler 里加断点，观察它每 1ms 触发一次——用调试器数 10 次断点的间隔。</li>
+            <li>把主频改成 64MHz（时钟树 PLL ×8），LED 翻转仍 1 秒——验证 LOAD 用 SystemCoreClock 自动适配。</li>
+            <li>在 EXTI 回调里写 HAL_Delay(100) 并触发按键——观察系统卡死，验证「中断里禁 delay」。</li>
+          </ol>
+        </section>
+
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>HAL_Delay 永远等不到 / 卡死</td><td>SysTick 中断被关 / 时基被 RTOS 占用</td><td>确认 TICKINT 使能；RTOS 工程用 TIM6/7 做 HAL 时基</td></tr>
+              <tr><td>中断回调里 delay 后死机</td><td>中断里调 HAL_Delay，uwTick 不推进</td><td>ISR 里禁止 HAL_Delay；用 time_elapsed 非阻塞写法</td></tr>
+              <tr><td>延时明显偏短/偏长</td><td>SystemCoreClock 与实际主频不符</td><td>核对时钟树；确认 SystemCoreClock 更新函数（SystemCoreClockUpdate）被调</td></tr>
+              <tr><td>HAL_GetTick 一直 0</td><td>SysTick_Handler 没写 / HAL_IncTick 没调</td><td>stm32f1xx_it.c 里补 SysTick_Handler → HAL_IncTick</td></tr>
+              <tr><td>移植后超时机制全失效</td><td>SysTick 停了，所有 HAL Timeout 依赖它</td><td>恢复 SysTick；或全局改用 TIM 时基并重配</td></tr>
+              <tr><td>FreeRTOS 与 HAL_Delay 冲突</td><td>两边抢 SysTick</td><td>FreeRTOS 占 SysTick，HAL 时基改 TIM6/TIM7（CubeMX SYS 页）</td></tr>
+              <tr><td>实时任务（如精准 PWM 捕获、高速串口）被 1ms 节拍打断、时序抖动（教材优先级坑）</td><td>SysTick 中断优先级设得太高，每 1ms 抢一次 CPU，把对时序敏感的中断/任务延迟了几 µs</td><td>把 SysTick 的抢占优先级设为<strong>较低</strong>（数字较大），让硬实时中断（如输入捕获、CAN）能抢占它；CubeMX NVIC 里 SysTick 优先级一般放最低一档，别和实时中断抢</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（必做）</strong>：用 <span class="inline-code">HAL_GetTick()</span> 实现「每 3 秒打印一次当前 tick」的非阻塞定时任务，主循环同时翻转另一个 LED——两个任务并行不卡。</p>
+          <p><strong>练习 2</strong>：读一下你工程里 <span class="inline-code">stm32f1xx_it.c</span> 的 <span class="inline-code">SysTick_Handler</span>，确认它调用 HAL_IncTick；把它注释掉，观察 HAL_Delay 卡死——亲眼验证依赖关系。</p>
+          <p><strong>练习 3（进阶）</strong>：把 SysTick 的 LOAD 改成 <span class="inline-code">SystemCoreClock / 1000U * 2U</span>（2ms 时基），观察 HAL_Delay(1000) 变成约 2 秒——理解「时基粒度决定延时精度」。</p>
+          <p><strong>延伸学习</strong>：时间基准懂了，下一课学 <a href="stm32-rtc.html">RTC 实时时钟</a>——从「毫秒心跳」升级到「真实日历」，用上外部 32.768kHz 晶振。</p>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="stm32-iwdg.html" class="btn btn-outline btn-sm">← 上一篇：独立看门狗 IWDG</a>
+          <a href="stm32-rtc.html" class="btn btn-outline btn-sm">下一篇：RTC 实时时钟 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - 低功耗模式（睡眠/停止/待机）</title>
+  <meta name="description" content="STM32 低功耗零基础教程：睡眠/停止/待机三档功耗对比、唤醒源（EXTI/RTC）、WFI/WFE、待机模式 RTC 唤醒，电池设备续航设计入门。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link active" aria-current="page">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>低功耗模式（睡眠/停止/待机）</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：STM32</span>
+          <span class="badge badge-orange">进阶</span>
+          <span class="badge badge-gray">更新：2026-10-25</span>
+        </div>
+
+        <p class="text-secondary mb-6">电池设备（遥控器、传感器节点、手表）最怕「待机也耗电」。STM32 的功耗管理有三档：睡眠、停止、待机——越省电代价越大（唤醒越慢、能保住的状态越少）。本课对照 ESP32 的 Deep Sleep（esp32-deepsleep.html），讲透三档模式的功耗/唤醒/状态保留，做出「每 10 秒醒来报一次温湿度再睡」的低功耗节点。</p>
+
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>分清睡眠/停止/待机三档：功耗、唤醒源、RAM/寄存器保留情况的差别。</li>
+            <li>用 HAL_PWR 接口进入停止模式，用 EXTI/RTC 唤醒。</li>
+            <li>设计「周期采集 + 休眠」的低功耗节点主循环。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识（对应学习路线阶段 4）：</strong></p>
+          <ul>
+            <li>RTC（stm32-rtc.html）：待机/停止模式用 RTC 唤醒最常用。</li>
+            <li>外部中断（stm32-exti.html）：按键唤醒。</li>
+            <li>时钟（stm32-clock.html）：停止模式关主时钟，唤醒要重新初始化。</li>
+          </ul>
+          <p><strong>本课会出现的新名词：</strong>WFI、睡眠模式、停止模式、待机模式、PWR、唤醒源、低功耗定时器、备份域、WU（唤醒）引脚。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. 三档功耗模式：省电与功能的「交易」</h3>
+          <p><strong>生活类比</strong>：手机屏幕关闭但后台待命 = 睡眠；飞行模式不联网 = 停止；关机拔电池再开要重新开机 = 待机。模式越深，省的电越多，但「回来干活」的成本（唤醒时间 + 状态恢复）也越高。</p>
+          <p><strong>一句话定义</strong>（F103）：
+          <strong>睡眠</strong>：CPU 停转，外设/时钟全活——唤醒立即，RAM 全保（约 7mA@72MHz 降至约 2mA 量级）；
+          <strong>停止</strong>：CPU + 主时钟全停，仅 LSI/LSE 与 RTC 可活——RAM 保留，唤醒要重新初始化时钟（约 20µA）；
+          <strong>待机</strong>：除了复位/RTC/备份域几乎全断电——RAM 不保留，程序从头跑（约 2µA，最低功耗）。</p>
+          <p><strong>例子</strong>：毫秒级响应要睡眠；周期采集要停止；「睡了就不管」的报警器用待机。</p>
+
+          <h3>2. WFI：让 CPU「打盹」的指令</h3>
+          <p><strong>一句话定义</strong>：进入睡眠/停止模式的内核指令是 <span class="inline-code">__WFI()</span>（等待中断）或 <span class="inline-code">__WFE()</span>（等待事件）。执行后 CPU 停在此处，直到<strong>唤醒源</strong>到达才继续向下执行。<strong>HAL 封装</strong>：<span class="inline-code">HAL_PWR_EnterSTOPMode(...)</span> 内部就是配置 + __WFI()。</p>
+          <p><strong>例子</strong>：主循环里执行 HAL_PWR_EnterSTOPMode 后，程序「暂停」在那一行，EXTI 中断一来到，从下一行继续跑。</p>
+
+          <h3>3. 唤醒源：谁把芯片叫醒</h3>
+          <p><strong>一句话定义</strong>：睡眠：任何中断/事件都能唤醒；停止：EXTI 外部中断（PA0 等）、RTC 闹钟/唤醒定时器、串口等部分外设事件；待机：RTC 唤醒（WKUP 引脚 PA0 上升沿）、复位。<strong>周期唤醒的首选是 RTC 闹钟</strong>（对应 stm32-rtc.html 的 Alarm）。</p>
+          <p><strong>例子</strong>：RTC 每 10 秒闹一次 → 唤醒 → 采一次数据 → 再睡——这是低功耗节点的标准节奏。</p>
+
+          <h3>4. 状态保留：醒来还能不能接着干</h3>
+          <p><strong>一句话定义</strong>：<strong>睡眠</strong>：一切保留，醒来直接继续；<strong>停止</strong>：RAM 保留，但时钟树要重新初始化（唤醒后通常直接 <span class="inline-code">SystemClock_Config()</span> 重配 + 重新 Start 外设）；<strong>待机</strong>：RAM 全丢，程序从 <span class="inline-code">main</span> 重新执行（像复位）。<strong>变量要跨待机保留</strong>：放备份寄存器（RTC 备份域）。</p>
+          <p><strong>例子</strong>：待机醒来判断「我是复位还是唤醒」：查 PWR_CSR 的 WUF 标志位。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-principle">三、原理介绍：三档功耗是怎么省出来的</h2>
+          <p>低功耗不是一个开关，而是「逐级关掉芯片内部时钟和电源」的三档。理解每一档到底关了什么，就懂了为什么醒来要做不同的事。</p>
+          <p><strong>整条链路：</strong>正常运行 → WFI 进 STOP（停主时钟、留 RAM）→ RTC 闹钟唤醒 → 时钟默认回 HSI → 重配 72MHz → 干活 → 再睡。</p>
+
+          <h3>原理 1：睡眠/停止/待机——每档到底关了什么</h3>
+          <ul>
+            <li><strong>Sleep 睡眠</strong>：只停 CPU 时钟，外设照常跑、RAM 全保留。任意中断都能立刻唤醒，醒来代码原地继续。省得最少（几 mA）。</li>
+            <li><strong>Stop 停止</strong>：把 HSI/HSE/PLL 全停、主稳压器切低功耗，RAM 与寄存器内容<strong>保留</strong>，但所有外设时钟都停了。唤醒靠 EXT 或 RTC 闹钟，电流约 20µA。</li>
+            <li><strong>Standby 待机</strong>：几乎全断电（连 RAM 也丢），本质是一次软复位，电流约 2µA，醒来程序从头跑。</li>
+          </ul>
+
+          <h3>原理 2：停止醒来为什么必须重配时钟</h3>
+          <p>Stop 模式把所有主时钟都关了，唤醒后时钟树回到<strong>上电初态（HSI 8MHz）</strong>——不是你睡之前的 72MHz。若不立刻重新调 <span class="inline-code">SystemClock_Config()</span>，SysTick、串口波特率全错，HAL_Delay 直接失效。<strong>这是停止模式头号坑</strong>：醒来第一件事永远是把 72MHz 配回来，再用外设。</p>
+
+          <h3>原理 3：待机为什么是「从头跑」、跨待机怎么存数</h3>
+          <p>Standby 把 CPU 状态和 RAM 全断，醒来等同于复位、main 从头执行——行为最可预期，很多报警器就用它（醒来=重新初始化，代码简单）。代价是 RAM 里的变量全丢。<strong>要跨待机保留少量数据</strong>，就写进<strong>备份寄存器</strong>（由 VBAT 供电、待机不丢）。醒来后查 PWR_CSR 的 WUF 标志，就能区分「我是真复位进来的，还是待机被唤醒的」。</p>
+          <blockquote>记忆点：Sleep=停 CPU 外设活、RAM 全保；Stop=主时钟全停 RAM 保留、醒来必须重配 72MHz（约 20µA）；Standby=几乎全断电 RAM 丢、程序从头跑（约 2µA）；进入用 HAL_PWR_EnterXMode+WFI；跨待机存数放备份寄存器；醒来查 WUF 区分复位/唤醒。</blockquote>
+
+          <h3>原理 4：PWR 寄存器 ↔ HAL 对照（PWR 挂在 APB1）</h3>
+          <p>功耗管理由 PWR 外设负责，它挂在 <strong>APB1</strong>，用前要开 PWR 时钟（<span class="inline-code">__HAL_RCC_PWR_CLK_ENABLE()</span>，CubeMX 已自动开）。本讲动作对应的寄存器：</p>
+          <table>
+            <thead><tr><th>你做的事</th><th>对应寄存器 / 位</th><th>HAL 函数</th></tr></thead>
+            <tbody>
+              <tr><td>进停止模式</td><td>PWR_CR 的 LPDS 位(低功耗稳压器) + Cortex-M3 的 SLEEPDEEP</td><td>HAL_PWR_EnterSTOPMode()</td></tr>
+              <tr><td>进待机模式</td><td>PWR_CR 的 PDDS 位(深掉电) + SLEEPDEEP</td><td>HAL_PWR_EnterSTANDBYMode()</td></tr>
+              <tr><td>使能 WKUP 引脚(PA0)</td><td>PWR_CSR 的 EWUP 位</td><td>HAL_PWR_EnableWakeUpPin()</td></tr>
+              <tr><td>读/清唤醒标志</td><td>PWR_CSR 的 WUF 位</td><td>__HAL_PWR_GET_FLAG / CLEAR_FLAG(PWR_FLAG_WU)</td></tr>
+              <tr><td>进睡眠模式</td><td>不设 SLEEPDEEP，直接 __WFI()</td><td>HAL_PWR_EnterSLEEPMode()</td></tr>
+            </tbody>
+          </table>
+          <p><strong>省电额外一招（教材提得少但实用）：</strong>即使不睡，进低功耗前把暂时不用的外设时钟关掉（<span class="inline-code">__HAL_RCC_GPIOx_CLK_DISABLE()</span> 等），每个挂在总线上的外设时钟停了都能省一点——FAQ 里「睡眠模式电流仍大」多半就是外设时钟没关。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <p>低功耗是芯片内部行为，演示硬件极简：</p>
+          <table>
+            <thead>
+              <tr><th>资源</th><th>用途</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>USB 串口</td><td>打印「醒了」</td><td>唤醒后串口报时（先重配时钟）</td></tr>
+              <tr><td>按键（PA0）</td><td>EXTI 唤醒演示</td><td>停止模式按键唤醒</td></tr>
+              <tr><td>万用表（电流档）</td><td>串入 VCC 测电流</td><td>对比三档模式实际功耗</td></tr>
+              <tr><td>RTC（片内）</td><td>周期唤醒</td><td>无需外接</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么用万用表串电流</strong>：低功耗的「效果」就是电流数字——运行 30mA → 停止 20µA，肉眼可见的量级差距。<strong>测量技巧</strong>：万用表 mA 档串进 3.3V 供电线；唤醒瞬间电流脉冲会让读数跳动，用「最小/平均」档看稳态。</p>
+          <div class="tip-warn mt-4"><span class="tip-label">避坑</span>
+            调试器（ST-Link）会干扰低功耗测量：J-Link/SWD 复位和时钟信号会阻止芯片真正休眠（电流虚高）。<strong>测量功耗时要断开调试器、用串口供电</strong>。另外开发板上的电源指示灯/LDO 自身也耗电，测到的是「板级功耗」不是「芯片功耗」——对比相对值即可。</div>
+        </section>
+
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p>示例 1 停止模式 RTC 周期唤醒；示例 2 待机模式（从 main 重跑）。</p>
+          <p><strong>示例 1：停止模式 + RTC 唤醒，每 10 秒醒一次</strong></p>
+          <pre><code class="language-c">/* 低功耗节点：停止模式睡眠，RTC 每 10 秒唤醒，醒来打印后继续睡
+   CubeMX：RTC 使能 WakeUp 定时器（中断），PWR 保持默认 */
+#include "main.h"
+#include &lt;stdio.h&gt;
+
+extern RTC_HandleTypeDef hrtc;
+extern UART_HandleTypeDef huart1;
+
+int fputc(int ch, FILE *f)
+{
+    HAL_UART_Transmit(&amp;huart1, (uint8_t *)&amp;ch, 1, 100);
+    return ch;
+}
+
+/* 初始化 RTC 唤醒：每 10 秒触发一次闹钟中断 */
+void rtc_wakeup_init(void)
+{
+    HAL_RTCEx_SetWakeUpTimer_IT(&amp;hrtc, 9, RTC_WAKEUPCLOCK_CK_SPRE_16BITS);
+    /* 9 + 1 = 10 秒（1Hz 基准，计数 N 则 N+1 秒） */
+}
+
+/* RTC 唤醒中断回调：HAL 自动调用（函数名固定） */
+void HAL_RTCEx_WakeUpTimerEventCallback(RTC_HandleTypeDef *hrtc)
+{
+    printf("wake up!\r\n");       /* 唤醒提示（此处中断里轻量处理） */
+}
+
+int main(void)
+{
+    HAL_Init();
+    SystemClock_Config();
+    MX_GPIO_Init();
+    MX_RTC_Init();
+    MX_USART1_UART_Init();
+    rtc_wakeup_init();
+
+    while (1) {
+        printf("sleep...\r\n");
+        HAL_Delay(50);            /* 等串口发完再睡 */
+
+        /* 进入停止模式：低功耗稳压器 + WFI */
+        HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON, PWR_STOPENTRY_WFI);
+
+        /* ===== 被唤醒后从这里继续 ===== */
+        SystemClock_Config();     /* 关键：重配时钟 */
+        MX_GPIO_Init();
+        MX_USART1_UART_Init();    /* 串口也重新初始化 */
+        HAL_Delay(10);
+    }
+}</code></pre>
+          <p><strong>示例 2：待机模式（醒来 = 程序重跑）</strong></p>
+          <pre><code class="language-c">/* 待机模式：按 PA0（WKUP）唤醒，程序从 main 重新执行 */
+#include "main.h"
+#include &lt;stdio.h&gt;
+
+extern UART_HandleTypeDef huart1;
+
+int main(void)
+{
+    HAL_Init();
+    SystemClock_Config();
+    MX_GPIO_Init();
+    MX_USART1_UART_Init();
+
+    printf("main start\r\n");
+
+    /* 待机唤醒标志判断：1 = 上次是待机唤醒（不是普通复位） */
+    if (__HAL_PWR_GET_FLAG(PWR_FLAG_WU) == SET) {
+        printf("wakeup from standby!\r\n");
+        __HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU);   /* 清标志 */
+    }
+
+    /* 进入待机：先清除唤醒标志，配置 PA0 为 WKUP */
+    __HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU);
+    HAL_PWR_EnableWakeUpPin(PWR_WAKEUP_PIN1);   /* PA0 上升沿唤醒 */
+    HAL_PWR_EnterSTANDBYMode();                 /* 睡死，直到 PA0 */
+
+    /* 不会执行到这里：待机唤醒后程序从 main 重头跑 */
+}</code></pre>
+        </section>
+
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第一段：WakeUpTimer 的 N+1 秒机制</h3>
+          <p><span class="inline-code">HAL_RTCEx_SetWakeUpTimer_IT(&amp;hrtc, 9, RTC_WAKEUPCLOCK_CK_SPRE_16BITS)</span>：第三个参数选 1Hz 计数基准（秒），计数值 9 → 9+1=10 秒后触发中断。<strong>为什么 +1</strong>：硬件计数到 0 才触发，所以设定值=目标秒数-1。这是 RTC 唤醒的经典细节，写错就成了 9 秒或 10 秒差 1。</p>
+
+          <h3>第二段：EnterSTOPMode 的两个参数</h3>
+          <p><span class="inline-code">PWR_LOWPOWERREGULATOR_ON</span> 切低功耗稳压器（进一步省电）；<span class="inline-code">PWR_STOPENTRY_WFI</span> 用等待中断方式进入（对应 __WFI()）。<strong>唤醒后</strong>：WFI 一被中断打断，函数返回，程序从下一行执行——<strong>这行注释「从这里继续」标的就是这个意思</strong>。</p>
+
+          <h3>第三段：醒来重配的三件套</h3>
+          <p><span class="inline-code">SystemClock_Config()</span> 恢复 72MHz 时钟树；<span class="inline-code">MX_GPIO_Init()</span> 恢复 IO；<span class="inline-code">MX_USART1_UART_Init()</span> 恢复串口。<strong>为什么只恢复这几个</strong>：停止模式里 RAM 没丢，变量值还在，但<strong>外设寄存器状态基于的时钟没了</strong>——凡依赖时钟的外设都要重配。RTC 本身在备份域（LSE 供电）不受影响，所以闹钟还继续走。</p>
+
+          <h3>第四段：待机模式的「程序重跑」设计</h3>
+          <p>待机唤醒不是「继续执行」而是<strong>复位重启</strong>——所以示例 2 在 main 开头判断 <span class="inline-code">PWR_FLAG_WU</span>：置位说明「我是被 PA0 唤醒的」，清掉标志继续正常流程。<strong>为什么 HAL_PWR_EnterSTANDBYMode 后面没有代码</strong>：一旦进入成功，代码永远到不了下一行（醒来重头跑）。<strong>为什么先 EnableWakeUpPin</strong>：待机时只有 WKUP 引脚（PA0）能唤醒，必须先配置再睡。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-demo">七、现象演示与验证</h2>
+          <ul>
+            <li><strong>停止模式</strong>：串口打印 <span class="inline-code">sleep...</span> → 10 秒后打印 <span class="inline-code">wake up!</span> 和 <span class="inline-code">sleep...</span>，循环。</li>
+            <li><strong>待机模式</strong>：串口打印 <span class="inline-code">main start</span> → 按 PA0 → 打印 <span class="inline-code">wakeup from standby!</span> → 再次 main start。</li>
+            <li><strong>电流对比</strong>：运行 ~30mA → 停止 ~20µA → 待机 ~2µA（板级含 LDO 会偏高）。</li>
+          </ul>
+          <p><strong>验证方法：</strong></p>
+          <ol>
+            <li>万用表 mA 档串供电线，分别观察运行/睡眠/停止/待机的稳态电流——记录四档数据。</li>
+            <li>把 WakeUpTimer 计数值从 9 改成 59（1 分钟），观察唤醒间隔变化。</li>
+            <li>注释掉醒来后的 SystemClock_Config，观察串口波特率错乱——亲眼验证「必须重配时钟」。</li>
+          </ol>
+        </section>
+
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>唤醒后串口乱码/程序跑飞</td><td>没重配时钟树</td><td>唤醒后先 SystemClock_Config() 再初始化外设</td></tr>
+              <tr><td>电流降不下来</td><td>调试器连着 / LDO 指示耗电</td><td>断开 ST-Link；用电池/稳压源供电测</td></tr>
+              <tr><td>RTC 唤醒不触发</td><td>WakeUpTimer 计数值/时钟源配错</td><td>核对 1Hz 基准与 N+1；确认唤醒中断已使能</td></tr>
+              <tr><td>停止模式按键唤不醒</td><td>EXTI 没配成唤醒源</td><td>停止模式用 EXTI（PA0 外部中断）唤醒，检查 NVIC 与 EXTI 线</td></tr>
+              <tr><td>待机后一直复位循环</td><td>WKUP 引脚配置/电平不对</td><td>待机只能 PA0 上升沿唤醒；清 WU 标志；防抖</td></tr>
+              <tr><td>待机后变量全丢</td><td>RAM 断电（正常特性）</td><td>需要保留的放备份寄存器（HAL_RTCEx_BKUPWrite）</td></tr>
+              <tr><td>唤醒后 HAL_Delay 卡死</td><td>SysTick 时钟没恢复</td><td>SystemClock_Config 后 SysTick 自动恢复；确认调用顺序</td></tr>
+              <tr><td>睡眠模式电流仍大</td><td>外设仍在跑（时钟没关）</td><td>睡眠前关不用的外设时钟（__HAL_RCC_xxx_CLK_DISABLE）</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（必做）</strong>：把停止模式示例改成「醒后读取 RTC 时间并串口打印」——结合 stm32-rtc.html 的知识做完整时钟节点。</p>
+          <p><strong>练习 2</strong>：测量并记录四档电流，算一算：2000mAh 电池、每 10 秒醒 1 次（每次 100ms），理论续航多少天。</p>
+          <p><strong>练习 3（进阶）</strong>：待机模式 + 备份寄存器：待机前把计数写进备份寄存器，唤醒后读回累加——跨待机的「记忆」。</p>
+          <p><strong>延伸学习</strong>：STM32 三篇进阶（CAN/内部 Flash/低功耗）完成。横向对比 <a href="esp32-deepsleep.html">ESP32 Deep Sleep</a>：ESP32 也有 sleep 与 wakeup 源，思路一致、API 不同。回到 <a href="route.html">学习路线</a> 阶段 4，低功耗 + 参数保存 + RTC 可以组合成完整的电池版温湿度记录仪毕设。</p>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="stm32-internal-flash.html" class="btn btn-outline btn-sm">← 上一篇：内部 Flash 读写</a>
+          <a href="stm32.html" class="btn btn-outline btn-sm">返回 STM32 教程目录 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

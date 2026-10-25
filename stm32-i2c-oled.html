@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - STM32 软件 I2C 驱动 OLED 显示屏（SSD1306）零基础</title>
+  <meta name="description" content="零基础学软件 I2C：SCL/SDA 两根线、7 位地址、起始/停止条件、ACK 应答、SSD1306 显存页结构、软件 I2C 与硬件 I2C 区别，用两个 GPIO 模拟时序点亮 0.96 寸 OLED。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link active" aria-current="page">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>软件 I2C 驱动 OLED 显示屏（SSD1306）</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：STM32</span>
+          <span class="badge badge-orange">进阶</span>
+          <span class="badge badge-gray">更新：2026-10-24</span>
+        </div>
+
+        <p class="text-secondary mb-6">用两个 GPIO 模拟 I2C 时序，把 0.96 寸 OLED 点起来。本讲从零讲透 I2C 总线为什么只要两根线、SCL/SDA 各自干什么、起始/停止/应答三个暗号、7 位设备地址怎么来的、SSD1306 显存的页结构，以及「软件 I2C」和「硬件 I2C」的区别。看懂这套位操作，你就掌握了 I2C 协议的本质。</p>
+
+        <!-- ===== 一 ===== -->
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>说清楚 I2C 协议的两根线 SCL/SDA、起始停止条件、ACK 应答、7 位地址是什么。</li>
+            <li>理解 SSD1306 的显存页结构，知道想在哪个位置写字节就能点亮哪个像素。</li>
+            <li>用软件 I2C（GPIO 模拟）在 OLED 上显示字符 Hi，并理解软件 I2C 与硬件 I2C 的取舍。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识：</strong></p>
+          <ul>
+            <li>GPIO（stm32-gpio.html）：开漏输出、上拉电阻——本讲 SCL/SDA 就配成开漏。</li>
+            <li>C 语言：位运算（&amp;、&lt;&lt;）、宏定义、函数。</li>
+          </ul>
+          <p><strong>本课新名词：</strong>I2C、SCL、SDA、起始/停止条件、ACK、7 位地址、SSD1306、显存、页(page)、软件 I2C、硬件 I2C、开漏输出。</p>
+        </section>
+
+        <!-- ===== 二 ===== -->
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. I2C 是什么：只用两根线的总线</h3>
+          <p><strong>生活类比</strong>：I2C 像一个会议室只有「时钟节拍手（SCL）」和「发言话筒（SDA）」两根线。主机控制节拍手什么时候敲，大家在同一拍上通过话筒传一个位，一根数据线就能挂很多个设备。</p>
+          <p><strong>一句话定义</strong>：I2C 是一种只用两根线的串行总线：<strong>SCL（时钟线）</strong>由主机控制节拍，<strong>SDA（数据线）</strong>在 SCL 高电平时数据必须稳定、在 SCL 低电平时才能变化。</p>
+          <p><strong>例子</strong>：本讲 PB6=SCL、PB7=SDA，一根接 OLED 的 SCL、一根接 OLED 的 SDA，就完成了通信。</p>
+
+          <h3>2. 三个暗号：起始、停止、应答</h3>
+          <p><strong>生活类比</strong>：两个人打电话要先说「喂（开始）」、挂前说「拜拜（结束）」，对方每听一句还要「嗯（应答）」一声。I2C 也有这三个暗号。</p>
+          <p><strong>一句话定义</strong>：<strong>起始 START</strong>：SCL 为高时，SDA 从高变低；<strong>停止 STOP</strong>：SCL 为高时，SDA 从低变高；<strong>应答 ACK</strong>：每发完 8 位，主机释放 SDA，从机拉低 SDA 表示「收到了」。</p>
+          <p><strong>例子</strong>：代码里 I2C_Start() 就是先 SCL 高、再把 SDA 拉低；I2C_Stop() 是 SCL 高时把 SDA 拉高。</p>
+
+          <h3>3. 7 位地址：总线上的门牌号</h3>
+          <p><strong>生活类比</strong>：一根 SDA 上挂好几个设备，怎么知道话是说给谁？靠门牌号。主机先喊地址，只有门牌号对的设备才应答。</p>
+          <p><strong>一句话定义</strong>：I2C 设备有一个 7 位地址，SSD1306 通常是 <span class="inline-code">0x3C</span>。发送时要左移一位、最低位放读写位，写成 8 位就是写地址 <span class="inline-code">0x78</span>（0x3C&lt;&lt;1）。</p>
+          <p><strong>例子</strong>：本讲 OLED_ADDR=0x78，就是 7 位地址 0x3C 左移一位后的写地址。</p>
+
+          <h3>4. SSD1306 与显存：想亮哪个点就写哪个字节</h3>
+          <p><strong>生活类比</strong>：OLED 屏幕背后有一张「显存地图」，地图上每个字节管 8 个像素竖条。你往地图某个格子写 1，屏幕对应位置就亮一个点。</p>
+          <p><strong>一句话定义</strong>：SSD1306 驱动 128×64 像素屏，内部显存把 64 行分成 8 个「页(page)」，每页高 8 像素、宽 128 列。写 OLED 先设页地址+列地址，再写一个字节，该字节 8 位对应那一列竖排 8 个像素的亮灭。</p>
+          <p><strong>例子</strong>：OLED_SetPos(x,y) 先发页地址 0xB0+y、再发列地址低 4 位和高 4 位，之后 WriteData 的每个字节就在对应位置点灯。</p>
+
+          <h3>5. 软件 I2C 与硬件 I2C：手动模拟 vs 硬件自动</h3>
+          <p><strong>生活类比</strong>：硬件 I2C 像自动挡——交给车（硬件外设）自己开，省事但限定挡位；软件 I2C 像手动挡——你用两个 GPIO 自己一根一根拨 SCL/SDA，不挑引脚、时序完全可控，但费 CPU。</p>
+          <p><strong>一句话定义</strong>：<strong>软件 I2C</strong> 用普通 GPIO 翻转电平手动模拟时序，任意引脚可用、时序看得见；<strong>硬件 I2C</strong> 用 STM32 内部 I2C 外设自动产生时序，省 CPU 但引脚固定。教学用软件 I2C 理解原理最快。</p>
+          <p><strong>例子</strong>：本讲故意用 PB6/PB7 软件模拟，不碰硬件 I2C 外设，方便逐行看清时序。</p>
+        </section>
+
+        <!-- ===== 三 ===== -->
+        <section>
+          <h2 id="sec-principle">三、原理介绍</h2>
+          <p>I2C 只用两根线就能挂多个从机，秘诀全在「开漏 + 统一上拉」这个电气设计里。下面三个机制讲清它为什么省线、为什么不乱。</p>
+          <p><strong>整条链路：</strong>主机拉 SDA 发起始 → 发 7 位从机地址 → 从机 ACK → 发控制字节(0x00命令/0x40数据) → 逐字节发像素 → 主机发起止。</p>
+
+          <h3>原理 1：开漏线与——为什么 I2C 能一线多挂</h3>
+          <p>I2C 是多机共享一根 SDA。若某设备用推挽输出，它要发 1 时主动推高 3.3V，另一个设备同时要发 0 又拉低，两条低阻线路对顶就会短路烧片。所以 I2C 规定<strong>开漏输出</strong>：引脚只能拉低、不能推高，高电平由统一的外部上拉电阻产生。发 1 = 松手（释放，被上拉拉高），发 0 = 拽低。任意个设备挂同一根线，谁都不会强制推高，永不打架——这就是「两线挂十几个传感器」的电气基础。</p>
+
+          <h3>原理 2：SCL/SDA 时序——三个暗号怎么对齐</h3>
+          <p>SCL 时钟由主机控制节拍，<strong>SDA 只在 SCL 低电平期间才允许变化</strong>，SCL 高电平期间 SDA 必须稳定，否则被误判为控制信号。三个暗号由此而来：</p>
+          <ul>
+            <li><strong>起始 START</strong>：SCL 高时 SDA 由高变低（唯一一次「SCL 高时 SDA 动」）。</li>
+            <li><strong>停止 STOP</strong>：SCL 高时 SDA 由低变高。</li>
+            <li><strong>应答 ACK</strong>：每发完 8 位，主机释放 SDA，从机拉低一位表示「收到了」。</li>
+          </ul>
+          <p>本教程用 GPIO 模拟（软件 I2C），就是手动按时序拉/放 SCL、SDA，把这套时序「看得见」——这也是为什么要把引脚配成开漏输出。</p>
+          <p><strong>教材式时序约束（建立/保持时间）：</strong>协议还规定了两个新手容易忽略的时间参数——<strong>建立时间(setup time)</strong>：SDA 上的数据必须在 SCL 上升沿之前就稳定下来，早于上升沿的那段余量；<strong>保持时间(hold time)</strong>：SCL 变低后，SDA 还要再稳一小段时间才能变。软件模拟时，代码里每个 SCL_H() 与 SCL_L() 之间不加足够微秒延时（直接狂飙），建立/保持时间就不满足，从机采错位——这就是为什么软件 I2C 要在每拍之间插 <span class="inline-code">HAL_Delay</span> 或短延时，跑得太快反而通信失败。标准模式 I2C(100kHz) 下一位约 10µs，模拟时序别快过这个。</p>
+
+          <h3>原理 3：SSD1306 显存——写一个字节怎么点亮 8 个像素</h3>
+          <p>OLED 驱动是 SSD1306（128×64），7 位地址常 <span class="inline-code">0x3C</span>（8 位写地址左移一位 = <span class="inline-code">0x78</span>）。它内部有<strong>显存 GDDRAM</strong>：64 行分成 8 个页，每页高 8 像素、宽 128 列，写一个字节 = 该列 8 个像素的亮灭位图。发数据前先发<strong>控制字节</strong>：<span class="inline-code">0x00</span> 后跟命令（设地址、开显示）、<span class="inline-code">0x40</span> 后跟像素数据。初始化里 <span class="inline-code">0x8D/0x14</span> 开内部充电泵（OLED 需要升压到 7V 才能点亮）、<span class="inline-code">0xAF</span> 开显示。</p>
+          <blockquote>记忆点：I2C 两线=SCL 时钟+SDA 数据，开漏+上拉实现一线多挂；SCL 高时 SDA 动=起始/停止，每 8 位一 ACK；SSD1306 显存按 8 页分，0x00=命令 0x40=数据，0x78 是写地址。</blockquote>
+        </section>
+
+        <!-- ===== 四 ===== -->
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <table>
+            <thead>
+              <tr><th>模块引脚（OLED）</th><th>单片机引脚</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>SCL</td><td>PB6</td><td>软件 I2C 时钟线，配 GPIO_Output Open Drain</td></tr>
+              <tr><td>SDA</td><td>PB7</td><td>软件 I2C 数据线，配 GPIO_Output Open Drain</td></tr>
+              <tr><td>VCC</td><td>3.3V</td><td>大部分 OLED 支持 3.3~5V，接 3.3V 最稳</td></tr>
+              <tr><td>GND</td><td>GND</td><td>共地</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么这样接：</strong></p>
+          <ul>
+            <li><strong>为什么 SCL/SDA 要开漏输出？</strong> I2C 总线是「线与」结构，主机和从机都只能拉低、靠上拉电阻释放为高。开漏输出正好符合：写 SET 是释放总线，写 RESET 是拉低。</li>
+            <li><strong>为什么 VCC 接 3.3V？</strong> STM32 是 3.3V 系统，OLED 模块通常自带上拉和稳压，接 3.3V 电平与单片机一致最稳。</li>
+            <li><strong>为什么共地？</strong> I2C 的高低电平是相对 GND 判断的，不共地通信会乱。</li>
+          </ul>
+          <div class="tip-info mt-4"><span class="tip-label">CubeMX 配置要点</span>
+            PB6、PB7 都设为 <span class="inline-code">GPIO_Output</span>，GPIO mode 选 <strong>Open Drain</strong>，默认输出 High（释放总线）。不需要开任何外设时钟。微秒级延时基于 SysTick 实现。</div>
+        </section>
+
+        <!-- ===== 五 ===== -->
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p>下面是软件 I2C + SSD1306 的核心驱动。字模表 <span class="inline-code">F6x8</span> 是一张标准 6×8 ASCII 点阵数组（放在 oledfont.h），本片段展示调用关系。</p>
+          <pre><code class="language-c">/* oled.c：软件 I2C 位操作核心（PB6=SCL, PB7=SDA, 开漏输出） */
+#define SCL_H()  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET)
+#define SCL_L()  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET)
+#define SDA_H()  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_SET)
+#define SDA_L()  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_RESET)
+
+#define OLED_ADDR   0x78    /* 0x3C 左移 1 位后的写地址 */
+
+static void I2C_Start(void)
+{
+  SDA_H(); SCL_H();
+  SDA_L();              /* SCL 高时 SDA 下降沿 = 起始 */
+  SCL_L();
+}
+
+static void I2C_Stop(void)
+{
+  SDA_L(); SCL_H();
+  SDA_H();              /* SCL 高时 SDA 上升沿 = 停止 */
+}
+
+static void I2C_WriteByte(uint8_t dat)
+{
+  for (uint8_t i = 0; i &lt; 8; i++)
+  {
+    if (dat &amp; 0x80) SDA_H(); else SDA_L();   /* 先发最高位 */
+    dat &lt;&lt;= 1;
+    SCL_H(); SCL_L();            /* 一个时钟节拍 */
+  }
+  SDA_H();              /* 释放 SDA，等待从机应答 */
+  SCL_H(); SCL_L();
+}
+
+static void OLED_WriteCmd(uint8_t cmd)
+{
+  I2C_Start();
+  I2C_WriteByte(OLED_ADDR);
+  I2C_WriteByte(0x00);  /* 控制字节：命令 */
+  I2C_WriteByte(cmd);
+  I2C_Stop();
+}
+
+static void OLED_WriteData(uint8_t dat)
+{
+  I2C_Start();
+  I2C_WriteByte(OLED_ADDR);
+  I2C_WriteByte(0x40);  /* 控制字节：数据 */
+  I2C_WriteByte(dat);
+  I2C_Stop();
+}
+
+/* 设置显存指针：x=列(0~127), y=页(0~7) */
+static void OLED_SetPos(uint8_t x, uint8_t y)
+{
+  OLED_WriteCmd(0xB0 + y);                 /* 页地址 */
+  OLED_WriteCmd(0x00 + (x &amp; 0x0F));        /* 列低 4 位 */
+  OLED_WriteCmd(0x10 + ((x &gt;&gt; 4) &amp; 0x0F)); /* 列高 4 位 */
+}
+
+/* 在 (x,y) 显示一个 ASCII 字符，字模宽 6 高 8 */
+void OLED_ShowChar(uint8_t x, uint8_t y, char ch)
+{
+  uint8_t c = ch - ' ';          /* 字模表从空格 0x20 开始 */
+  OLED_SetPos(x, y);
+  for (uint8_t i = 0; i &lt; 6; i++)
+  {
+    OLED_WriteData(F6x8[c][i]);   /* F6x8 为标准 6x8 字模表 */
+  }
+}
+
+void OLED_Init(void)
+{
+  HAL_Delay(100);
+  OLED_WriteCmd(0xAE);   /* 关显示 */
+  OLED_WriteCmd(0x20); OLED_WriteCmd(0x10);
+  OLED_WriteCmd(0xB0);
+  OLED_WriteCmd(0xC8);   /* 反方向扫描 */
+  OLED_WriteCmd(0x00); OLED_WriteCmd(0x10);
+  OLED_WriteCmd(0x40);
+  OLED_WriteCmd(0x81); OLED_WriteCmd(0x7F);  /* 对比度 */
+  OLED_WriteCmd(0xA1);
+  OLED_WriteCmd(0xA6);   /* 正常显示（非反白） */
+  OLED_WriteCmd(0xA8); OLED_WriteCmd(0x3F);
+  OLED_WriteCmd(0xD3); OLED_WriteCmd(0x00);
+  OLED_WriteCmd(0xD5); OLED_WriteCmd(0x80);
+  OLED_WriteCmd(0xD9); OLED_WriteCmd(0xF1);
+  OLED_WriteCmd(0xDA); OLED_WriteCmd(0x12);
+  OLED_WriteCmd(0xDB); OLED_WriteCmd(0x40);
+  OLED_WriteCmd(0x8D); OLED_WriteCmd(0x14);  /* 开启内部充电泵：缺它屏不亮 */
+  OLED_WriteCmd(0xAF);   /* 开显示 */
+}</code></pre>
+          <p>main 中调用：</p>
+          <pre><code class="language-c">int main(void)
+{
+  HAL_Init();
+  SystemClock_Config();
+  MX_GPIO_Init();
+
+  OLED_Init();                 /* 初始化 SSD1306 */
+  OLED_ShowChar(0, 0, 'H');   /* 在 (列0, 页0) 显示 H */
+  OLED_ShowChar(8, 0, 'i');   /* 在 (列8, 页0) 显示 i */
+
+  while (1) { }
+}</code></pre>
+        </section>
+
+        <!-- ===== 六 ===== -->
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第 1 段：I2C 起始/停止/发字节</h3>
+          <p><strong>在做什么：</strong> I2C_Start 在 SCL 高时拉低 SDA（起始）；I2C_Stop 在 SCL 高时拉高 SDA（停止）；I2C_WriteByte 逐位把一个字节发到 SDA，每个位配一个 SCL 时钟节拍。</p>
+          <p><strong>为什么这么写：</strong> 严格按 I2C 时序：SCL 高电平时 SDA 不能变（否则会被误判为起始/停止），数据只能在 SCL 低电平时变化。先发最高位 MSB。</p>
+          <p><strong>不写会怎样：</strong> 时序错了 OLED 收不到正确命令，屏幕全黑。这是软件 I2C 调试最耗时的地方。</p>
+
+          <h3>第 2 段：命令 vs 数据控制字节</h3>
+          <p><strong>在做什么：</strong> 每次通信先发 0x78 地址，再发一个控制字节：0x00=后面是命令，0x40=后面是显示数据。</p>
+          <p><strong>为什么这么写：</strong> SSD1306 靠这个字节区分「你是让我设地址/开显示」还是「你要在显存点灯」。没有它，芯片分不清字节含义。</p>
+          <p><strong>不写会怎样：</strong> 控制字节发错，命令被当数据写进显存，屏幕显示乱码而不是正常字符。</p>
+
+          <h3>第 3 段：SetPos 与 ShowChar</h3>
+          <p><strong>在做什么：</strong> OLED_SetPos 先设页地址 0xB0+y，再分列低 4 位和高 4 位；ShowChar 从字模表取 6 个字节逐字节写进显存。</p>
+          <p><strong>为什么这么写：</strong> SSD1306 的列地址是 8 位的，要分两次发（低 4 位 + 高 4 位）。字模表 F6x8 把每个字符做成 6 字节点阵，写 6 字节就拼出一个字符。</p>
+          <p><strong>不写会怎样：</strong> 只写列低 4 位不写高 4 位，字符会跑到屏幕右边或位置错乱。</p>
+
+          <h3>第 4 段：OLED_Init 充电泵</h3>
+          <p><strong>在做什么：</strong> 一长串初始化命令，其中 0x8D/0x14 是开启内部充电泵，0xAF 是开显示。</p>
+          <p><strong>为什么这么写：</strong> OLED 是自发光屏，需要内部升压产生驱动电压，充电泵命令缺了，屏幕永远全黑不亮。</p>
+          <p><strong>不写会怎样：</strong> 漏掉 0x8D/0x14，无论怎么写数据屏幕都不亮——这是 OLED 全黑的第一排查点。</p>
+        </section>
+
+        <!-- ===== 七 ===== -->
+        <section>
+          <h2 id="sec-demo">七、现象演示说明</h2>
+          <ul>
+            <li>下载后 OLED 背光亮起（淡蓝/白光），第一行最左边显示两个字符 <span class="inline-code">Hi</span>。</li>
+            <li>如果一片漆黑，先看有没有充电泵命令 0x8D/0x14——缺了它 OLED 永远不亮。</li>
+            <li>验证：把 OLED_ShowChar 的坐标改成 (0, 4)，字应出现在屏幕下半部分；y 参数就是页号（0~7）。</li>
+          </ul>
+          <p><strong>可量化的验证方法：</strong></p>
+          <ul>
+            <li><strong>改 y 看位置</strong>：把第二个 ShowChar 的页号从 0 改成 4，字符应移到屏幕中间偏下一行——验证页号 y 控制纵向位置。</li>
+            <li><strong>改 x 看横向</strong>：x 从 0 改成 64，字符应移到屏幕右半部分——验证列号 x 控制横向位置。</li>
+            <li><strong>多字符测试</strong>：连续 ShowChar 出 "Hello"，应在一行水平排开 5 个字符；若挤在一起或重叠，说明字间距（每字符宽 6 列）没算对。</li>
+          </ul>
+        </section>
+
+        <!-- ===== 八 ===== -->
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>屏幕全黑不亮</td><td>初始化序列缺了充电泵命令 0x8D/0x14；或 VCC 没供上</td><td>对照本教程 OLED_Init 检查命令；确认 VCC 接 3.3V</td></tr>
+              <tr><td>屏幕全白/全反色</td><td>扫描方向或段重映射写反</td><td>把 0xC8 改成 0xC0、0xA1 改成 0xA0 试一次</td></tr>
+              <tr><td>字符位置错乱/跑到右边去了</td><td>列地址只写了低 4 位，没写高 4 位</td><td>OLED_SetPos 里 0x00+(x&amp;0x0F) 与 0x10+((x&gt;&gt;4)&amp;0x0F) 两条都要发</td></tr>
+              <tr><td>完全没反应</td><td>SCL/SDA 接反；或引脚没配成开漏输出</td><td>对调 SCL/SDA 测试；CubeMX 把 PB6/PB7 设为 GPIO_Output Open Drain</td></tr>
+              <tr><td>编译报 F6x8 未定义</td><td>没把字模数组 oledfont.h 加进工程</td><td>把字模表文件加入工程并 #include "oledfont.h"</td></tr>
+              <tr><td>波形上 SCL/SDA 永远拉不高，或时通时不通（教材电气坑）</td><td>I2C 是开漏线与，高电平完全靠上拉电阻；OLED 模块虽自带上拉，但如果你自己用杜邦线在面包板上搭、且没加 4.7k~10kΩ 上拉到 3.3V，总线高电平就出不来</td><td>确认 SCL/SDA 各有一颗上拉电阻（典型 4.7kΩ）到 3.3V；或在 CubeMX 给开漏脚同时开内部上拉作临时验证。上拉太小耗电大、太大边沿缓</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <!-- ===== 九 ===== -->
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（显示你的名字）：</strong> 用多个 OLED_ShowChar 在第一行显示自己的名字拼音，如 "LUJINGBIAO"。提示：每个字符占 6 列，x 依次加 6。</p>
+          <p><strong>练习 2（多行显示）：</strong> 第一行显示标题，第三行显示一行数字。提示：页号 y 每行加 2（每个字符高 1 页，行间留 1 页空白更美观）。</p>
+          <p><strong>练习 3（做 OLED_ShowString）：</strong> 基于 ShowChar 写一个能整串显示的函数：遍历字符串逐字符调用 ShowChar。提示：这正是最后电压表项目要用的函数。</p>
+          <p><strong>延伸学习：</strong></p>
+          <ul>
+            <li><a href="#xxx" data-placeholder>外部中断 EXTI：按键翻页（stm32-exti.html）</a></li>
+            <li><a href="#xxx" data-placeholder>硬件 I2C：用 STM32 内部 I2C 外设代替 GPIO 模拟</a></li>
+            <li><a href="#xxx" data-placeholder>画点画线：在 OLED 上画图形</a></li>
+          </ul>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="stm32-adc.html" class="btn btn-outline btn-sm">← 上一篇：ADC 模拟采集</a>
+          <a href="stm32-exti.html" class="btn btn-outline btn-sm">下一篇：外部中断 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

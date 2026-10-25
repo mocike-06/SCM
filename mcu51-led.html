@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - IO 口输出：LED 流水灯（零基础）</title>
+  <meta name="description" content="零基础学 51 单片机 IO 口：什么是高低电平、欧姆定律与限流电阻、灌电流与拉电流、二进制十六进制与位运算、sbit，写出可直接烧录的 LED 流水灯完整代码。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link active" aria-current="page">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>IO 口输出：LED 流水灯</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：51 单片机</span>
+          <span class="badge badge-green">入门</span>
+          <span class="badge badge-gray">更新：2026-10-24</span>
+        </div>
+
+        <p class="text-secondary mb-6">让 8 个 LED 像跑马灯一样依次点亮、来回流动。本讲从「什么是高/低电平」讲起，带你弄懂欧姆定律、灌电流与拉电流、十六进制与位运算，再用 sbit 写出第一个真正能烧录的控制程序。即使你还没学过数字电路，也能跟着走完。</p>
+
+        <!-- ===== 一、本课目标与前置知识 ===== -->
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>说清楚「高电平/低电平」「灌电流/拉电流」「限流电阻」是什么，为什么 LED 必须串电阻。</li>
+            <li>看懂并会改流水灯程序：用 sbit 定义引脚、用十六进制和位运算控制 8 个 LED。</li>
+            <li>独立完成接线、烧录，并能通过改延时参数观察现象来验证程序。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识（对应学习路线阶段 1、阶段 2 前两篇）：</strong></p>
+          <ul>
+            <li>C 语言基础（阶段 1）：变量、for 循环、函数调用——本课代码只用这些。</li>
+            <li>开发环境搭建（mcu51-env.html）：会建 Keil 工程、会烧录 hex 文件。</li>
+            <li>最小系统概念（mcu51-minisys.html）：知道晶振、复位、上电时序，理解单片机为什么「能跑起来」。</li>
+          </ul>
+          <p><strong>本课会出现的新名词（下面逐一讲解）：</strong>高电平/低电平、欧姆定律、限流电阻、灌电流/拉电流、二进制/十六进制、位运算（&lt;&lt; &gt;&gt;）、sbit、准双向口。</p>
+        </section>
+
+        <!-- ===== 二、基础概念铺垫 ===== -->
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. 高电平与低电平</h3>
+          <p><strong>生活类比</strong>：把电路比作一条水管，电就像水。「高电平」相当于阀门开大、水压高；「低电平」相当于阀门关小、水压接近零。数字电路里我们只认这两个状态，不需要中间值。</p>
+          <p><strong>一句话定义</strong>：引脚上的电压接近电源电压（51 单片机是 5V）时叫<strong>高电平</strong>，记为数字 <span class="inline-code">1</span>；接近 0V 时叫<strong>低电平</strong>，记为数字 <span class="inline-code">0</span>。</p>
+          <p><strong>例子</strong>：程序写 <span class="inline-code">P1 = 0x00</span>，P1 口 8 根线全部输出 0V（低电平）；写 <span class="inline-code">P1 = 0xff</span>，全部输出 5V（高电平）。LED 亮不亮，就看它两端有没有电位差、有没有电流流过。</p>
+
+          <h3>2. 欧姆定律与限流电阻</h3>
+          <p><strong>生活类比</strong>：电压是「水压」，电流是「水流」，电阻是「水管粗细」。水管越细，同样的水压下水流越小——这就是电阻在限制电流。</p>
+          <p><strong>一句话定义</strong>：欧姆定律 <span class="inline-code">I = U / R</span>（电流 = 电压 ÷ 电阻）。LED 是个「娇气」的器件，只要很小电流（约 5~20mA）就亮，电流太大几秒钟就烧毁，所以必须串一个电阻把电流限制住，这个电阻就叫<strong>限流电阻</strong>。</p>
+          <p><strong>例子</strong>：共地接法下，5V 电源减去 LED 自身压降约 2V，电阻两端电压约 3V；串 220Ω 时电流约 3V ÷ 220Ω ≈ 13.6mA，安全又能看清。不串电阻，电流可能达到上百毫安，LED 直接烧掉（可能冒烟、永久损坏）。</p>
+
+          <h3>3. 灌电流与拉电流</h3>
+          <p><strong>生活类比</strong>：站在引脚的角度看电流方向——「灌」是水从外面流进引脚（像往瓶子里灌水），「拉」是水从引脚流出去（像从瓶子里往外倒水）。</p>
+          <p><strong>一句话定义</strong>：外部电流<strong>流进</strong>单片机引脚叫<strong>灌电流</strong>（sink）；电流从引脚<strong>流出</strong>叫<strong>拉电流</strong>（source）。51 单片机的准双向口「能吸」的能力远强于「能吐」的能力。</p>
+          <p><strong>例子</strong>：本课的接法里，LED 阳极接 5V、阴极接引脚，IO 输出 0 时电流从 5V 经 LED 和电阻<strong>灌进</strong>引脚，LED 亮——这叫共地接法（灌电流），比让引脚自己往外「拉」电流的接法更亮更稳。记口诀：<strong>共地接法下，写 0 亮、写 1 灭</strong>。</p>
+
+          <h3>4. 二进制与十六进制</h3>
+          <p><strong>生活类比</strong>：8 个开关并排摆在面板上，每个开关只有开/关两种状态。单片机内部也是这样：一根线、一位（bit）只存 0 或 1。8 位合起来叫一个字节（byte）。</p>
+          <p><strong>一句话定义</strong>：二进制就是只用 0 和 1 记数；十六进制用 0~9 和 A~F 记数，<strong>1 位十六进制 = 4 位二进制</strong>，写程序时用 <span class="inline-code">0x</span> 开头表示十六进制数。</p>
+          <p><strong>例子</strong>：<span class="inline-code">0xfe</span> 拆开看：f = 1111，e = 1110，合起来就是 <strong>1111 1110</strong>——8 位里只有最低位是 0，其余是 1。往 P1 写 0xfe，就表示「让 P1.0 输出 0（点亮），其余 7 位输出 1（熄灭）」。反过来 <span class="inline-code">0x01</span> = 0000 0001。</p>
+
+          <h3>5. 位运算与 sbit</h3>
+          <p><strong>生活类比</strong>：位运算像「搬动整排开关」——左移 <span class="inline-code">&lt;&lt;</span> 就是整排向右看齐（把每个开关的状态传给左边邻居），右移 <span class="inline-code">&gt;&gt;</span> 就是向左看齐。</p>
+          <p><strong>一句话定义</strong>：位运算是直接对一个数的二进制位进行操作的运算；<span class="inline-code">sbit</span> 是 Keil 专门用来「给某个引脚起名字」的关键字，起好名字后直接写 <span class="inline-code">名字 = 0</span> 就能控制这根线。</p>
+          <p><strong>例子</strong>：<span class="inline-code">0xfe &lt;&lt; 1</span> 等于 <span class="inline-code">0xfc</span>（1111 1000），最低位补进来的 0 会让灯「熄灭」——所以流水灯代码里左移后要用 <span class="inline-code">| 0x01</span> 把最低位补回 1，保证整排只有一颗灯灭。而 <span class="inline-code">sbit LED = P1^0;</span> 之后，<span class="inline-code">LED = 0;</span> 就能点亮 P1.0 上的灯。</p>
+        </section>
+
+        <!-- ===== 三、原理介绍 ===== -->
+        <section>
+          <h2 id="sec-principle">三、原理介绍：往 P1 写一个字节，灯为什么就按位亮了</h2>
+          <p>51 有 P0~P3 四个 8 位口、共 32 根 IO。它们不是简单的「输出高/低」开关，而是一套内部带电阻和 MOS 管的电路——理解它的结构，才能明白为什么按键不用外接上拉、为什么 LED 要共地接。流水灯本身只是这条链路的第一次练手：</p>
+          <p><strong>流水灯一次来回的执行流程：</strong></p>
+          <ol>
+            <li><span class="inline-code">led=0xfe</span>（1111 1110），只有 P1.0 输出 0，第 1 颗灯亮。</li>
+            <li>写入 P1、延时 300ms，让这颗灯「亮住」。</li>
+            <li><span class="inline-code">led=(led&lt;&lt;1)|0x01</span>：亮位左移、最低位补 1，第 2 颗亮、第 1 颗灭。</li>
+            <li>重复走到 P1.7，再用右移走回来，while(1) 无限循环。</li>
+          </ol>
+
+          <h3>原理 1：准双向口内部到底长什么样</h3>
+          <p>P1/P2/P3 每根引脚内部是<strong>一个弱上拉电阻 + 一个下拉 MOS 管</strong>的组合：</p>
+          <ul>
+            <li><strong>写 1</strong>：下拉 MOS 截止，那个约 30kΩ 弱上拉把引脚拉到高电平。这个上拉很「弱」，所以叫<strong>准</strong>双向——高电平的驱动能力差。</li>
+            <li><strong>写 0</strong>：下拉 MOS 导通，直接把引脚硬拉到 GND，灌电流能力强。</li>
+          </ul>
+          <p><strong>这就解释了后面按键为什么免外接上拉</strong>：你只要先往引脚写 1，内部那只弱上拉就已经把电平维持在高；按键另一端接地，按下时强拉到 0、松开被内部弱上拉拉回 1——根本不需要外接电阻。P0 口是例外：它<strong>没有内部上拉</strong>，是真正的开漏输出，所以接数码管/P0 外扩时必须外加排阻，否则高电平出不来。</p>
+
+          <h3>原理 2：为什么 LED 要「阴极接引脚」而不是阳极</h3>
+          <p>本讲是<strong>共地（灌电流）接法</strong>：LED 阳极经限流电阻接 VCC、阴极接 IO。电流路径是 <span class="inline-code">VCC → 电阻 → LED → IO 内部下拉 MOS → GND</span>。IO 写 0 时下拉 MOS 导通，回路有电流、灯亮；写 1 时弱上拉把两端都顶到高电位、无电流、灯灭。<strong>为什么不反过来</strong>：51 的灌电流（往引脚灌 0）能力约每脚 20mA，而拉电流（引脚输出 1 往外送电流）受那个 30kΩ 弱上拉限制、小一个量级。阳极接 IO、阴极接地是拉电流接法，灯会明显变暗——这就是「共地更亮」的硬件根源。</p>
+
+          <h3>原理 3：读引脚 vs 读锁存器——准双向口最隐蔽的坑</h3>
+          <p>51 引脚内部其实有两个「读到的数据」：一个是<strong>锁存器</strong>（你写进去的那一位），一个是<strong>引脚真实电平</strong>。指令分两类：<span class="inline-code">P1=0xfe</span> 这种写操作、以及 <span class="inline-code">P1=P1|0x01</span> 这种「读-改-写」指令，读的是<strong>锁存器</strong>；而 <span class="inline-code">a=P1</span> 真的去读引脚电平时，读的是<strong>引脚上实际的电压</strong>。<strong>为什么读引脚前必须先写 1</strong>：如果你之前把该位写过 0，内部下拉 MOS 一直导通、把引脚死死拉在地上，这时外部再怎么拉它都读不到高电平——这就是「准双向」的代价。所以 51 当输入用前，标准动作是先往端口写 1（关断下拉 MOS、交给内部弱上拉），再读引脚。后面按键、矩阵键盘全靠这条规则。</p>
+          <h3>原理 4：P3 口的「第二功能」——教材必背引脚对照表</h3>
+          <p>51 的 P3 口每根引脚除了当普通 IO，还兼职一个片内外设功能。教材把这张表列为必考，后面定时器/串口/中断全部建立在这上面：</p>
+          <table>
+            <thead><tr><th>P3 引脚</th><th>P3.0</th><th>P3.1</th><th>P3.2</th><th>P3.3</th><th>P3.4</th><th>P3.5</th><th>P3.6</th><th>P3.7</th></tr></thead>
+            <tbody>
+              <tr><td>第二功能</td><td>RXD（串口收）</td><td>TXD（串口发）</td><td>/INT0（外部中断0）</td><td>/INT1（外部中断1）</td><td>T0（计数脉冲0）</td><td>T1（计数脉冲1）</td><td>/WR（片外写）</td><td>/RD（片外读）</td></tr>
+            </tbody>
+          </table>
+          <p>所以后面「串口接 P3.0/P3.1」「外部中断接 P3.2/P3.3」「定时器计数接 P3.4/P3.5」不是随便挑的，是芯片出厂就焊死的功能。<strong>sbit 与位寻址区的关系</strong>：<span class="inline-code">sbit LED = P1^0;</span> 本质是给片内 20H~2FH 位寻址区（或可位寻址 SFR）里的某一位起名字——P1 在 0x90（可位寻址，因 0x90 能被 8 整除），P1^0 就是 0x90 单元的最低位。这也是为什么只有 20H~2FH 和以 0/8 结尾的 SFR 才能用 sbit 直接操作。</p>
+          <blockquote>记忆点：P1~P3 内部=弱上拉+下拉 MOS，写 0 强拉低（灌电流亮灯）、写 1 弱上拉（所以按键免外接上拉）；P0 无内部上拉是开漏、必须外排阻；当输入前先写 1 关断下拉，读的是引脚电平、改寄存器读的是锁存器；main 必须 while(1) 死循环，单片机没有「结束」；P3.0~P3.7 第二功能分别是 RXD/TXD/INT0/INT1/T0/T1/WR/RD。</blockquote>
+        </section>
+
+        <!-- ===== 四、硬件接线说明 ===== -->
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <p>8 个 LED 阳极各自串一个 220~470Ω 限流电阻后接 VCC，阴极分别接到 P1 口的 8 根线上（P1.0~P1.7）。</p>
+          <table>
+            <thead>
+              <tr><th>模块引脚</th><th>单片机引脚</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>LED1~LED8 阳极</td><td>各经 220Ω 电阻接 VCC</td><td>电阻限流，防止 LED 过流烧毁</td></tr>
+              <tr><td>LED1 阴极</td><td>P1.0</td><td>IO 输出 0 时点亮（灌电流）</td></tr>
+              <tr><td>LED2~LED8 阴极</td><td>P1.1 ~ P1.7</td><td>依次对应，共 8 路</td></tr>
+              <tr><td>共地</td><td>GND</td><td>开发板与 USB 供电共地</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么这样接：</strong></p>
+          <ul>
+            <li><strong>为什么 LED 必须串电阻？</strong> LED 导通后压降基本固定（约 2V），没有电阻限流，电流会飙到上百毫安把 LED 烧毁。串 220~470Ω 后电流约 7~14mA，既亮又安全。</li>
+            <li><strong>为什么必须共地？</strong> 电流要形成回路，LED 的回路必须「回到」单片机的 GND。开发板、USB 电源、LED 电路三者不共地，回路断着，灯永远不亮——这是新手排查接线时第一个要查的点。</li>
+            <li><strong>为什么阴极接 IO 而不是阳极？</strong> 因为要用「灌电流」：电流流进引脚的能力强。反过来阳极接 IO、阴极接地是「拉电流」接法，51 拉电流能力弱，灯会明显变暗甚至不亮。</li>
+          </ul>
+        </section>
+
+        <!-- ===== 五、完整代码 ===== -->
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p>下面代码让 8 个 LED 从 P1.0 到 P1.7 依次点亮再回来，形成来回流水效果。可直接复制到 Keil C51 新建工程编译烧录。</p>
+          <pre><code class="language-c">/* LED 流水灯：P1 口 8 个 LED 来回流动（零基础注释版） */
+#include &lt;reg52.h&gt;              /* reg52.h：51 寄存器"字典"，定义了 P1、sbit 等 */
+
+/* 软件延时：大约延时 ms 毫秒（粗略，仅供入门演示） */
+void delay_ms(unsigned int ms) {
+    unsigned int i, j;
+    for (i = 0; i &lt; ms; i++)        /* 外层循环：重复 ms 次 */
+        for (j = 0; j &lt; 120; j++);  /* 内层循环：每次空转约 1ms */
+}
+
+void main(void) {
+    unsigned char led = 0xfe;    /* 1111 1110：最低位为 0，P1.0 点亮 */
+    unsigned char i;             /* 循环计数 */
+
+    while (1) {                  /* 死循环：程序永远在这里转 */
+        /* --- 第 1 段：亮灯从 P1.0 走到 P1.7（向右流动） --- */
+        for (i = 0; i &lt; 7; i++) {
+            P1 = led;            /* 把 led 的 8 位值写到 P1 口的 8 根线 */
+            delay_ms(300);       /* 停留 300ms，让肉眼看清当前亮灯 */
+            led = (led &lt;&lt; 1) | 0x01;  /* 亮位左移一格，最低位补 1 */
+        }
+        /* --- 第 2 段：亮灯从 P1.7 走回 P1.0（向左流动） --- */
+        for (i = 0; i &lt; 7; i++) {
+            P1 = led;
+            delay_ms(300);
+            led = (led &gt;&gt; 1) | 0x80;  /* 亮位右移一格，最高位补 1 */
+        }
+    }
+}</code></pre>
+          <p>想单独控制某一颗灯时，用 sbit 更直观。例如在 <span class="inline-code">#include</span> 下方加一句 <span class="inline-code">sbit LED1 = P1^0;</span>，然后在代码里直接写 <span class="inline-code">LED1 = 0;</span> 点亮它、<span class="inline-code">LED1 = 1;</span> 熄灭它。</p>
+
+          <p><strong>第二实例：用「数值自增」跑二进制计数灯</strong>。上面是移位流水，这个变体换个思路——让一个 8 位变量每 300ms 自增 1，直接写进 P1。8 颗灯的亮灭组合就变成了 00000000~11111111 的二进制计数，像一个 8 位「进度条」，顺带验证「P1 口整体写值=同时更新 8 根线」：</p>
+          <pre><code class="language-c">/* 二进制计数灯：P1 口显示 0~255 的二进制，走马灯效果 */
+#include &lt;reg52.h&gt;
+
+void delay_ms(unsigned int ms) {
+    unsigned int i, j;
+    for (i = 0; i &lt; ms; i++)
+        for (j = 0; j &lt; 120; j++);
+}
+
+void main(void) {
+    unsigned char cnt = 0;      /* 0~255 循环计数 */
+    while (1) {
+        P1 = ~cnt;              /* 共地写 0 亮：取反，cnt 的 bit=1 对应灯亮 */
+        delay_ms(300);
+        cnt++;                  /* 每 300ms +1，灯组按二进制进位变化 */
+    }
+}</code></pre>
+          <p><strong>为什么 <span class="inline-code">P1=~cnt</span> 要取反</strong>：共地接法写 0 才亮，而 cnt 自增时是「高位先变 1」，直接写 P1 会变成 1 亮（熄灭）。取反后 cnt 的每一位 1 都被映成 P1 的 0，于是 cnt=0b00000111 时低 3 盏亮、其余灭——肉眼看到灯组按二进制逐位点亮又清零，正好复习「一个字节 8 位 = 8 颗灯」的概念。</p>
+        </section>
+
+        <!-- ===== 六、代码逐段讲解 ===== -->
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第 1 段：头文件（第 1 行）</h3>
+          <p><strong>在做什么：</strong> <span class="inline-code">#include &lt;reg52.h&gt;</span> 把 51 单片机的「寄存器字典」引入程序，让 <span class="inline-code">P1</span>、<span class="inline-code">sbit</span> 这些名字可用。</p>
+          <p><strong>为什么这么写：</strong> 单片机内部靠寄存器控制，但寄存器地址是一串难记的数字（如 P1 对应地址 0x90）。头文件提前把这些名字和地址对应好，你写 <span class="inline-code">P1</span>，编译器就知道是操作哪个地址。</p>
+          <p><strong>不写会怎样：</strong> 编译直接报错 <span class="inline-code">'P1' undefined</span>——程序里用到的所有寄存器名都没有定义，一行都编译不过。</p>
+
+          <h3>第 2 段：延时函数 delay_ms（第 4~8 行）</h3>
+          <p><strong>在做什么：</strong> 让程序「空转」大约 ms 毫秒。内层 <span class="inline-code">j</span> 循环空转约 1ms，外层 <span class="inline-code">i</span> 循环把这段空转重复 ms 次。</p>
+          <p><strong>为什么这么写：</strong> 单片机执行一条指令是微秒级的，如果亮灯后不延时立即切换，整个流水过程快到你肉眼根本看不清。嵌套循环是入门阶段最简单的延时办法；120 这个数不是精确值，是让内层循环大约跑 1ms 的经验计数。</p>
+          <p><strong>不写会怎样：</strong> 不延时或延时太短（如把 300 改成 1），8 颗灯会变成全亮一片或一闪而过，看不到「流动」效果。</p>
+
+          <h3>第 3 段：向右流动（第 14~18 行）</h3>
+          <p><strong>在做什么：</strong> 先 <span class="inline-code">P1 = led</span> 把当前亮灯位置写到端口，延时后执行 <span class="inline-code">led = (led &lt;&lt; 1) | 0x01</span> 把亮的位置向左移一位。</p>
+          <p><strong>为什么这么写：</strong> 位运算一次就能移动整排灯的亮灭状态，比逐个引脚赋值高效得多。左移后最低位会变成 0（多出一颗「灭的灯」），用 <span class="inline-code">| 0x01</span> 立刻把它补回 1——保证整排始终只有一颗灯灭。</p>
+          <p><strong>不写会怎样：</strong> 如果只写 <span class="inline-code">led = led &lt;&lt; 1</span> 不补 1，第一轮没问题（0xfe 左移后低位本来就是 1），但到第 8 步 led 会变成 0x00（全灭），整排灯熄灭，流水中断。</p>
+
+          <h3>第 4 段：向左回流（第 20~24 行）</h3>
+          <p><strong>在做什么：</strong> 用 <span class="inline-code">(led &gt;&gt; 1) | 0x80</span> 让亮灯反向移动 7 次回到起点，补 1 的位置换成最高位（0x80 = 1000 0000）。</p>
+          <p><strong>为什么这么写：</strong> 右移后最高位变 0，用 <span class="inline-code">| 0x80</span> 补回 1，原理与左移对称，形成「到边折返」的来回效果。</p>
+          <p><strong>不写会怎样：</strong> 两个 for 循环缺一个，灯只会单向跑，到 P1.7 后突然从头再跑（跳跃感），而不是平滑来回。</p>
+        </section>
+
+        <!-- ===== 七、现象演示说明 ===== -->
+        <section>
+          <h2 id="sec-demo">七、现象演示说明</h2>
+          <p>烧录成功后，8 个 LED 从 P1.0 那一颗开始依次点亮，每颗停留约 0.3 秒，走到 P1.7 后再反向走回来，循环往复，像跑马灯。</p>
+          <p><strong>可量化的验证方法：</strong></p>
+          <ul>
+            <li><strong>改参数看变化：</strong> 把 <span class="inline-code">delay_ms(300)</span> 改成 <span class="inline-code">delay_ms(50)</span> 重新烧录，流动速度应明显变快；改成 <span class="inline-code">1000</span> 则明显变慢。这说明延时函数确实在起作用。</li>
+            <li><strong>数周期：</strong> 一个来回共 14 次切换（去 7 次 + 回 7 次）。用 300ms 延时，一个完整来回约 14 × 0.3s = <strong>4.2 秒</strong>。用手机秒表计时 3 个来回，应约为 12.6 秒，误差在零点几秒内（软件延时本身不精确，偏差正常）。</li>
+            <li><strong>数灯数：</strong> 任意时刻都只有 1 颗灯灭、7 颗灯亮（因为亮的是「灭的那一位」在流动）。如果看到全灭或多颗灭，说明位运算逻辑被改错了。</li>
+          </ul>
+        </section>
+
+        <!-- ===== 八、常见报错排查方案 ===== -->
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>8 个灯全亮或全灭，不流动</td><td>LED 极性接反（接成了 1 亮、0 灭），或阳极阴极颠倒</td><td>确认是共地接法：LED 阳极经电阻接 VCC、阴极接 IO；把代码里亮灭电平对调验证，或把 LED 反过来接</td></tr>
+              <tr><td>只有第一个灯亮，其余不亮</td><td>其余 7 路的限流电阻虚焊 / 引脚没接好 / 杜邦线断了</td><td>用万用表量每颗 LED 两端电压，逐路排查接线；用手压住杜邦线看是否接触不良</td></tr>
+              <tr><td>灯微亮但不变化 / 亮度不均匀</td><td>没接限流电阻或阻值太小，电流过大；或阻值差异过大</td><td>每颗 LED 统一串 220~470Ω 电阻，规格尽量一致</td></tr>
+              <tr><td>Keil 报错 sbit expected / P1 undefined</td><td>头文件没写、sbit 写法错误（把脱字符 ^ 写成了别的符号）</td><td>确认第 1 行是 #include &lt;reg52.h&gt;；sbit 必须写成 sbit LED = P1^0; 形式（脱字符 ^，位号 0~7）</td></tr>
+              <tr><td>烧录失败：一直连接不上 / 提示握手失败</td><td>串口被占用、没断电冷启动、波特率或芯片型号选错</td><td>关闭串口助手等占用软件；烧录软件点「下载」后再给板子断电重新上电（STC 冷启动）；核对芯片型号 STC89C52RC 与波特率</td></tr>
+              <tr><td>LED 接到 P0 口后，写 1 不亮、写 0 也只是微亮</td><td>P0 口是开漏输出、没有内部上拉，写 1 时引脚悬空、高电平出不来</td><td>P0 外接 8 颗 4.7~10kΩ 排阻上拉到 VCC，或改用 P1/P2/P3 口（它们内部有弱上拉）</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <!-- ===== 九、课后练习与延伸 ===== -->
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（改引脚）：</strong> 把 8 颗 LED 改接到 P2 口，让程序继续正常工作。提示：只需把所有 <span class="inline-code">P1</span> 改成 <span class="inline-code">P2</span>（包括 sbit 与端口赋值处），注意接线也要同步换。</p>
+          <p><strong>练习 2（改延时）：</strong> 把延时分别改成 100ms 和 1000ms 各烧录一次，用秒表验证「一个来回约 14 次 × 延时值」。提示：只改 <span class="inline-code">delay_ms(300)</span> 的参数即可，体会软件延时对速度的控制。</p>
+          <p><strong>练习 3（扩展功能）：</strong> 实现「两颗灯从两边向中间对向流动」的效果（亮位从 0xfe 和 0x7f 同时逼近）。提示：需要两个变量分别维护左右两端的亮位，或者研究用 <span class="inline-code">for</span> + 位运算组合实现，写完先纸上推演一轮 8 位状态再上机。</p>
+          <p><strong>延伸学习：</strong></p>
+          <ul>
+            <li><a href="#xxx" data-placeholder>用定时器代替软件延时（更精确，下一篇将讲解 mcu51-timer.html）</a></li>
+            <li><a href="#xxx" data-placeholder>中断与按键消抖（mcu51-interrupt.html）</a></li>
+            <li><a href="#xxx" data-placeholder>数码管动态扫描（占位）</a></li>
+          </ul>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="mcu51-minisys.html" class="btn btn-outline btn-sm">← 上一篇：51 最小系统电路原理</a>
+          <a href="mcu51-timer.html" class="btn btn-outline btn-sm">下一篇：定时器原理与定时 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - C 语言基础入门（变量、类型、运算符、流程控制）</title>
+  <meta name="description" content="零基础学单片机前的第一课：C 语言变量与数据类型、运算符、if/while/for 流程控制，配合 51 点灯示例在 Keil 中边学边练。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link active" aria-current="page">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>C 语言基础入门（变量、类型、运算符、流程控制）</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：C 语言基础</span>
+          <span class="badge badge-green">入门</span>
+          <span class="badge badge-gray">更新：2026-10-25</span>
+        </div>
+
+        <p class="text-secondary mb-6">学习路线的第 1 站。学完本课你会写出第一个 C 程序，看懂变量、数据类型、运算符和 if/while/for 流程控制，并能在 Keil 里编译运行——这是进入 51 单片机开发前必须夯实的语言地基。</p>
+
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>说清「变量」「数据类型」「表达式」是什么，并正确声明与使用它们。</li>
+            <li>分清 <span class="inline-code">if / while / for</span> 三种流程控制，写出带条件判断和循环的程序。</li>
+            <li>在 Keil C51 里新建工程，编译运行一个 LED 闪烁程序，看到真实硬件反应。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识：</strong></p>
+          <ul>
+            <li>会用电脑、能安装软件（本课会带你在 Keil 里练习，也可用在线 C 编译器先跑标准 C）。</li>
+            <li>不需要任何单片机知识——本课就是为零基础准备的，后面的 51 教程会把 C 语法和硬件联系起来。</li>
+          </ul>
+          <p><strong>本课会出现的新名词（下面逐一讲解）：</strong>程序、语句、变量、数据类型、运算符、表达式、流程控制、编译、<span class="inline-code">main</span> 函数。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. 程序、语句与 main 函数</h3>
+          <p><strong>生活类比</strong>：程序就像一份「做菜的菜谱」，语句就是一行一行的「步骤」，而 <span class="inline-code">main</span> 函数是「厨师开工的入口」——电脑/单片机永远从 main 函数第一行开始执行。</p>
+          <p><strong>一句话定义</strong>：程序 = 一系列按顺序执行的<strong>语句</strong>；C 程序必须有且只有一个 <span class="inline-code">main</span> 函数，它是程序执行的起点。每条语句以分号 <span class="inline-code">;</span> 结尾。</p>
+          <p><strong>例子</strong>：<span class="inline-code">LED = 0;</span> 是一条语句，意思「把 LED 这个引脚置为低电平」；<span class="inline-code">return 0;</span> 表示程序正常结束。</p>
+
+          <h3>2. 变量：给数据起名字的「储物格」</h3>
+          <p><strong>生活类比</strong>：变量就像一个贴了标签的储物格。格子有固定大小（决定能装多大数），标签就是变量名。你往格子里放东西叫<strong>赋值</strong>，看格子里有什么叫<strong>读取</strong>。</p>
+          <p><strong>一句话定义</strong>：变量是内存中一块<strong>有名字、有类型</strong>的存储空间。<span class="inline-code">unsigned char cnt = 0;</span> 表示：开一个叫 <span class="inline-code">cnt</span> 的格子，类型是「无符号字符」（0~255），初始放 0。单片机开发 90% 的变量都是 <span class="inline-code">unsigned char</span>（8 位）和 <span class="inline-code">unsigned int</span>（16 位）。</p>
+          <p><strong>例子</strong>：<span class="inline-code">unsigned char i;</span> 声明变量；<span class="inline-code">i = 3;</span> 赋值；<span class="inline-code">i = i + 1;</span> 把 i 的值加 1 再存回去。</p>
+
+          <h3>3. 数据类型：格子的「容量规格」</h3>
+          <p><strong>生活类比</strong>：储物格有「小格（8 位）」和「大格（16 位）」两种规格。小格最多放 0~255 或 -128~127，放不下会「溢出」（像里程表从 99999 跳回 00000）。</p>
+          <p><strong>一句话定义</strong>：数据类型决定变量占几个字节、能表示什么范围。51 单片机最常用：<span class="inline-code">unsigned char</span>（0~255，8 位）、<span class="inline-code">signed char</span>（-128~127）、<span class="inline-code">unsigned int</span>（0~65535，16 位）、<span class="inline-code">bit</span>（0/1，Keil 特有）、<span class="inline-code">sbit</span>（可位寻址引脚，Keil 特有）。</p>
+          <p><strong>例子</strong>：<span class="inline-code">unsigned int t = 60000;</span> 合法；<span class="inline-code">unsigned char t = 60000;</span> 会溢出成 34496-256×134≈200，结果错误——选错类型是新手写 bug 的高发原因。</p>
+          <p><strong>谭浩强教材要点：负数在内存里用补码存放</strong>。以 signed char（8 位）为例：正数 5 存成 0000 0101；负数 −5 不是直接存「负号+5」，而是「取反加 1」：对 0000 0101 逐位取反得 1111 1010、再加 1 得 <strong>1111 1011（0xFB）</strong>。这就是为什么 signed char 读 0xFB 会得到 −5 而不是 251。范围 −128~127 的边界：1000 0000 表示 −128，0111 1111 表示 127。DS18B20 负温按补码处理（见对应课）就是同一套原理。<strong>unsigned 与 signed 混算时默认按 unsigned 解释</strong>，这是 51 程序里有符号数突然变大正数的常见根因。</p>
+
+          <h3>4. 运算符与表达式</h3>
+          <p><strong>生活类比</strong>：运算符就是「加减乘除、比较大小」这些动作符号。由运算符把变量和数字连起来组成的式子叫<strong>表达式</strong>，它一定算出一个结果。</p>
+          <p><strong>一句话定义</strong>：常见几类：算术 <span class="inline-code">+ - * / %</span>；赋值 <span class="inline-code">=</span>、<span class="inline-code">+=</span>；比较 <span class="inline-code">== != &gt; &lt; &gt;= &lt;=</span>；逻辑 <span class="inline-code">&amp;&amp; || !</span>。注意：<strong>单等号 <span class="inline-code">=</span> 是赋值，双等号 <span class="inline-code">==</span> 才是「相等比较」</strong>，写混是新手第一大坑。</p>
+          <p><strong>例子</strong>：<span class="inline-code">a = b + 1;</span> 是「把 b 加 1 的结果存进 a」；<span class="inline-code">if (a == 1)</span> 是「判断 a 是否等于 1」。而 <span class="inline-code">if (a = 1)</span> 会把 1 赋给 a，条件永远成立——程序行为立刻错乱。</p>
+          <p><strong>教材运算符优先级速记（谭书）</strong>：从高到低大致为「<strong>单目(!、~、++、−) &gt; 算术(*、/、%) &gt; 算术(+、−) &gt; 关系(&lt;、&gt;、&lt;=、&gt;=) &gt; 关系(==、!=) &gt; 逻辑(&amp;&amp;) &gt; 逻辑(||) &gt; 赋值(=、+=)</strong>」。所以 <span class="inline-code">a = b &gt; c &amp;&amp; d</span> 实际是 <span class="inline-code">a = ((b &gt; c) &amp;&amp; d)</span>。<strong>最稳妥的写法</strong>：拿不准优先级就加括号，别靠背——这也是嵌入式代码里到处是括号的原因。</p>
+
+          <h3>5. 流程控制：顺序、分支、循环</h3>
+          <p><strong>生活类比</strong>：程序默认从上往下「顺序」执行；<span class="inline-code">if</span> 是「十字路口」——满足条件走 A 路，不满足走 B 路；<span class="inline-code">while/for</span> 是「绕圈跑」——跑到指定圈数或条件不再满足才停。</p>
+          <p><strong>一句话定义</strong>：<span class="inline-code">if (条件) { … } else { … }</span> 做分支；<span class="inline-code">while (条件) { … }</span> 先判断再循环；<span class="inline-code">for (初值; 条件; 步进) { … }</span> 适合「固定次数」的循环。单片机里最经典的就是 <span class="inline-code">while (1) { … }</span>——永远循环执行，这是单片机程序的常态（上电后不停工作）。</p>
+          <p><strong>例子</strong>：LED 闪烁的核心就是 <span class="inline-code">while (1) { 亮; 延时; 灭; 延时; }</span>，永远循环下去。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-principle">三、原理介绍：你写的变量和代码，在芯片里各待在哪、又是怎么被跑起来的</h2>
+          <p>C 源码不能直接被单片机执行，要经过：<strong>编译</strong>(Keil 翻成机器码出 hex) → <strong>烧录</strong>(写进 Flash) → <strong>运行</strong>(上电从 main 开始一条条取指)。但更值得懂的是：代码和变量在芯片里<strong>待在两个不同的地方</strong>。</p>
+
+          <h3>原理 1：编译后程序被拆成「代码段 / 数据段 / 栈」三块</h3>
+          <p>编译链接完成后，你的程序在芯片里是这样分布的：</p>
+          <ul>
+            <li><strong>代码段（Flash）</strong>：所有函数指令、<span class="inline-code">code</span> 修饰的常量/段码表——烧进 Flash，掉电不丢，CPU 上电从这里取指。</li>
+            <li><strong>数据段（RAM）</strong>：已赋初值的全局变量，上电时由启动代码从 Flash 复制到 RAM，之后在这里被读写。</li>
+            <li><strong>栈（RAM）</strong>：函数调用、局部变量、返回地址用的临时空间，从栈顶往下生长。</li>
+          </ul>
+          <p><strong>为什么要分清</strong>：Flash 慢但不丢、RAM 快但掉电即丢。这决定了——<strong>不变的查表数据放 code（省 RAM）</strong>，<strong>要反复改的变量放 RAM</strong>。51 内部 RAM 只有 128 字节，栈稍微用狠了就溢出踩坏别的变量，所以嵌入式里「省着用 RAM」是硬约束。</p>
+
+          <h3>原理 2：变量的生命周期——局部变量为什么出了函数就消失</h3>
+          <p><span class="inline-code">unsigned char t;</span> 这种写在函数<strong>里面</strong>的局部变量，存在栈上：进函数时在栈顶腾一块、用；<strong>函数一返回，栈就回收</strong>，那块空间立刻可被下次调用复用——所以函数外根本读不到它，上次的值也不保留。而写在函数<strong>外面</strong>的全局变量，存在数据段、<strong>整个程序生命周期都在</strong>，任何函数都能读写。<strong>这就是为什么「想在中断和主循环之间共享一个计数」必须用全局变量</strong>——局部变量一出函数就没了，中断里根本见不到主循环那个 cnt。</p>
+
+          <h3>原理 3：CPU 跑程序的本质——PC 指针一条条往下取指</h3>
+          <p>所谓「程序在跑」，其实是 CPU 里一个叫 <strong>PC（程序计数器）</strong> 的寄存器：它存着「下一条指令在 Flash 的哪个地址」，CPU 取出该指令执行，PC 自动加 1 指向下一条。遇到 <span class="inline-code">while(1)</span>，编译出的机器码就是「跳回前面地址」——PC 永远绕回原处，这就是单片机没有「程序结束」、必须死循环的底层原因。遇到 <span class="inline-code">if/for</span>，本质是机器码按条件改不改 PC 的跳转目标。<strong>所以「写 C」真正在做两件事：控制数据(变量怎么变)、控制 PC(什么时候跳、做什么)</strong>。</p>
+          <blockquote>记忆点：程序=代码段(Flash,指令+code常量,掉电不丢)+数据段(RAM,全局变量)+栈(RAM,局部变量,函数返回即回收)；局部变量出函数就消失、跨函数共享必须用全局；CPU靠PC指针一条条取指，while(1)=让PC永远跳回、单片机没有「结束」。</blockquote>
+        </section>
+
+        <section>
+          <h2 id="sec-wiring">四、练习环境准备（软件版「接线」）</h2>
+          <p>C 语言阶段没有硬件接线，但需要一个「练习场」。两种方式任选：</p>
+          <table>
+            <thead>
+              <tr><th>方式</th><th>适合人群</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Keil C51（推荐）</td><td>后面要学 51 的同学</td><td>从现在就用真实开发环境：新建工程 → 选 STC89C52 → 写代码 → 编译生成 hex，与 51 教程无缝衔接</td></tr>
+              <tr><td>在线 C 编译器</td><td>只想先练标准 C 语法</td><td>浏览器打开在线编译器，粘贴 <span class="inline-code">printf</span> 程序直接运行，零安装</td></tr>
+            </tbody>
+          </table>
+          <p><strong>Keil 练习步骤</strong>（详见 <a href="mcu51-env.html">51 环境搭建教程</a>）：安装 Keil C51 → 新建工程并选择 STC89C52 型号 → 新建 <span class="inline-code">main.c</span> 源文件 → 把下面代码粘进去 → 点 Build 按钮编译，下方输出 <span class="inline-code">0 Error(s)</span> 即编译成功。</p>
+          <div class="tip-warn mt-4"><span class="tip-label">避坑</span>
+            如果电脑上暂时装不了 Keil，也可以先用在线编译器把「标准 C 示例」跑通；但学完本课建议尽快装 Keil，因为 51 特有的 <span class="inline-code">sbit</span>、<span class="inline-code">reg52.h</span> 只有 Keil C51 支持。</div>
+        </section>
+
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p>先看一个最简标准 C 程序（在线编译器可跑），理解程序骨架：</p>
+          <pre><code class="language-c">/* 示例 1：最简 C 程序——打印一行字 */
+#include &lt;stdio.h&gt;              /* 包含标准输入输出头文件，printf 靠它 */
+
+int main(void)                  /* 程序入口，void 表示不接收参数 */
+{
+    printf("Hello McuStudy!\n"); /* 输出一行文字，\n 表示换行 */
+    return 0;                    /* 返回 0，表示程序正常结束 */
+}</code></pre>
+          <p>再看 51 单片机版：用变量 + 流程控制实现 LED 闪烁，这是本课练习的核心（用 P1.0 外接 LED，共地接法，写 0 亮）：</p>
+          <pre><code class="language-c">/* 示例 2：51 LED 闪烁——综合运用变量/运算符/流程控制 */
+#include &lt;reg52.h&gt;              /* 51 单片机寄存器定义头文件 */
+sbit LED = P1^0;                /* 把 P1.0 引脚改名为 LED */
+
+void delay_ms(unsigned int ms)  /* 自定义函数：软件延时 ms 毫秒 */
+{
+    unsigned int i, j;          /* 局部变量：循环计数器 */
+    for (i = 0; i &lt; ms; i++)    /* 外层循环 ms 次 */
+        for (j = 0; j &lt; 120; j++); /* 内层空循环约 1ms */
+}
+
+void main(void)                 /* 51 程序入口 */
+{
+    unsigned char count = 0;    /* 变量：记录闪烁次数（0~255） */
+    while (1)                   /* 永远循环：单片机程序常态 */
+    {
+        LED = 0;                /* 赋值语句：低电平点亮 LED */
+        delay_ms(500);          /* 函数调用：延时 500ms */
+        LED = 1;                /* 高电平熄灭 LED */
+        delay_ms(500);
+        count = count + 1;      /* 每闪一次计数加 1 */
+        if (count &gt;= 10)       /* 分支判断：闪够 10 次后…… */
+            LED = 0;            /* 保持常亮（示意，可自行改逻辑） */
+    }
+}</code></pre>
+        </section>
+
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第一段：头文件与引脚改名</h3>
+          <p><span class="inline-code">#include &lt;reg52.h&gt;</span> 把 51 单片机的「寄存器名字表」包含进来，这样你写 <span class="inline-code">P1</span> 编译器才知道它指端口 1。<span class="inline-code">sbit LED = P1^0;</span> 是 Keil 特有的写法：给 P1 口的第 0 位起一个更形象的名字。如果不写这两行，后面所有 <span class="inline-code">LED</span> 都无法识别。</p>
+
+          <h3>第二段：延时函数</h3>
+          <p><span class="inline-code">void delay_ms(unsigned int ms)</span> 定义了一个「空转等待」的函数：双层 for 循环让 CPU 什么也不做地数数，大约每轮 1ms。<span class="inline-code">unsigned int</span> 表示 ms 最大能到 65535。<strong>为什么要它</strong>：单片机执行语句极快（微秒级），不加延时 LED 亮灭快得看不见；<strong>不写会怎样</strong>：程序直接崩在肉眼不可见的闪烁上。</p>
+
+          <h3>第三段：main 里的循环与分支</h3>
+          <p><span class="inline-code">while (1)</span> 是单片机的「主旋律」：上电后永远在这里面转。LED 赋值 + 延时组成一次闪烁；<span class="inline-code">count = count + 1;</span> 演示变量自增（等价 <span class="inline-code">count++</span>）；<span class="inline-code">if (count &gt;= 10)</span> 演示分支——注意这里用的是 <span class="inline-code">&gt;=</span>（大于等于），如果手滑写成 <span class="inline-code">count = 10</span>，就成了赋值，条件恒成立，程序行为立刻异常。</p>
+
+          <h3>关于示例 1 与示例 2 的区别</h3>
+          <p>示例 1 是「纯计算型」程序，用 <span class="inline-code">printf</span> 把结果打印到屏幕；示例 2 是「控制型」程序，用赋值语句直接改变硬件引脚电平。单片机世界里 90% 是示例 2 这种「写引脚 + 读引脚 + 循环判断」的写法，这就是为什么变量、if、while 必须学扎实。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-demo">七、现象演示与验证</h2>
+          <ul>
+            <li><strong>示例 1（标准 C）</strong>：编译运行后屏幕输出 <span class="inline-code">Hello McuStudy!</span>。</li>
+            <li><strong>示例 2（51）</strong>：烧录后 P1.0 上的 LED 以约 1Hz 频率闪烁（亮 0.5s 灭 0.5s）；闪够 10 次后保持常亮。</li>
+          </ul>
+          <p><strong>验证方法（强烈建议做）</strong>：</p>
+          <ol>
+            <li>把 <span class="inline-code">delay_ms(500)</span> 改成 <span class="inline-code">delay_ms(100)</span> 重新编译烧录，LED 应变快 5 倍——证明延时函数确实在起作用。</li>
+            <li>把 <span class="inline-code">if (count &gt;= 10)</span> 改成 <span class="inline-code">if (count == 10)</span>，行为不变（第 10 次后常亮）；再故意改成 <span class="inline-code">if (count = 10)</span>，程序会立即错乱——亲手踩一次这个坑，比看十遍教程都记得牢。</li>
+          </ol>
+        </section>
+
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>编译报 <span class="inline-code">undefined identifier 'LED'</span></td><td>漏写 <span class="inline-code">#include &lt;reg52.h&gt;</span> 或 <span class="inline-code">sbit</span> 定义</td><td>在文件开头补上头文件与 <span class="inline-code">sbit LED = P1^0;</span></td></tr>
+              <tr><td>程序运行结果完全不对 / 条件永远成立</td><td><span class="inline-code">=</span> 与 <span class="inline-code">==</span> 写混</td><td>检查所有 <span class="inline-code">if</span> 条件，比较一律用 <span class="inline-code">==</span></td></tr>
+              <tr><td>编译报 <span class="inline-code">missing ';'</span></td><td>上一条语句漏了分号</td><td>看报错提示的行号，在该行或上一行末尾补 <span class="inline-code">;</span></td></tr>
+              <tr><td>变量值突然变成奇怪的大数</td><td>类型太小发生溢出（如 <span class="inline-code">unsigned char</span> 存 300）</td><td>改用 <span class="inline-code">unsigned int</span>，或先判断数值范围再选类型</td></tr>
+              <tr><td>LED 常亮不闪</td><td>延时太短（肉眼看不出来）或 <span class="inline-code">while(1)</span> 里逻辑写错</td><td>先加大延时到 1000 试；再检查是否 LED 赋值被后面的语句覆盖</td></tr>
+              <tr><td>学标准 C 时 scanf 输入后程序崩/读不到值</td><td><span class="inline-code">scanf("%d", n);</span> 漏了取地址符 <span class="inline-code">&amp;</span>（应为 <span class="inline-code">&amp;n</span>）</td><td>scanf 要的是变量地址：<span class="inline-code">scanf("%d", &amp;n);</span>；漏 &amp; 会把读到的数写到地址 0 附近，轻则乱码重则崩溃——谭书第一学期经典错</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（必做）</strong>：把示例 2 的闪烁间隔改成「亮 200ms、灭 800ms」的不对称闪烁，体会延时参数对现象的影响。</p>
+          <p><strong>练习 2</strong>：新增一个变量 <span class="inline-code">unsigned int total</span>，在 <span class="inline-code">while(1)</span> 里让它每循环一次加 1；当 total 超过 1000 时让 LED 反转一次并清零 total。用 if 分支实现。</p>
+          <p><strong>练习 3（进阶）</strong>：写一个函数 <span class="inline-code">unsigned char add(unsigned char a, unsigned char b)</span> 返回两数之和，在 main 里调用并借助 <span class="inline-code">P1 = add(3, 5);</span> 观察 P1 口对应 LED 亮法（3+5=8，对应 P1 输出 0x08）。</p>
+          <p><strong>延伸学习</strong>：下一课学《数组与指针》——流水灯花样数组和字符串处理全靠它；同时可打开 <a href="tools.html">在线工具-进制转换器</a> 边学边换算 0xFE、0x08 这类十六进制数。</p>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="route.html" class="btn btn-outline btn-sm">← 返回学习路线</a>
+          <a href="c-array-pointer.html" class="btn btn-outline btn-sm">下一篇：数组与指针 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - Proteus 仿真调试与虚拟仪器</title>
+  <meta name="description" content="Proteus 仿真第二课：加载 HEX 文件、运行/暂停/单步调试、断点观察，用虚拟示波器和虚拟串口终端验证 LED 闪烁与串口收发。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link active" aria-current="page">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>Proteus 仿真调试与虚拟仪器</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：Proteus 仿真</span>
+          <span class="badge badge-green">入门</span>
+          <span class="badge badge-gray">更新：2026-10-25</span>
+        </div>
+
+        <p class="text-secondary mb-6">上一课画好的最小系统，本课正式「通电」：加载 hex、运行仿真、学会暂停/单步/断点观察程序执行，再用虚拟示波器和虚拟串口终端把 LED 闪烁和串口收发「看」出来。</p>
+
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>把 Keil 编译的 hex 加载进 AT89C52，运行/暂停/停止仿真。</li>
+            <li>用单步执行和断点定位「程序跑到哪里出问题」。</li>
+            <li>用虚拟示波器看 PWM 波形、用虚拟串口终端验证串口收发数据。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识：</strong></p>
+          <ul>
+            <li><a href="proteus-basics.html">Proteus 入门与原理图绘制</a>：已画出最小系统工程。</li>
+            <li><a href="mcu51-uart.html">UART 串口通信</a>（可选）：本课虚拟串口终端需要串口程序配合。</li>
+          </ul>
+          <p><strong>本课会出现的新名词：</strong>加载 hex、运行/暂停/单步、断点、观察窗口、虚拟示波器、虚拟串口终端、波特率。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. 加载 hex：给虚拟芯片「烧程序」</h3>
+          <p><strong>生活类比</strong>：真实开发板烧录是把程序写进芯片的 Flash；仿真里没有 USB 线，靠「双击芯片 → 浏览选 hex 文件」这一下完成同样的事。</p>
+          <p><strong>一句话定义</strong>：双击原理图上的 AT89C52，弹出属性框，在 <span class="inline-code">Program File</span> 一栏点文件夹图标选你的 <span class="inline-code">.hex</span> 文件，点 OK。加载成功后芯片左下角会出现一个绿色小方块（表示已有程序）。</p>
+          <p><strong>例子</strong>：加载 <span class="inline-code">led.hex</span> 后点运行，P1 口接的 LED 应开始闪烁——第一个仿真就成功了。</p>
+
+          <h3>2. 运行 / 暂停 / 单步：调试的三个档位</h3>
+          <p><strong>生活类比</strong>：看比赛录像有三种方式：正常播放（运行）、按暂停（暂停）、一帧一帧看（单步）。调试 bug 时最常用的是「单步」——看清楚每一步执行后发生了什么。</p>
+          <p><strong>一句话定义</strong>：Proteus 左下角有 ▶（运行）、⏸（暂停）、■（停止）。<span class="inline-code">Debug → Step Over</span>（快捷键 F10）单步执行一条 C 语句（跳过函数内部）；<span class="inline-code">Step Into</span>（F11）会进入函数内部。</p>
+          <p><strong>例子</strong>：怀疑 LED 赋值语句没生效？暂停仿真，把鼠标移到代码里的 <span class="inline-code">P1</span> 变量上，能看到当前值，再单步看它变化。</p>
+
+          <h3>3. 断点：跑快一点，到点再停</h3>
+          <p><strong>一句话定义</strong>：断点就是「程序跑到这一行就自动暂停」的标记。在代码行号左边点一下出现红点即为断点。调试时长循环程序时，断点比一直单步快得多。</p>
+          <p><strong>例子</strong>：在 <span class="inline-code">while(1)</span> 里的 LED 赋值行打断点，运行后每次停在这里，看变量值是否符合预期。</p>
+
+          <h3>4. 虚拟仪器：不花一分钱买示波器</h3>
+          <p><strong>一句话定义</strong>：Proteus 左侧工具条自带一批「虚拟仪器」：<span class="inline-code">OSCILLOSCOPE</span>（示波器，看波形）、<span class="inline-code">VIRTUAL TERMINAL</span>（虚拟串口终端，收发串口数据）、<span class="inline-code">LOGIC ANALYSER</span>（逻辑分析仪）等。选好仪器放到原理图上，把探头接到被测网络，运行仿真即可看到波形/数据。</p>
+          <p><strong>例子</strong>：示波器探头接到 LED 阳极网络，能直接看到方波——LED 亮灭的电压波形，这就是「眼见为实」的调试方式。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-principle">三、原理介绍：实物上「看不到内部」，为什么仿真里却能把寄存器逐个摊开看</h2>
+          <p>Proteus 仿真的本质是一个<strong>软件模拟的 8051 CPU</strong>：它逐条读 hex 里的机器指令，模拟每条指令对寄存器、内存、引脚电平的影响。正因为 CPU 是「一段软件」而不是真硅片，它天然具备实物没有的「透明性」。</p>
+
+          <h3>原理 1：为什么能「暂停后看寄存器、看内存」——它们本来就是软件里的变量</h3>
+          <p>真芯片里，ACC/PSW/P1 是硬件触发器，你从外面无法直接读；但在 Proteus 的指令集模拟器里，<strong>「ACC」就是软件里的一个变量</strong>、「内部 RAM」就是模拟器内部一块数组。CPU 每执行一条指令改的都是这些变量。于是模拟器随时能<strong>把这些变量当前值打印出来</strong>——这就是 <span class="inline-code">Debug → 8051 CPU Registers</span> 看 ACC/P1、<span class="inline-code">Internal Memory</span> 逐字节看内部 RAM 的原理。<strong>「暂停」就是暂停模拟器循环</strong>，停在某条指令上，此时所有内部状态原封不动——这才敢「暂停→看变量→单步→再看」。实物要得到同样能力，得靠 Keil Debugger+硬件仿真器(J-LINK)，通过调试接口把内部寄存器读出来。</p>
+
+          <h3>原理 2：虚拟仪器怎么「挂」到电路上——探头就是监听某个网络的电平</h3>
+          <p>示波器/虚拟终端这类虚拟仪器，本质是<strong>并联在某根网络上的监听器</strong>：示波器的 A 通道接到某节点，仿真器每个时间步都把那个网络当前电压画成曲线；虚拟终端的 RXD 接单片机 TXD(P3.1)，它就在仿真里「接收」单片机串口发出的每个字节、弹出来显示。<strong>接线要交叉</strong>——单片机发(TXD)接终端收(RXD)、单片机收(RXD)接终端发(TXD)，和真实串口线一摸一样。这就是「接对探头就能看见波形/串口数据」的原理。</p>
+
+          <h3>原理 3：单步/断点为什么比「盲跑」更快定位 bug</h3>
+          <p>程序「盲跑」出 bug，你只看到最终现象错了、不知道错在哪一步。<strong>断点=让模拟器跑到那一行就自动暂停</strong>，单步=一次只执行一条指令。于是你能逐行观察「变量什么时候开始变错」——这比反复烧录、瞎猜快几个数量级。<strong>这就是嵌入式调试的通用基本功</strong>：现象不对→先暂停看寄存器/内存→单步跟踪→定位到第一行变错的代码。实物流程相同，只是工具换成 Keil Debugger+硬件仿真器。</p>
+          <blockquote>记忆点：仿真CPU是软件、寄存器就是它内部变量，所以能暂停看、单步走；虚拟仪器=并联在某网络上的监听器，示波器画电平、虚拟终端收串口(接线要交叉TX/RX)；调试循环=现象不对先暂停看变量、再单步定位第一行变错的代码，别上来就改。</blockquote>
+        </section>
+
+        <section>
+          <h2 id="sec-wiring">四、调试环境搭建步骤</h2>
+          <p><strong>第 1 步：加载程序</strong>。打开上一课的 <span class="inline-code">minisys.pdsprj</span>，双击 AT89C52 → Program File 选择 <span class="inline-code">led.hex</span> → OK。</p>
+          <p><strong>第 2 步：放虚拟串口终端（可选）</strong>。左侧工具条点「虚拟仪器模式」（扳手图标下的示波器图标），选 <span class="inline-code">VIRTUAL TERMINAL</span> 放到图上，把它的 <span class="inline-code">RXD</span> 接到单片机 <span class="inline-code">TXD</span>（P3.1，11 脚）、<span class="inline-code">TXD</span> 接到单片机 <span class="inline-code">RXD</span>（P3.0，10 脚）——交叉接线，与真实串口一样。</p>
+          <p><strong>第 3 步：放示波器（可选）</strong>。同样在虚拟仪器里选 <span class="inline-code">OSCILLOSCOPE</span>，把 A 通道探头（蓝色线）接到 LED 阳极的网络节点上（点节点出 ✎ 再连线）。</p>
+          <p><strong>第 4 步：运行</strong>。点左下角 ▶，观察 LED 是否闪烁、双击 VIRTUAL TERMINAL 弹窗是否出现串口数据、示波器是否显示方波。</p>
+          <table>
+            <thead>
+              <tr><th>仪器</th><th>接到哪里</th><th>能看什么</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>VIRTUAL TERMINAL</td><td>RXD←P3.1(TXD)，TXD→P3.0(RXD)</td><td>串口发出的字符、收到的按键数据</td></tr>
+              <tr><td>OSCILLOSCOPE</td><td>A 通道 → LED 阳极网络</td><td>高低电平方波，周期=闪烁周期</td></tr>
+              <tr><td>8051 CPU Registers</td><td>Debug 菜单打开</td><td>P1、ACC、PSW 等寄存器实时值</td></tr>
+            </tbody>
+          </table>
+          <div class="tip-warn mt-4"><span class="tip-label">避坑</span>
+            虚拟串口终端的<strong>波特率必须与程序一致</strong>（双击终端属性里设置，程序 9600 就设 9600）；若终端一直没数据，先看是否交叉接线接反了（TXD↔RXD）。</div>
+        </section>
+
+        <section>
+          <h2 id="sec-code">五、配套程序</h2>
+          <p>LED 闪烁程序（上一课已编译）：</p>
+          <pre><code class="language-c">/* led.hex：P1 口全亮全灭，周期约 0.6s */
+#include &lt;reg52.h&gt;
+
+void delay_ms(unsigned int ms) {
+    unsigned int i, j;
+    for (i = 0; i &lt; ms; i++)
+        for (j = 0; j &lt; 120; j++);
+}
+
+void main(void) {
+    while (1) {
+        P1 = 0x00;
+        delay_ms(300);
+        P1 = 0xFF;
+        delay_ms(300);
+    }
+}</code></pre>
+          <p>串口发送程序（配合虚拟串口终端，波特率 9600）：</p>
+          <pre><code class="language-c">/* uart.hex：上电后每 1 秒发一句 "OK" */
+#include &lt;reg52.h&gt;
+
+void delay_ms(unsigned int ms) {
+    unsigned int i, j;
+    for (i = 0; i &lt; ms; i++)
+        for (j = 0; j &lt; 120; j++);
+}
+
+void uart_init(void) {          /* 方式 1，9600@11.0592MHz */
+    SCON = 0x50;
+    TMOD |= 0x20;
+    TH1 = 0xFD;
+    TL1 = 0xFD;
+    TR1 = 1;
+}
+
+void uart_send(unsigned char c) {
+    SBUF = c;
+    while (!TI);
+    TI = 0;
+}
+
+void main(void) {
+    uart_init();
+    while (1) {
+        uart_send('O');
+        uart_send('K');
+        delay_ms(1000);
+    }
+}</code></pre>
+          <p><strong>变体：串口回显（echo）——亲手验证虚拟终端是双向的</strong>。上面只演示了单片机「发」；这个变体让单片机把你在终端里敲的每个字符原样发回来，相当于一个对讲机。它同时教会你「怎么收串口」——这是双向通信的基础：</p>
+          <pre><code class="language-c">/* echo.hex：终端敲什么，单片机原样回什么；收到 '1' 亮灯、'0' 灭灯 */
+#include &lt;reg52.h&gt;
+
+sbit LED = P1^0;                 /* 共地：写 0 亮 */
+
+void uart_init(void) {           /* 方式 1，9600@11.0592MHz */
+    SCON = 0x50;                 /* 8 位数据，允许接收(REN 已含在 0x50) */
+    TMOD |= 0x20;
+    TH1 = 0xFD; TL1 = 0xFD;
+    TR1 = 1;
+}
+
+void main(void) {
+    unsigned char c;
+    uart_init();
+    while (1) {
+        while (!RI);             /* 等硬件收到一个字节 */
+        RI = 0;                  /* 软件清接收标志 */
+        c = SBUF;                /* 读走收到的字符 */
+        SBUF = c;                /* 立刻原样发回去 */
+        while (!TI);
+        TI = 0;
+        if (c == '1') LED = 0;   /* 敲 1 开灯，敲 0 关灯 */
+        if (c == '0') LED = 1;
+    }
+}</code></pre>
+          <p><strong>在虚拟终端里怎么验证</strong>：双击打开 VIRTUAL TERMINAL，直接键盘敲 <span class="inline-code">hello</span>，窗口应逐字回显 <span class="inline-code">hello</span>；敲 <span class="inline-code">1</span> LED 亮、敲 <span class="inline-code">0</span> 灭。<strong>为什么收和发用的是同一个 SBUF</strong>：发送和接收各有独立缓冲，但共用 SBUF 这个寄存器名——发时往它写、收时从它读，靠 TI/RI 两个标志区分「现在是要发还是已收到」。若敲了没回显，先查终端波特率是不是 9600、TXD/RXD 有没有接反。</p>
+          <p>（注：Proteus 里晶振默认 12MHz 时波特率会偏差，串口实验请把晶振属性改成 11.0592MHz 再编译对应 hex——与实物「黄金频率」一致。）</p>
+        </section>
+
+        <section>
+          <h2 id="sec-code-explain">六、程序与调试的对应关系</h2>
+          <p><strong>LED 闪烁程序</strong>：核心是 <span class="inline-code">while(1)</span> 里「P1=0x00 → 延时 → P1=0xFF → 延时」。仿真中单步跟踪你会发现：CPU 大部分时间「卡」在 delay 的双层 for 里数数（这正是软件延时的本质），真正改 P1 的只有两行——这解释了为什么「改延时值就能改变闪烁频率」。</p>
+          <p><strong>串口程序</strong>：<span class="inline-code">uart_init</span> 用位运算配置 SCON/TMOD（回顾位运算课的「置 1 用 |、清零用 &amp;~」）；<span class="inline-code">uart_send</span> 把字符放进 SBUF，硬件自动一位位发出去，<span class="inline-code">while(!TI)</span> 等发送完成。仿真里你会在 VIRTUAL TERMINAL 看到 O、K、O、K……每秒一组——如果出现乱码，十有八九是波特率不一致（程序 vs 终端 vs 晶振）。</p>
+          <blockquote>记忆点：LED 现象看延时，串口现象看波特率——仿真排错永远先查这两个「时间基准」。</blockquote>
+        </section>
+
+        <section>
+          <h2 id="sec-demo">七、现象演示与验证</h2>
+          <ul>
+            <li><strong>LED 闪烁</strong>：运行后 8 颗 LED 全亮 0.3s、全灭 0.3s 循环。</li>
+            <li><strong>示波器</strong>：A 通道显示约 1.67Hz 的方波（周期 0.6s），高电平段对应 LED 灭（共地接法 P1 输出 1），低电平段对应亮。</li>
+            <li><strong>虚拟串口终端</strong>：双击打开后每秒出现一行 <span class="inline-code">OK</span>。</li>
+          </ul>
+          <p><strong>验证方法：</strong></p>
+          <ol>
+            <li>把延时 300 改成 1000 重新编译烧录（重新加载 hex），LED 变慢 3 倍以上、示波器周期相应变长——证明程序与硬件时序联动。</li>
+            <li>在 <span class="inline-code">P1 = 0x00;</span> 行打断点，运行后每次自动停在该行，看寄存器窗口 P1 值 0x00——理解断点调试。</li>
+            <li>把虚拟串口终端波特率改成 4800，数据立刻变乱码——亲手制造并理解乱码成因。</li>
+          </ol>
+        </section>
+
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>点运行后灯完全不动</td><td>hex 没加载 / 芯片型号不对 / 晶振没接</td><td>双击芯片确认 Program File 已选 hex；用 AT89C52；检查 19/18 脚晶振与电容</td></tr>
+              <tr><td>运行后闪一下就停 / 卡死</td><td>复位电路接错（如 RST 悬空）或代码死循环卡死</td><td>检查 9 脚复位电路（10µF + 10kΩ 到地）；用暂停+单步看程序停在哪</td></tr>
+              <tr><td>虚拟串口终端没数据</td><td>接线没交叉 / 波特率不一致 / 程序没初始化串口</td><td>确认终端 RXD↔单片机 TXD、TXD↔RXD；双击终端核对波特率；确认 uart_init 已调用</td></tr>
+              <tr><td>串口数据是乱码</td><td>波特率不符或晶振不是 11.0592MHz</td><td>程序/终端波特率统一；晶振属性改为 11.0592MHz 并重新编译</td></tr>
+              <tr><td>单步时提示 No source</td><td>只加载了 hex，没关联源码</td><td>在 Keil 里勾选 Output 生成 <span class="inline-code">Debug Information</span> 并重新编译；源码与 hex 放同目录</td></tr>
+              <tr><td>仿真非常慢</td><td>软件延时太长（如延时 5s）或开了多个仪器</td><td>先用短延时验证逻辑；关闭不用的虚拟仪器窗口</td></tr>
+              <tr><td>仿真里 LED 闪烁比实物快一倍（教材实验常见坑）</td><td>Proteus 单片机属性里的 Clock Frequency 默认 12MHz，而代码按 11.0592MHz 写的软件延时</td><td>双击 AT89C52 把 Clock Frequency 改成 11.0592MHz，与 Keil 工程 Xtal 和实际晶振三者一致；否则所有靠机器周期算的延时/波特率全错</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（必做）</strong>：完成 LED 闪烁仿真 + 断点观察寄存器，把「暂停看 P1 值」的操作练熟。</p>
+          <p><strong>练习 2</strong>：加载串口程序，用虚拟串口终端收下完整数据；然后把波特率改成 4800 制造乱码，再改回来，记录乱码与正常的区别。</p>
+          <p><strong>练习 3（进阶）</strong>：在电路上加一颗 10kΩ 电位器（<span class="inline-code">POT-HG</span>），中抽头接 P1.0，程序里读 P1 并据按键在终端打印——结合 <a href="mcu51-uart.html">串口教程</a> 模拟「电压 → 数字」的概念。</p>
+          <p><strong>延伸学习</strong>：仿真时发现元件库里没有 DHT11、LCD1602 等常用模块？进入 <a href="proteus-library.html">元件库导入教程</a> 学会装第三方库；实物开发可回看 <a href="mcu51-env.html">Keil + STC-ISP 烧录</a>。</p>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="proteus-basics.html" class="btn btn-outline btn-sm">← 上一篇：Proteus 入门与原理图绘制</a>
+          <a href="proteus-library.html" class="btn btn-outline btn-sm">下一篇：元件库导入 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

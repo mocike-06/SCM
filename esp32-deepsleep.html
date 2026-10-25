@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - Deep Sleep 低功耗</title>
+  <meta name="description" content="ESP32 低功耗零基础教程：电池供电为何必须省电、功耗模式分级（Active/Modem Sleep/Light/Deep）、RTC 与唤醒源（定时/GPIO/触摸）、定时唤醒采集并深睡的低功耗物联网节点实战。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link active" aria-current="page">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>Deep Sleep 低功耗</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：ESP32</span>
+          <span class="badge badge-orange">进阶</span>
+          <span class="badge badge-gray">更新：2026-10-25</span>
+        </div>
+
+        <p class="text-secondary mb-6">温度传感器节点、智能门锁、野外监测——电池供电的设备动辄要撑几个月，而 ESP32 正常跑着 WiFi 就要 100mA+，一节电池撑不过几天。Deep Sleep 是官方给出的答案：没事就「深度睡眠」只留 10µA，定时醒来干活几十秒再睡回去。本课讲透功耗模式、唤醒源、RTC 机制，做一个「定时醒来→采集→上报→再睡」的完整低功耗节点。</p>
+
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>说清 ESP32 的功耗模式阶梯（Active/Modem/Light/Deep）和各自电流量级。</li>
+            <li>理解 Deep Sleep 后 CPU 停了但 RTC 还在跑，能定时/GPIO/触摸唤醒。</li>
+            <li>写出「唤醒→采集→存 NVS→上报→再睡」的完整低功耗节点程序。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识（对应学习路线阶段 5）：</strong></p>
+          <ul>
+            <li>ADC 采集（esp32-adc.html）：低功耗节点要读传感器/电池电压。</li>
+            <li>NVS 存储（esp32-storage.html）：睡眠期间的数据靠 Flash 保存。</li>
+            <li>WiFi/MQTT（可选）：上报数据用（低功耗下 WiFi 只在醒来时开）。</li>
+          </ul>
+          <p><strong>本课会出现的新名词：</strong>低功耗、Active/Modem Sleep/Light Sleep/Deep Sleep、RTC、唤醒源（定时/GPIO/触摸）、<span class="inline-code">esp_sleep_enable_timer_wakeup</span>、<span class="inline-code">esp_deep_sleep_start</span>、µA 量级。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. 为什么要低功耗：电池容量的数学题</h3>
+          <p><strong>生活类比</strong>：一块 18650 锂电池约 3000mAh。设备持续耗 100mA → 30 小时就没电；若平时睡觉只耗 10µA、每小时醒来 3 秒耗 100mA → 一个月平均不到 5mA，能用 600 小时——差出两个数量级。</p>
+          <p><strong>一句话定义</strong>：低功耗不是「降低性能」，而是「无事时让芯片尽可能不干活」。ESP32 这种 SoC 的优势：Deep Sleep 时大部分电路断电，只留 RTC 域计时，电流降到 10µA 级。</p>
+          <p><strong>例子</strong>：环境监测节点每 10 分钟采一次温湿度并上报，其余 9 分 57 秒都在 Deep Sleep——这是电池设备的标准工作模式。</p>
+
+          <h3>2. ESP32 的功耗模式阶梯</h3>
+          <p><strong>一句话定义</strong>（典型电流，实测因板而异）：<strong>Active</strong>（CPU 全速 + WiFi 开，100~240mA）；<strong>Modem Sleep</strong>（CPU 跑、WiFi 关闭，20~50mA）；<strong>Light Sleep</strong>（CPU 暂停、可定时唤醒，1~5mA）；<strong>Deep Sleep</strong>（CPU 和大部分 SRAM 断电，只留 RTC，10µA 级）。选哪级看需求：要频繁响应选 Light，要极致续航选 Deep。</p>
+          <p><strong>例子</strong>：要省电又要秒回消息 → Light Sleep；定时采集上报 → Deep Sleep 足够。</p>
+
+          <h3>3. RTC 域与唤醒源：睡着了谁叫你</h3>
+          <p><strong>生活类比</strong>：Deep Sleep 时 CPU 和主内存全关机，但一块「独立小闹钟」（RTC 电路）还开着电——闹钟响（唤醒源触发），整机才重新开机。</p>
+          <p><strong>一句话定义</strong>：Deep Sleep 期间只有 <strong>RTC 域</strong>（RTC 定时器、RTC 存储器、部分 RTC GPIO、UART 等）带电。<strong>唤醒源</strong>：① 定时器（<span class="inline-code">esp_sleep_enable_timer_wakeup(微秒)</span>）；② 外部 GPIO（ext0 单脚 / ext1 多脚，<span class="inline-code">esp_sleep_enable_ext0_wakeup</span>）；③ 触摸传感器。<strong>唤醒后</strong>：程序从 setup() 重新开始执行（相当于重启，但复位原因是 Deep Sleep 唤醒）。</p>
+          <p><strong>例子</strong>：门上传感器用 GPIO 唤醒（开门→唤醒→拍照）；环境节点用定时唤醒（每 10 分钟醒一次）。</p>
+
+          <h3>4. 唤醒后怎么知道「我是谁」：复位原因与 RTC 内存</h3>
+          <p><strong>一句话定义</strong>：唤醒 = 重启，所以要用 <span class="inline-code">esp_sleep_get_wakeup_cause()</span> 判断这次是「上电 / Deep Sleep 唤醒 / GPIO 唤醒」，走不同逻辑；跨睡眠保存少量数据可以用 <span class="inline-code">RTC_DATA_ATTR</span> 修饰的全局变量（存在 RTC 内存，Deep Sleep 不清空）——比 NVS 快，但容量小（约 8KB）。</p>
+          <p><strong>例子</strong>：<span class="inline-code">RTC_DATA_ATTR int wakeCount;</span> 每次唤醒 +1，断电才清零——不磨损 Flash，适合高频计数。</p>
+        </section>
+
+          <h3>5. ULP 协处理器：深睡时还能「悄悄干活」的小工</h3>
+          <p><strong>生活类比</strong>：Deep Sleep 把主 CPU 关了，但 RTC 域里还养着一个超省电的小工——ULP（超低功耗协处理器）。它不会开 WiFi，只会极慢地读 ADC、查触摸，一旦发现「温度超标/有人摸」，才把主 CPU 叫醒。</p>
+          <p><strong>一句话定义</strong>：<strong>ULP（Ultra Low-Power coprocessor）</strong>是 ESP32 RTC 域里的一个 8 位小协处理器，Deep Sleep 期间仍能以微安级功耗运行，可定时采样 ADC、比较阈值，满足条件再唤醒主 CPU。它适合「长期守着阈值、偶尔才上报」的场景，比每次都唤醒主 CPU 再省一个量级。</p>
+          <p><strong>例子</strong>：野外土壤监测——ULP 每几秒偷偷读一次湿度，只有跌破阈值才唤醒主 CPU 开 WiFi 上报一次；平时主 CPU 全程深睡，电池撑半年以上。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-principle">三、原理介绍：低功耗节点的一次完整循环</h2>
+          <p>ESP32 的功耗是分域管理的：CPU、WiFi 射频、内部 RAM 分属不同电源域，可以单独断电。Deep Sleep 就是把除 RTC 域之外全部断电——电流从运行时的约 100mA 降到约 10µA，差一万倍。理解「哪些域保留、哪些断电」，才能解释为什么唤醒等于重启、什么数据能跨睡眠保留。</p>
+          <p>一次低功耗循环：醒来（=冷启动跑 setup）→ 判断唤醒原因 → 读传感器+上报 → 配置唤醒源 → esp_deep_sleep_start()（不返回）→ 睡到下次触发。</p>
+
+          <h3>原理 1：功耗域——Deep Sleep 到底关了什么</h3>
+          <p>ESP32 芯片内部电源分域：<strong>数字域</strong>（CPU、SRAM、WiFi/蓝牙射频）功耗最大；<strong>RTC 域</strong>（实时时钟、低速外设）功耗极小。Deep Sleep 做的事是：切断数字域电源，只保留 RTC 域。结果就是——CPU 停了、WiFi 断了、<strong>主 RAM 里的变量全部丢失</strong>，只有 RTC 计数器还在走。这就是为什么 Deep Sleep 电流能降到微安级。</p>
+
+          <h3>原理 2：三种唤醒源——谁能把断电的芯片叫醒</h3>
+          <ul>
+            <li><strong>Timer（定时唤醒）</strong>：RTC 计数器数到你设的微秒数自动唤醒——<span class="inline-code">esp_sleep_enable_timer_wakeup(600e6)</span> 里 600 秒=6 亿微秒。</li>
+            <li><strong>EXT0（引脚唤醒）</strong>：指定某一个 RTC 引脚，电平到设定值就唤醒——适合按键。</li>
+            <li><strong>EXT1（多引脚唤醒）</strong>：一组 RTC 引脚按「全低」或「全高」唤醒——适合多个按键任意一个触发。</li>
+          </ul>
+          <p>三种唤醒源都属于 RTC 域，所以<strong>睡眠期间它们一直在耗电值守</strong>——这是用 10µA 换「能随时醒来」。</p>
+
+          <h3>原理 3：为什么唤醒=重启，什么数据能跨睡保留</h3>
+          <p>因为主 RAM 被断电了，唤醒时 CPU 的寄存器、栈、变量全没了——程序只能像刚上电一样从 setup 冷启动。<span class="inline-code">esp_sleep_get_wakeup_cause()</span> 告诉你这次是「真上电」还是「睡眠唤醒」，据此跳过重复初始化。<strong>想跨睡眠保留的小数据</strong>（比如计数），要放进 <span class="inline-code">RTC_DATA_ATTR</span> 修饰的变量——它被链接到 RTC 域内存，睡眠时不掉电；大块数据则存 NVS Flash。<strong>WiFi 为什么要短连快断</strong>：WiFi 射频开机就 100mA+，是功耗大头；醒来→连网→几秒发完→立刻睡，把开机时间压到最短，平均电流才能真降下来。</p>
+          <blockquote>记忆点：Deep Sleep=切断数字域、只留 RTC 域（100mA→10µA）；唤醒源=Timer/EXT0/EXT1，都属 RTC 域值守；唤醒=冷启动跑 setup，用 wakeup_cause 区分；RTC_DATA_ATTR 跨睡留小变量、大的存 NVS；WiFi 短连快断。</blockquote>
+        </section>
+
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <p>低功耗节点示例（带光敏/电位器 ADC 输入与板载 LED 指示）：</p>
+          <table>
+            <thead>
+              <tr><th>模块引脚</th><th>ESP32 引脚</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>传感器（光敏/电位器）</td><td>GPIO34（ADC1）</td><td>采集模拟量；用 RTC GPIO 唤醒可另行接 GPIO4</td></tr>
+              <tr><td>按键（GPIO 唤醒练习）</td><td>GPIO4（RTC GPIO）</td><td>esp_sleep_enable_ext0_wakeup 用</td></tr>
+              <tr><td>LED 指示</td><td>GPIO2 或板载</td><td>唤醒期间点亮一下，肉眼可见「醒来又睡了」</td></tr>
+              <tr><td>串口</td><td>板载 USB</td><td>打印唤醒原因与采集值（睡眠时串口也断电）</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么传感器接 ADC1（GPIO32~39）</strong>：Deep Sleep 唤醒后要马上采样，ADC1 不需要 RTC 配合、用起来简单；ADC2 在 WiFi 使用时又不稳——保持上一课的原则。<strong>为什么 GPIO 唤醒要接 RTC GPIO</strong>：只有部分引脚（如 GPIO2/4/12~15/32~39 等）属于 RTC 域，Deep Sleep 时只有它们能感知外部电平变化，普通 GPIO 在深睡时根本不工作——查 ESP32 数据手册的 RTC GPIO 表。</p>
+          <div class="tip-warn mt-4"><span class="tip-label">避坑</span>
+            板上 USB 串口芯片（CH340 等）本身也耗电（几 mA），测功耗时要用电池/外接电源并拔掉 USB——开发板测量 Deep Sleep 电流常见「测不准」就是因为 USB 芯片还在耗电。</div>
+        </section>
+
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p><strong>示例 1：定时唤醒 + 采集 + 计数 + 再睡（10 秒一醒）</strong></p>
+          <pre><code class="language-cpp">/* Deep Sleep 节点：每 10 秒唤醒一次，采样 + 计数，再睡 */
+#include &lt;esp_sleep.h&gt;
+
+const int adcPin = 34;
+RTC_DATA_ATTR int wakeCount = 0;   /* RTC 内存：Deep Sleep 不清空 */
+
+void printWakeCause() {
+  switch (esp_sleep_get_wakeup_cause()) {
+    case ESP_SLEEP_WAKEUP_UNDEFINED:   /* 首次上电 */
+      Serial.println("Cause: power-on");
+      break;
+    case ESP_SLEEP_WAKEUP_TIMER:
+      Serial.println("Cause: timer");
+      break;
+    default:
+      Serial.println("Cause: other");
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(100);                        /* 等串口稳定 */
+
+  wakeCount++;                       /* 唤醒次数 +1（跨睡保存） */
+  printWakeCause();
+  Serial.printf("wakeCount=%d\n", wakeCount);
+
+  /* 干活：读一次 ADC（低功耗节点醒来才开外设） */
+  analogSetPinAttenuation(adcPin, ADC_11db);
+  int n = analogRead(adcPin);
+  Serial.printf("sensor=%d\n", n);
+
+  /* 配置唤醒：10 秒（微秒单位） */
+  esp_sleep_enable_timer_wakeup(10 * 1000000ULL);
+
+  Serial.println("Entering Deep Sleep...");
+  esp_deep_sleep_start();            /* 此函数不返回，直接睡 */
+}
+
+void loop() {                        /* Deep Sleep 程序里 loop 用不到 */
+}</code></pre>
+          <p><strong>示例 2：GPIO 唤醒（按一下 GPIO4 才醒）</strong></p>
+          <pre><code class="language-cpp">/* 外部 GPIO 唤醒：平时深睡，按键按下（下降沿）唤醒 */
+#include &lt;esp_sleep.h&gt;
+
+const int wakePin = 4;      /* 必须是 RTC GPIO */
+
+void setup() {
+  Serial.begin(115200);
+  delay(100);
+
+  if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0) {
+    Serial.println("Woken by GPIO!");
+  } else {
+    Serial.println("Power-on");
+  }
+
+  /* ext0：单脚低电平唤醒；HIGH/LOW 可选触发电平 */
+  esp_sleep_enable_ext0_wakeup((gpio_num_t)wakePin, 0);  /* 0=LOW 唤醒 */
+
+  Serial.println("Sleeping...");
+  esp_deep_sleep_start();
+}
+
+void loop() { }</code></pre>
+        </section>
+
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第一段：RTC_DATA_ATTR 的跨睡计数</h3>
+          <p><span class="inline-code">RTC_DATA_ATTR int wakeCount</span> 把变量放进 RTC 内存——Deep Sleep 断电时它还在，唤醒后值保留。<strong>为什么不用普通变量</strong>：普通变量在主内存里，深睡断电全丢，每次唤醒都从 0 开始。<strong>为什么不用 NVS</strong>：NVS 写一次擦写一次 Flash（有寿命），RTC 内存没有擦写损耗且速度快——高频计数用 RTC 变量更合适，低频配置才用 NVS。</p>
+
+          <h3>第二段：printWakeCause 的分支处理</h3>
+          <p><span class="inline-code">ESP_SLEEP_WAKEUP_UNDEFINED</span> 表示「不是任何唤醒源」= 首次上电或复位。<strong>为什么必须区分</strong>：首次上电需要完整初始化（校准、清空临时状态），定时唤醒则直接干活——不区分会导致每次唤醒都重置计数或重复初始化。<strong>工程习惯</strong>：低功耗程序的第一步永远是判断唤醒原因。</p>
+
+          <h3>第三段：esp_sleep_enable_timer_wakeup 的单位</h3>
+          <p>参数是<strong>微秒</strong>：<span class="inline-code">10 * 1000000ULL</span> = 10 秒（加 ULL 防 32 位溢出）。<strong>为什么容易错</strong>：很多人按毫秒写（10000）结果 10 毫秒就醒一次，串口疯狂刷——单位换算错误是低功耗代码第一坑。</p>
+
+          <h3>第四段：esp_deep_sleep_start 不返回</h3>
+          <p>这个函数「一去不回」——芯片立即进入深睡。所以它必须放在 setup 的<strong>最后一行</strong>，后面写的任何代码都执行不到。<strong>loop 为什么空着</strong>：程序根本到不了 loop——睡眠前就停了；这也解释了为什么低功耗程序的逻辑可以全放 setup。</p>
+
+          <h3>第五段：ext0 唤醒的电平参数</h3>
+          <p><span class="inline-code">esp_sleep_enable_ext0_wakeup(pin, 0)</span> 第二个参数 0=LOW 电平唤醒（引脚被拉低时唤醒）、1=HIGH。<strong>按键怎么配合</strong>：GPIO4 平时靠外部上拉为高，按键按下接地变低 → LOW 唤醒；松开后恢复高，下次再按再醒。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-demo">七、现象演示与验证</h2>
+          <ul>
+            <li><strong>示例 1</strong>：串口每 10 秒打印一组 <span class="inline-code">Cause: timer / wakeCount=N / sensor=xxx</span>，然后进深睡；LED 无持续工作。</li>
+            <li><strong>示例 2</strong>：上电打印 Power-on 后睡；按一下 GPIO4 按键，串口打印 Woken by GPIO。</li>
+          </ul>
+          <p><strong>验证方法：</strong></p>
+          <ol>
+            <li>用万用表电流档串联测功耗：深睡期间电流应从 mA 级掉到 µA 级（几十~几百 µA 含板载芯片，属正常）。</li>
+            <li>把定时从 10 秒改成 60 秒（60×10⁶ µs），观察唤醒间隔拉长 6 倍——验证定时单位。</li>
+            <li>示例 1 里把 wakeCount 改用普通 int，重启后计数归零——对比 RTC_DATA_ATTR 的作用。</li>
+          </ol>
+        </section>
+
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>唤醒间隔不对（太快/太慢）</td><td>定时单位写错（毫秒 vs 微秒）</td><td>参数必须微秒：10 秒 = 10×10⁶ µs，加 ULL</td></tr>
+              <tr><td>GPIO 唤醒没反应</td><td>引脚不是 RTC GPIO / 触发电平反了</td><td>换 GPIO2/4/12~15/32~39；LOW/HIGH 参数试反</td></tr>
+              <tr><td>唤醒后变量全变 0</td><td>用了普通变量而不是 RTC_DATA_ATTR</td><td>跨睡数据用 RTC_DATA_ATTR 或 NVS</td></tr>
+              <tr><td>测功耗偏高（几十 mA）</td><td>USB 串口芯片/板载稳压器在耗电</td><td>拔 USB、用电池供电测；接受开发板固有底噪</td></tr>
+              <tr><td>每次唤醒都走初始化逻辑</td><td>没判断 wakeup cause</td><td>setup 开头用 esp_sleep_get_wakeup_cause() 分分支</td></tr>
+              <tr><td>深睡后串口没输出</td><td>深睡时 USB 串口也断电，正常</td><td>唤醒瞬间的 100ms 内打印；长时间串口监视会看到间歇输出</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（必做）</strong>：把示例 1 的「干活」改成真正采集 + 存 NVS：读 ADC 后写入 Preferences（每次存 4 字节），深睡重启后用 <span class="inline-code">getInt</span> 读回打印——打通「采集→存→睡→醒→读」全流程。</p>
+          <p><strong>练习 2</strong>：加 WiFi 上报：唤醒时连 WiFi、发一次 MQTT/HTTP 数据、马上深睡（结合 <a href="esp32-wifi.html">WiFi</a> 与 <a href="esp32-mqtt.html">MQTT</a> 教程），注意 WiFi 连接超时保护（连不上也要睡，别卡死）。</p>
+          <p><strong>练习 3（进阶）</strong>：用 ext1 多脚唤醒（<span class="inline-code">esp_sleep_enable_ext1_wakeup</span> + 位掩码）实现「两个按键都能唤醒且能区分是谁」——多输入唤醒的工程做法。</p>
+          <p><strong>延伸学习</strong>：Deep Sleep 学完，ESP32 教材体系核心外设齐了（GPIO/WiFi/蓝牙/MQTT/PWM/ADC/中断/存储/低功耗）。进阶方向：ESP-IDF 原生框架、OTA 升级、FreeRTOS 任务调度。回看 <a href="route.html">学习路线</a> 阶段 5，可以把四个综合项目都做一遍了。</p>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="esp32-storage.html" class="btn btn-outline btn-sm">← 上一篇：EEPROM/NVS 掉电存储</a>
+          <a href="esp32-i2c.html" class="btn btn-outline btn-sm">下一篇：I2C 通信与 OLED 显示 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

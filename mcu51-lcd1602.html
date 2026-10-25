@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - LCD1602 液晶驱动（零基础）</title>
+  <meta name="description" content="零基础学 LCD1602：并行通信、RS/RW/E 引脚时序（先地址后数据）、指令与数据的区别、ASCII 码、液晶内部 RAM 地址，写出显示字符串与数字的完整驱动代码。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link active" aria-current="page">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>LCD1602 液晶驱动</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：51 单片机</span>
+          <span class="badge badge-orange">进阶</span>
+          <span class="badge badge-gray">更新：2026-10-24</span>
+        </div>
+
+        <p class="text-secondary mb-6">LED 只会亮灭，串口只能在电脑上看——本讲让数据直接显示在一块小液晶屏上。LCD1602 能显示 2 行 × 16 个字符，是学习「并行通信时序」最好的入门器件。本讲从 RS/RW/E 三根控制线的时序讲起，再封装出显示字符串、显示数字的函数。</p>
+
+        <!-- ===== 一、本课目标与前置知识 ===== -->
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>说清楚并行通信、RS/RW/E 三根控制线的作用、指令与数据的区别。</li>
+            <li>理解 LCD1602 内部 RAM 地址和两行显示位置的关系（第一行 0x00、第二行 0x40）。</li>
+            <li>写出完整驱动：第一行显示字符串、第二行用 sprintf 显示数字，并能调对比度看到清晰字符。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识（对应学习路线阶段 2）：</strong></p>
+          <ul>
+            <li>高低电平、sbit、8 位端口写值（mcu51-led.html）。</li>
+            <li>Keil 工程里能加 #include &lt;stdio.h&gt;（用 sprintf）。</li>
+          </ul>
+          <p><strong>本课会出现的新名词：</strong>并行通信、RS/RW/E、指令 vs 数据、ASCII 码、DDRAM 地址、E 使能脉冲。</p>
+        </section>
+
+        <!-- ===== 二、基础概念铺垫 ===== -->
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. 并行通信</h3>
+          <p><strong>生活类比</strong>：串口是一个人搬箱子一次搬一个；并行是 8 个人同时搬，一次搬 8 个。LCD1602 用 8 根数据线（D0~D7）一次传一个完整字节，所以快，但要占 8 根 IO。</p>
+          <p><strong>一句话定义</strong>：<strong>并行通信</strong>用多根数据线同时传送多位（这里是 8 根线一次传 8 位 = 一个字节），配合几根控制线告诉对方「现在传的是什么」。</p>
+          <p><strong>例子</strong>：51 的 P0 口 8 根线正好接 LCD1602 的 D0~D7，往 P0 写一个数（如 0x38），LCD 就在 8 根线上同时收到这 8 个电平。</p>
+
+          <h3>2. RS / RW / E 三根控制线时序</h3>
+          <p><strong>生活类比</strong>：去快递柜取件，要先告诉柜子「我要存件还是取件」（RS）、「我现在要写还是读」（RW）、最后按一下「确认键」（E）柜子才动作。</p>
+          <p><strong>一句话定义</strong>：<strong>RS</strong>=0 表示接下来送的是「命令」、=1 是「要显示的数据」；<strong>RW</strong>=0 表示写、=1 表示读（本讲只写，RW 接地或恒 0）；<strong>E</strong> 是使能脉冲——数据放到线上后，E 给一个高脉冲，LCD 在 E 下降沿锁存这字节。完整节奏：先摆好 RS/RW → 再把字节放到 D0~D7 → 拉高 E → 稍等 → 拉低 E。</p>
+          <p><strong>例子</strong>：要发命令 0x38：RS=0、RW=0、P0=0x38、E=1、等几微秒、E=0。LCD 就在 E 变低那一瞬间把 0x38 读进去，理解为「8 位接口、2 行显示」。</p>
+
+          <h3>3. 指令 vs 数据</h3>
+          <p><strong>生活类比</strong>：同一个显示屏，你发「清屏」是指挥它干活（指令），你发「A」是告诉它显示什么（数据）。区分这两类的就是 RS 引脚。</p>
+          <p><strong>一句话定义</strong>：<strong>指令</strong>是控制 LCD 的命令（清屏、开显示、设光标位置等），用 RS=0 发送；<strong>显示数据</strong>是要显示字符的编码，用 RS=1 发送。</p>
+          <p><strong>例子</strong>：<span class="inline-code">0x01</span> 是清屏指令（RS=0 发）；字母 'A' 的 ASCII 码 0x41 是数据（RS=1 发）——前者让屏幕清空，后者让屏幕上出现一个 A。</p>
+
+          <h3>4. ASCII 码</h3>
+          <p><strong>生活类比</strong>：电脑/液晶屏怎么知道 0x41 要显示成字母 A？因为全世界约定了一张「字符→数字」对照表，就是 ASCII 码。</p>
+          <p><strong>一句话定义</strong>：<strong>ASCII 码</strong>是英文字符与数字的标准对应表：'0'=0x30、'A'=0x41、'a'=0x61、空格=0x20。LCD1602 内部固化了 ASCII 字模，你送哪个编码，它就显示哪个字符。</p>
+          <p><strong>例子</strong>：想显示数字「3」，不能直接写 3（LCD 会显示一个控制符号），要送 ASCII 码 0x33（即字符 '3'）。这就是为什么显示数字要用 sprintf 把 123 转成 "123" 字符串再逐字符送——每个字符已经是 ASCII 码。</p>
+
+          <h3>5. 液晶内部 RAM 地址（DDRAM）</h3>
+          <p><strong>生活类比</strong>：LCD1602 内部有 32 个小格子（第一行 16 个、第二行 16 个），每个格子存一个字符的编码。你要往某个位置写字，得先告诉液晶「下一个字写到哪个格子」。</p>
+          <p><strong>一句话定义</strong>：LCD 的显示数据存在内部 DDRAM，地址是 7 位的。第一行首地址 <span class="inline-code">0x00</span>，第二行首地址 <span class="inline-code">0x40</span>。设地址指令要「或上 0x80」：第一行第 col 列 = <span class="inline-code">0x80 + col</span>；第二行 = <span class="inline-code">0x80 + 0x40 + col</span>。</p>
+          <p><strong>例子</strong>：想在第二行第 3 列显示字符，先发命令 <span class="inline-code">0x80 + 0x40 + 2 = 0xC2</span>（注意列从 0 开始数），再发要显示的字符。第二行不是 0x80+16，而是 0x80+0x40，这是新手最常写错的地方。</p>
+        </section>
+
+        <!-- ===== 三、原理介绍 ===== -->
+        <section>
+          <h2 id="sec-principle">三、原理介绍：单片机只发一个字节，液晶怎么知道这是「命令」还是「字」</h2>
+          <p>LCD1602 能显示 2 行×16 个 ASCII 字符，和单片机之间用 8 位并口 D0~D7 通信，外加 RS/RW/E 三根控制线。它和你直接控 IO 不一样——它内部自带一个控制器（HD44780），你不是逐点刷液晶，而是<strong>给控制器发命令和字符，控制器自己去点阵屏上画</strong>。</p>
+          <p><strong>初始化到显示的完整流程：</strong></p>
+          <ol>
+            <li>上电先发 0x38（设 8 位、2 行、5×7 点阵）。</li>
+            <li>发 0x0C（开显示、关光标）。</li>
+            <li>发 0x06（写入后地址自增）。</li>
+            <li>发 0x01（清屏）。</li>
+            <li>发位置指令（0x80=第一行开头、0xC0=第二行开头）。</li>
+            <li>逐个发字符数据，内部地址自动 +1，字符依次右排。</li>
+          </ol>
+          <p>必记命令：<span class="inline-code">0x38</span> 功能设置、<span class="inline-code">0x0C</span> 开显示关光标、<span class="inline-code">0x06</span> 地址自增、<span class="inline-code">0x01</span> 清屏、<span class="inline-code">0x80|地址</span> 定位。</p>
+
+          <h3>原理 1：RS/RW/E 三根线是怎么完成一次「握手」的</h3>
+          <p>同一个 D0~D7 口线上，可能传的是命令、也可能是字符——液晶靠 <strong>RS</strong> 这根线来区分：<strong>RS=0 表示「口线上是命令」，RS=1 表示「口线上是要显示的数据」</strong>。RW 选择读还是写（本讲只读，直接把 RW 接地一直写）。<strong>E（使能）是同步脉冲</strong>：你不能把字节放在口线上液晶就自动收——它要等你给一个「取货信号」。标准动作是：先把 RS 摆好、把字节放到 D0~D7 → 拉高 E → 等几微秒 → 拉低 E，液晶在 <strong>E 的下降沿</strong>才把口线上的数据锁进去。<strong>为什么要「先摆好数据再给脉冲」而不是边给边看</strong>：因为口线电平在切换瞬间是不稳定的，E 脉冲这一刻它认定的数据才有效——这和后面 I2C「时钟高电平期间数据必须稳定」是同一种同步思想。</p>
+          <p><strong>教材式时序参数（HD44780 数据手册）</strong>：E 高电平脉宽 <span class="inline-code">≥ 450ns</span>；RS/RW 在 E 下降沿前要稳定（建立时间 tsu ≈ 几十 ns）；数据 D0~D7 相对 E 下降沿的建立时间 ≥ 195ns、保持时间 ≥ 10ns。51 在 11.0592MHz 下一个机器周期就 1.085µs≈1085ns，所以「E=1; E=0;」两条语句之间哪怕空一条 NOP 也远大于这些参数，软件延时不用写太长。更规范的做法是读<strong>忙标志 BF（D7）</strong>：RW=1、RS=0 时读 D0~D7，D7=1 表示液晶还在忙、不能发下一条——入门阶段用 2~5ms 软件延时代替即可。</p>
+
+          <h3>原理 2：为什么要先「写命令定位」再「写字符」——DDRAM 地址指针</h3>
+          <p>液晶内部有一块 <strong>DDRAM（显示数据 RAM）</strong>，每个字节对应屏幕上一个格子，并有一个<strong>地址指针</strong>指向下一个要写入的格子。你发 <span class="inline-code">0x80|地址</span> 命令，本质就是<strong>移动这个指针</strong>。两个坑点：</p>
+          <ul>
+            <li><strong>第二行不是紧接第一行</strong>：第一行首地址是 0x00，第二行首地址是 <strong>0x40</strong>（中间空了一段）。所以定位第二行开头要写 <span class="inline-code">0x80|0x40 = 0xC0</span>，而不是想当然的 0x10。</li>
+            <li><strong>写完一个字符指针自动 +1</strong>（这就是 0x06 命令设的）：所以你定位一次后，连续发 N 个字符就自动从左往右排，不用每个都重新定位。</li>
+          </ul>
+          <p><strong>「先命令后数据」的分工由此清楚</strong>：命令（RS=0）管的是「指针移到哪、开不开显示、清不清屏」；数据（RS=1）管的是「往当前指针那个格子塞什么字符」。上层的 lcd_show_string 就是「先写一条定位命令、再循环写字符数据」的封装。</p>
+
+          <h3>原理 3：为什么初始化那一串命令不能省、顺序不能乱</h3>
+          <p>液晶上电后内部控制器是<strong>默认未知状态</strong>：几位接口？几行？光标闪不闪？写入后地址加还是减？全要靠初始化命令一个个定下来。<strong>0x38 必须第一个发</strong>，因为它定「8 位并口」——在它生效前，控制器还不知道你口线一次给它 8 位还是 4 位，后面命令全会被读错。这就是为什么 LCD1602「偶尔显示乱码花屏」多半是初始化时序不够（命令之间没留够等待时间）或顺序错了，而不是接线问题。</p>
+          <blockquote>记忆点：RS=0 命令/1 数据，E 下降沿锁存（先摆好数据再给脉冲）；液晶内部有 DDRAM 地址指针，0x80|地址=移动指针，第二行首地址是 0x40 所以定位写 0xC0，写一个字符指针自动 +1；初始化 0x38→0x0C→0x06→0x01 顺序不能乱，否则花屏。</blockquote>
+        </section>
+
+        <!-- ===== 四、硬件接线说明 ===== -->
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <p>数据口 D0~D7 接 P0，控制线 RS/RW/E 接 P2.0/P2.1/P2.2。VO 脚接电位器中间抽头调节对比度。</p>
+          <table>
+            <thead>
+              <tr><th>模块引脚</th><th>单片机引脚</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>RS</td><td>P2.0</td><td>0 命令 / 1 数据</td></tr>
+              <tr><td>RW</td><td>P2.1</td><td>恒接地（只写不读），这里仍接 IO 便于演示</td></tr>
+              <tr><td>E</td><td>P2.2</td><td>使能脉冲</td></tr>
+              <tr><td>D0~D7</td><td>P0.0 ~ P0.7</td><td>8 位数据口</td></tr>
+              <tr><td>VSS/VDD/VO</td><td>GND / 5V / 电位器</td><td>VO 调对比度，调到字符清晰可见</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么这样接：</strong></p>
+          <ul>
+            <li><strong>为什么数据口用 P0？</strong> P0 是 8 位口，一次写一个字节正好匹配 LCD 的 8 位并口；换 P1 也行，只要改代码里的 <span class="inline-code">#define LCD_DATA P0</span>。</li>
+            <li><strong>为什么要有电位器调 VO？</strong> VO 控制液晶驱动电压，调不到合适值时一片白或一片黑，什么都看不见——这是新手「烧录成功但屏幕没字」第一个要查的点。</li>
+            <li><strong>为什么 RW 可以接地？</strong> 本讲只写不读（不查忙标志），RW 恒为 0 即可，省一根 IO；接 IO 是为了代码更通用。</li>
+          </ul>
+        </section>
+
+        <!-- ===== 五、完整代码 ===== -->
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p>第一行显示字符串，第二行显示一个数字（用 sprintf 把数字转字符串再送显示）。</p>
+          <pre><code class="language-c">/* LCD1602 显示：第一行字符串，第二行数字 */
+#include &lt;reg52.h&gt;
+#include &lt;stdio.h&gt;          /* 用 sprintf 把数字转成字符串 */
+
+#define LCD_DATA P0         /* 数据口接到 P0 */
+
+sbit RS = P2^0;
+sbit RW = P2^1;
+sbit E  = P2^2;
+
+void delay_us(unsigned int us) { while(us--); }   /* 粗略微秒延时 */
+
+/* 写命令：RS=0 */
+void Lcd_Write_Cmd(unsigned char cmd) {
+    RS = 0;
+    RW = 0;
+    LCD_DATA = cmd;     /* 命令字节放到数据口 */
+    E = 1; delay_us(10);
+    E = 0;              /* E 下降沿锁存 */
+    delay_us(100);
+}
+
+/* 写数据：RS=1 */
+void Lcd_Write_Data(unsigned char dat) {
+    RS = 1;
+    RW = 0;
+    LCD_DATA = dat;     /* 要显示的字符（ASCII 码） */
+    E = 1; delay_us(10);
+    E = 0;
+    delay_us(100);
+}
+
+void Lcd_Init(void) {
+    Lcd_Write_Cmd(0x38);  /* 8位，2行，5x7 点阵 */
+    Lcd_Write_Cmd(0x0C);  /* 开显示，关光标 */
+    Lcd_Write_Cmd(0x06);  /* 写入后地址自动加一 */
+    Lcd_Write_Cmd(0x01);  /* 清屏 */
+}
+
+/* 在指定行(row 0/1)、列(col 0~15)开始显示字符串 */
+void Lcd_Show_Str(unsigned char row, unsigned char col, unsigned char *s) {
+    if (row == 0) Lcd_Write_Cmd(0x80 + col);          /* 第一行 */
+    else          Lcd_Write_Cmd(0x80 + 0x40 + col);     /* 第二行 */
+    while (*s) Lcd_Write_Data(*s++);
+}
+
+void main(void) {
+    unsigned char buf[16];
+    unsigned char n = 123;
+    Lcd_Init();
+    Lcd_Show_Str(0, 0, "McuStudy 51");     /* 第一行第0列开始 */
+    sprintf(buf, "Num = %d", n);            /* 把数字 123 转成 "Num = 123" */
+    Lcd_Show_Str(1, 0, buf);               /* 第二行显示 */
+    while (1);                             /* 显示完就停住 */
+}</code></pre>
+
+          <h3>进阶实例：第二行数字每秒自增走动</h3>
+          <p>在上面驱动函数不变的前提下，把 main 改成「数字每秒 +1 并刷新」，让屏幕像个秒表计数器。注意每次刷新前要清掉旧数字的残影（用固定宽度 <span class="inline-code">%5d</span> 右对齐补空格即可）。</p>
+          <pre><code class="language-c">/* 进阶：在上面所有驱动函数保留的前提下，把 main 替换成本段 */
+void delay_ms(unsigned int ms) {
+    unsigned int i, j;
+    for (i = 0; i &lt; ms; i++)
+        for (j = 0; j &lt; 120; j++);
+}
+
+void main(void) {
+    unsigned char buf[16];
+    unsigned int n = 0;
+    Lcd_Init();
+    Lcd_Show_Str(0, 0, "Counter:");
+    while (1) {
+        sprintf(buf, "%5d", n++);   /* %5d：占 5 位宽，旧位被空格覆盖，不留残影 */
+        Lcd_Show_Str(1, 0, buf);
+        delay_ms(1000);
+    }
+}</code></pre>
+          <p>烧录后第一行 <span class="inline-code">Counter:</span> 不动，第二行数字应从 0 开始每秒往上跳一个。若数字左侧残留旧字符，说明格式化宽度不够，把 <span class="inline-code">%5d</span> 改成 <span class="inline-code">%6d</span>。</p>
+        </section>
+
+        <!-- ===== 六、代码逐段讲解 ===== -->
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第 1 段：两个底层函数 Lcd_Write_Cmd / Lcd_Write_Data（第 12~31 行）</h3>
+          <p><strong>在做什么：</strong> 把「摆 RS → 放数据 → E 脉冲」这三步封装成两个函数：一个发命令（RS=0），一个发数据（RS=1）。</p>
+          <p><strong>为什么这么写：</strong> 时序细节（E 拉高再拉低、中间延时）只写一遍，上层调用就不用关心时序。E=1 后 delay_us(10) 再 E=0，是因为 LCD 锁存需要稳定的高脉冲宽度，太短会丢字节。</p>
+          <p><strong>不写会怎样：</strong> 把 RS 忘设成 0（发命令时 RS=1），LCD 会把命令当字符显示出来，出现乱码。</p>
+
+          <h3>第 2 段：Lcd_Init 初始化（第 33~38 行）</h3>
+          <p><strong>在做什么：</strong> 上电后依次发 0x38、0x0C、0x06、0x01 四条命令。</p>
+          <p><strong>为什么这么写：</strong> LCD1602 上电后内部状态是未知的，必须按手册顺序初始化：先设接口格式（0x38），再开显示（0x0C），再设自增方式（0x06），最后清屏（0x01）。顺序不能乱，漏发就会显示异常。</p>
+          <p><strong>不写会怎样：</strong> 漏 0x38 → 初始化不完整，显示乱码；漏 0x01 → 屏幕上残留上电随机字符。</p>
+
+          <h3>第 3 段：Lcd_Show_Str 定位显示（第 40~44 行）</h3>
+          <p><strong>在做什么：</strong> 先按行/列发「设地址」命令（0x80+col 或 0x80+0x40+col），再逐个发字符数据。</p>
+          <p><strong>为什么这么写：</strong> 发完位置命令后，LCD 内部地址指针会在每个字符发送后自动 +1（这是 0x06 设好的），所以字符串能从指定位置依次往右排，不用每发一个字符都重设地址。</p>
+          <p><strong>不写会怎样：</strong> 第二行地址错写成 0x80+16+col → 字符跑到奇怪位置或换行错乱；不设地址直接发数据 → 显示在上次位置，可能接在上一行末尾。</p>
+
+          <h3>第 4 段：main 里 sprintf 显示数字（第 46~56 行）</h3>
+          <p><strong>在做什么：</strong> 用 sprintf 把数字 n=123 格式化成字符串 "Num = 123"，再交给 Lcd_Show_Str 显示。</p>
+          <p><strong>为什么这么写：</strong> LCD 只认 ASCII 码，直接送 123 这个数字会显示成控制符号。sprintf 把 123 拆成 '1'、'2'、'3' 三个 ASCII 字符放进 buf，再逐字符送显示。</p>
+          <p><strong>不写会怎样：</strong> 直接 <span class="inline-code">Lcd_Write_Data(123)</span> → 屏幕显示一个奇怪符号，而不是数字 123。</p>
+        </section>
+
+        <!-- ===== 七、现象演示说明 ===== -->
+        <section>
+          <h2 id="sec-demo">七、现象演示说明</h2>
+          <p>烧录后，LCD1602 第一行显示 <span class="inline-code">McuStudy 51</span>，第二行显示 <span class="inline-code">Num = 123</span>。如果一片白看不到字，先调 VO 对比度电位器。</p>
+          <p><strong>可量化的验证方法：</strong></p>
+          <ul>
+            <li><strong>调对比度：</strong> 慢拧 VO 电位器，应从全白 → 出现黑块（对比度过强）→ 清晰显示字符 → 字符变淡消失，找到最清晰的位置。</li>
+            <li><strong>改数字：</strong> 把 <span class="inline-code">n = 123</span> 改成 <span class="inline-code">n = 4567</span> 重新烧录，第二行应变成 <span class="inline-code">Num = 4567</span>——证明 sprintf 数字显示链路正常。</li>
+            <li><strong>改位置：</strong> 把 <span class="inline-code">Lcd_Show_Str(0, 0, ...)</span> 的 col 从 0 改成 5，字符串应从第 6 列开始显示，前面空 5 格。</li>
+          </ul>
+        </section>
+
+        <!-- ===== 八、常见报错排查方案 ===== -->
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>屏幕全白或全黑，一个字都没有</td><td>对比度 VO 没调好</td><td>调电位器 VO，直到背景与字符对比清晰</td></tr>
+              <tr><td>显示乱码、字符错位</td><td>初始化命令没发全 / E 脉冲太短</td><td>确认先发 0x38、0x0C、0x06、0x01，适当加大 delay_us</td></tr>
+              <tr><td>字符显示到第二行跑到很后面</td><td>第二行地址写错</td><td>第二行地址是 0x80 + 0x40 + col，不要写成 0x80+16+col</td></tr>
+              <tr><td>数字显示成奇怪符号</td><td>直接把数字当 ASCII 送了</td><td>先用 sprintf 转成字符串再逐字符送 Lcd_Write_Data</td></tr>
+              <tr><td>第一行正常、第二行完全不显示</td><td>接线中 P0 某根线松动 / 初始化漏 2 行设置</td><td>重插 D0~D7 杜邦线；确认 0x38 已发（含 2 行设置）</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <!-- ===== 九、课后练习与延伸 ===== -->
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（改文字）：</strong> 第一行改成你的姓名拼音、第二行改成你的专业，重新烧录。提示：只改两个 Lcd_Show_Str 的字符串参数，注意一行最多 16 个字符。</p>
+          <p><strong>练习 2（显示多行数字）：</strong> 定义两个变量 a=100、b=200，第二行用 sprintf 显示 <span class="inline-code">a=100 b=200</span>。提示：sprintf 格式串写成 <span class="inline-code">"a=%d b=%d"</span>，参数传 a、b。</p>
+          <p><strong>练习 3（滚动显示）：</strong> 让一句长字符串（超过 16 字符）从右往左慢慢滚过屏幕。提示：用定时器每 200ms 发一次「地址自增 +1」命令（0x18 或 0x1C），实现整屏左移。</p>
+          <p><strong>延伸学习：</strong></p>
+          <ul>
+            <li><a href="#xxx" data-placeholder>下一篇：综合项目 DHT11 温湿度采集（把传感器数据显示到 1602）</a></li>
+            <li><a href="#xxx" data-placeholder>I2C 接口的 OLED 屏（比 1602 省 IO，占位）</a></li>
+            <li><a href="#xxx" data-placeholder>数码管动态扫描（另一类显示器件，占位）</a></li>
+          </ul>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="mcu51-uart.html" class="btn btn-outline btn-sm">← 上一篇：UART 串口通信</a>
+          <a href="mcu51-dht11.html" class="btn btn-outline btn-sm">下一篇：综合项目 温湿度采集 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

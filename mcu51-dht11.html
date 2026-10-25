@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - 综合项目：温湿度采集（零基础）</title>
+  <meta name="description" content="零基础综合实战：DHT11 单总线温湿度传感器——什么是单总线、起始信号、数据位 0/1 的宽度差异、校验和与温湿度单位，配合 LCD1602 实时显示，整合前 6 课知识。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link active" aria-current="page">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>综合项目：温湿度采集</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：51 单片机</span>
+          <span class="badge badge-orange">进阶</span>
+          <span class="badge badge-gray">更新：2026-10-24</span>
+        </div>
+
+        <p class="text-secondary mb-6">收官实战：用 DHT11 这颗只用一根线的温湿度传感器读数，再把结果送到 LCD1602 上实时显示。本讲会把前面学的 IO、时序、液晶驱动全部串起来，重点搞懂「单总线」——一根线上怎么靠「高电平持续多久」区分 0 和 1。</p>
+
+        <!-- ===== 一、本课目标与前置知识 ===== -->
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>说清楚什么是单总线、DHT11 的起始信号/响应/数据位时序、校验和的作用。</li>
+            <li>看懂 DHT11 读 40 位数据的代码，理解「等变高、数高电平宽度」的判别原理。</li>
+            <li>把温湿度结果用 LCD1602 实时显示出来，能用哈气、手捏做物理验证。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识（对应学习路线阶段 2 全部）：</strong></p>
+          <ul>
+            <li>高低电平、sbit、IO 输入输出（mcu51-led.html）。</li>
+            <li>delay_ms / delay_us 粗延时的写法。</li>
+            <li>LCD1602 驱动（mcu51-lcd1602.html）：Lcd_Str 等函数可直接复用。</li>
+          </ul>
+          <p><strong>本课会出现的新名词：</strong>单总线、起始信号、响应信号、数据位宽度（0/1）、校验和、温湿度单位。</p>
+        </section>
+
+        <!-- ===== 二、基础概念铺垫 ===== -->
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. 什么是单总线</h3>
+          <p><strong>生活类比</strong>：串口用了两根线（一发一收），LCD 用了 8 根数据线。DHT11 更省——只用<strong>一根</strong>线，既当输出又当输入，靠「什么时候谁说话、说多久」来区分。</p>
+          <p><strong>一句话定义</strong>：<strong>单总线（1-Wire）</strong>是只用一根数据线（加共地）就能双向通信的协议：主机拉低发起请求，传感器再通过同一根线把数据发回来；线上平时被上拉电阻拉成高电平。</p>
+          <p><strong>例子</strong>：DHT11 的 DATA 脚接 P2.3，同时接一个 4.7k~10kΩ 电阻到 VCC。平时这根线是高电平；单片机拉低表示「我要读数了」，之后松开，传感器再通过这根线返回 40 位数据。</p>
+
+          <h3>2. 时序：起始信号与数据位 0/1 的宽度差异</h3>
+          <p><strong>生活类比</strong>：单总线没有时钟线，怎么区分 0 和 1？靠「高电平持续的时间长短」——像摩斯密码里的短点（·）和长划（—）。</p>
+          <p><strong>一句话定义</strong>：DHT11 一次通信分三段——<strong>起始信号</strong>（主机拉低 ≥18ms 再拉高 20~40µs）、<strong>响应</strong>（传感器拉低 80µs 再拉高 80µs）、<strong>40 位数据</strong>（每位先约 50µs 低电平开头，接着高电平：<strong>26~28µs 表示 0，约 70µs 表示 1</strong>）。</p>
+          <p><strong>例子</strong>：读每一位时，先等 50µs 低电平结束（线变高），延时约 30µs 后再看线还是不是高：如果已经变低了，说明高电平只有 26µs 左右 → 这一位是 0；如果还是高，说明高电平有 70µs → 这一位是 1。</p>
+
+          <h3>3. 校验和</h3>
+          <p><strong>生活类比</strong>：快递送了 4 箱货，附一张纸条写「4 箱总重量」。你收到后把 4 箱称一遍加起来，和纸条对得上，就说明没漏没多。</p>
+          <p><strong>一句话定义</strong>：DHT11 发完 40 位（5 个字节）后，最后一个字节是<strong>校验和</strong> = 前 4 个字节相加的低 8 位。单片机收到后自己把前 4 个字节加起来，和第 5 个字节对得上，才说明这 40 位读对了。</p>
+          <p><strong>例子</strong>：读到 hum_int=55、hum_dec=0、tem_int=26、tem_dec=0，和 = 81；校验和字节也应等于 81。不等就丢弃这次数据、显示错误，不显示乱值。</p>
+
+          <h3>4. 温湿度单位</h3>
+          <p><strong>生活类比</strong>：DHT11 报的数就是日常说的「百分之几湿度」和「摄氏度温度」。</p>
+          <p><strong>一句话定义</strong>：湿度单位是 <strong>%RH</strong>（相对湿度 0~100%）；温度单位是 <strong>℃</strong>（摄氏度）。DHT11 精度不高（湿度 ±5%、温度 ±2℃），且小数位字节通常为 0（它只测整数温湿度）。</p>
+          <p><strong>例子</strong>：hum_int=55 表示相对湿度 55%；tem_int=26 表示 26℃。对着哈气湿度会上升，手捏住温度会缓慢上升——这就是本项目的物理验证方法。</p>
+        </section>
+
+        <!-- ===== 三、原理介绍 ===== -->
+        <section>
+          <h2 id="sec-principle">三、原理介绍：一根线怎么既能听又能说，还能分清 0 和 1</h2>
+          <p>DHT11 是<strong>单总线（1-Wire）</strong>数字温湿度传感器，只用一根数据线双向通信。通信是严格的「主从问答」：主机（单片机）先发令、传感器再应答。</p>
+          <p><strong>一次完整采集的流程：</strong></p>
+          <ol>
+            <li>单片机把 DATA 拉低 ≥18ms 发起始信号，再拉高 30µs 并转输入。</li>
+            <li>DHT11 回应答：拉低 80µs + 拉高 80µs，表示「准备好了」。</li>
+            <li>循环读 5 字节：每位先 50µs 低电平开头，高电平长短代表 0/1。</li>
+            <li>前 4 字节相加与第 5 个校验字节比对，相等才认数据有效。</li>
+            <li>有效就送 LCD，无效显示 "DHT11 Err"。</li>
+          </ol>
+          <p><strong>40 位格式</strong>：湿度整数+湿度小数+温度整数+温度小数+校验和；校验和=前 4 字节之和的低 8 位。</p>
+
+          <h3>原理 1：单总线为什么必须接一颗上拉电阻——开漏双向的本质</h3>
+          <p>这根数据线是<strong>开漏（open-drain）</strong>结构：主机和传感器都只能把线<strong>拉低</strong>，谁也没本事主动把线<strong>拉高</strong>。那空闲时高电平从哪来？靠外接的 4.7k~10kΩ <strong>上拉电阻</strong>——没人拉低时，电阻把线默默托到 VCC。<strong>这就是「双向共用一根线」的物理基础</strong>：两方都只会「拉低说话、松手释放」，靠上拉电阻回高电平，天然不会打架（不像两个推挽输出硬接会短路）。没有这颗电阻，线电平飘忽，起始信号发不出去、传感器也应答不了——这是单总线电路第一必查。</p>
+
+          <h3>原理 2：没有时钟线，怎么靠「高电平多宽」分出 0 和 1</h3>
+          <p>单总线没有独立时钟线，双方约定用<strong>高电平持续时间的长短</strong>来编码：每一位都先固定给约 50µs 低电平当「位头」，紧接着——</p>
+          <ul>
+            <li>高电平约 <strong>26~28µs</strong> → 这一位是 <strong>0</strong>；</li>
+            <li>高电平约 <strong>70µs</strong> → 这一位是 <strong>1</strong>。</li>
+          </ul>
+          <p><strong>读代码的关键技巧</strong>：不用真去量高电平精确多宽，而是「等 50µs 低位过去 → 延时约 30~40µs → 在这段时间点采样线电平」。如果是 0，高电平早就在 30µs 左右结束了，此时线已变低，读到 0；如果是 1，70µs 的高电平还没结束，此时线仍高，读到 1。<strong>本质是「在 28µs 和 70µs 的中点附近采样」</strong>，靠时间窗口把两种宽度区分开——所以读代码里全是「等变高、等变低、延时再判断」的微秒级操作，时序余量极小，CPU 中途不能被打断。</p>
+
+          <h3>原理 3：校验和为什么能防「读错」</h3>
+          <p>单总线时序要求苛刻，稍不准就读错位。DHT11 多发一个<strong>校验和字节</strong>：它自己把前 4 个字节加起来取低 8 位一起发出来。主机收到后<strong>自己再把前 4 字节加一遍</strong>，和第 5 个字节比对——一致说明这 40 位没读错位；不一致说明这次时序飘了、数据作废。<strong>这是软件层面的最后一道保险</strong>：即使上拉太大、线太长导致个别位读歪了，校验和大概率能拦下错误数据，避免你看到一个莫名其妙的温度。所以代码里「和校验不过就显示 Err 而不是硬显示」是必要的，不是多余。</p>
+          <blockquote>记忆点：单总线是开漏结构、双方都只会拉低，空闲高电平靠外接上拉电阻，不接就读不到；没时钟线，用高电平宽度编码（短≈28µs=0、长≈70µs=1），靠「延时30µs后采样」在时间窗口里区分；40 位末字节是校验和=前4字节之和低8位，对不上就丢弃这次读数。</blockquote>
+        </section>
+
+        <!-- ===== 四、硬件接线说明 ===== -->
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <p>DHT11 数据线接 P2.3，并接一个 4.7k~10kΩ 上拉电阻到 VCC；LCD1602 沿用上一讲的接线。</p>
+          <table>
+            <thead>
+              <tr><th>模块引脚</th><th>单片机引脚</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>DHT11 DATA</td><td>P2.3</td><td>接 10kΩ 上拉到 VCC</td></tr>
+              <tr><td>DHT11 VCC / GND</td><td>5V / GND</td><td>供电</td></tr>
+              <tr><td>LCD1602 RS/RW/E</td><td>P2.0/P2.1/P2.2</td><td>同上一讲</td></tr>
+              <tr><td>LCD1602 D0~D7</td><td>P0.0~P0.7</td><td>8 位数据口</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么这样接：</strong></p>
+          <ul>
+            <li><strong>为什么 DATA 要接上拉电阻？</strong> 单总线空闲时必须保持高电平。DHT11 不输出时这根线是高阻态，靠上拉电阻把它拉到 VCC；没这个电阻，线电平飘着，起始信号根本发不出去。</li>
+            <li><strong>为什么 DHT 单独用 P2.3、不和 LCD 共用？</strong> LCD 占用 P0 全部 + P2.0~2.2，DHT 用 P2.3 互不干扰；共用引脚会让液晶写数据时把 DHT 的线乱拉。</li>
+            <li><strong>为什么 VCC 用 5V？</strong> DHT11 是 5V 器件，3.3V 下虽然有时能用但读数不稳，统一 5V 最省心。</li>
+          </ul>
+        </section>
+
+        <!-- ===== 五、完整代码 ===== -->
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p>整合 DHT11 读取与 LCD1602 显示：第一行显示湿度，第二行显示温度，约 1 秒刷新一次。</p>
+          <pre><code class="language-c">/* 综合项目：DHT11 温湿度 + LCD1602 显示 */
+#include &lt;reg52.h&gt;
+#include &lt;stdio.h&gt;
+
+#define LCD_DATA P0
+sbit RS = P2^0;
+sbit RW = P2^1;
+sbit E  = P2^2;
+sbit DHT = P2^3;            /* DHT11 数据线 */
+
+unsigned char hum_int, hum_dec, tem_int, tem_dec, check;
+
+void delay_ms(unsigned int ms) {
+    unsigned int i, j;
+    for (i = 0; i &lt; ms; i++)
+        for (j = 0; j &lt; 120; j++);
+}
+void delay_us(unsigned int us) { while(us--); }   /* 粗略微秒延时 */
+
+/* ---- LCD1602 底层（沿用上一讲） ---- */
+void Lcd_Cmd(unsigned char c) {
+    RS=0; RW=0; LCD_DATA=c; E=1; delay_us(10); E=0; delay_us(100);
+}
+void Lcd_Dat(unsigned char d) {
+    RS=1; RW=0; LCD_DATA=d; E=1; delay_us(10); E=0; delay_us(100);
+}
+void Lcd_Init(void) {
+    Lcd_Cmd(0x38); Lcd_Cmd(0x0C); Lcd_Cmd(0x06); Lcd_Cmd(0x01);
+}
+void Lcd_Str(unsigned char row, unsigned char col, unsigned char *s) {
+    Lcd_Cmd((row==0 ? 0x80 : 0x80+0x40) + col);
+    while (*s) Lcd_Dat(*s++);
+}
+
+/* ---- DHT11：读一个字节（8 位） ---- */
+unsigned char DHT_Read_Byte(void) {
+    unsigned char i, dat=0;
+    for (i=0; i&lt;8; i++) {
+        while(DHT == 0);        /* 等每位开头的 50us 低电平结束（线变高） */
+        delay_us(30);           /* 等 30us：此时 0 的高电平(26us)已结束，1 的还在 */
+        dat &lt;&lt;= 1;
+        if (DHT == 1) {         /* 线还是高 =&gt; 高电平约 70us，这一位是 1 */
+            dat |= 1;
+            while(DHT == 1);    /* 等本次高电平结束，准备下一位 */
+        }
+    }
+    return dat;
+}
+
+/* ---- DHT11：完整读一次，返回 1=成功 0=失败 ---- */
+bit DHT_Read(void) {
+    DHT = 0; delay_ms(20);      /* 主机起始：拉低 &gt;=18ms */
+    DHT = 1; delay_us(30);     /* 拉高 20~40us 后转为接收 */
+    if (DHT == 1) return 0;     /* 没收到响应（线没被传感器拉低） */
+    while(DHT == 0);            /* 等 80us 低响应结束 */
+    while(DHT == 1);            /* 等 80us 高响应结束 */
+    hum_int = DHT_Read_Byte();
+    hum_dec = DHT_Read_Byte();
+    tem_int = DHT_Read_Byte();
+    tem_dec = DHT_Read_Byte();
+    check   = DHT_Read_Byte();
+    /* 校验：前4字节之和的低8位 == 第5字节 */
+    return (check == (hum_int+hum_dec+tem_int+tem_dec));
+}
+
+void main(void) {
+    char buf[16];
+    Lcd_Init();
+    while (1) {
+        if (DHT_Read()) {
+            sprintf(buf, "Humi: %d%%", hum_int);   /* 显示湿度 */
+            Lcd_Str(0, 0, buf);
+            sprintf(buf, "Temp: %d C", tem_int);   /* 显示温度 */
+            Lcd_Str(1, 0, buf);
+        } else {
+            Lcd_Str(0, 0, "DHT11 Err");            /* 校验失败/没接好 */
+        }
+        delay_ms(1000);                             /* DHT11 采样间隔 ≥1 秒 */
+    }
+}</code></pre>
+
+          <h3>进阶实例：超限声光报警（改 main）</h3>
+          <p>在上面 DHT_Read / LCD 驱动不变的前提下，给 main 加一个报警：温度超过 30℃ 或湿度低于 30% 时点亮 P1.0 的 LED（代表报警），正常时熄灭。这是「传感器读值 → 判断 → 执行机构」的最小闭环。</p>
+          <pre><code class="language-c">/* 进阶：保留上面所有函数，把 main 替换成本段 */
+sbit ALARM = P1^0;          /* 报警 LED：0 亮 1 灭 */
+
+void main(void) {
+    char buf[16];
+    Lcd_Init();
+    while (1) {
+        if (DHT_Read()) {
+            sprintf(buf, "Humi: %d%%", hum_int);
+            Lcd_Str(0, 0, buf);
+            sprintf(buf, "Temp: %d C", tem_int);
+            Lcd_Str(1, 0, buf);
+            /* 报警判断：温度偏高或湿度偏低就亮灯 */
+            if (tem_int &gt;= 30 || hum_int &lt;= 30) {
+                ALARM = 0;      /* 触发报警，点灯 */
+            } else {
+                ALARM = 1;      /* 正常，灭灯 */
+            }
+        } else {
+            Lcd_Str(0, 0, "DHT11 Err");
+        }
+        delay_ms(1000);
+    }
+}</code></pre>
+          <p>烧录后：哈气让湿度持续偏低（或手捏让温度升到 30℃ 以上）时，P1.0 报警 LED 应点亮；恢复正常后自动熄灭。若报警阈值不符预期，改 <span class="inline-code">30</span> 这两个数即可。</p>
+        </section>
+
+        <!-- ===== 六、代码逐段讲解 ===== -->
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第 1 段：Lcd_Cmd / Lcd_Dat / Lcd_Init / Lcd_Str（第 14~25 行）</h3>
+          <p><strong>在做什么：</strong> 把上一讲 LCD1602 的驱动函数原样搬过来。</p>
+          <p><strong>为什么这么写：</strong> 本项目是「传感器 + 显示」的综合，LCD 驱动属于已掌握的工具，直接复用，把注意力放在 DHT11 时序上。</p>
+          <p><strong>不写会怎样：</strong> 不初始化 LCD，直接发数据，屏幕一片乱码或全白。</p>
+
+          <h3>第 2 段：DHT_Read_Byte 读一个字节（第 27~39 行）</h3>
+          <p><strong>在做什么：</strong> 连续读 8 位，每位：等 50µs 低电平过去 → 延时 30µs → 看线电平 → 判断是 0 还是 1。</p>
+          <p><strong>为什么这么写：</strong> 每位先有 50µs 低电平（区分位的开始），随后高电平 26µs（0）或 70µs（1）。延时 30µs 这个临界点是关键：30µs 时，0 的高电平（26µs）已经结束、线已变低；1 的高电平（70µs）还在、线仍高——此时读线电平，1 和 0 自然分开。<span class="inline-code">dat &lt;&lt;= 1</span> 是因为先发的是高位。</p>
+          <p><strong>不写会怎样：</strong> 不延时 30µs 直接读 → 每位都读到高电平（50µs 低电平刚结束），全是 0xFF；延时位置错 → 温湿度全是乱值。</p>
+
+          <h3>第 3 段：DHT_Read 起始 + 校验（第 41~52 行）</h3>
+          <p><strong>在做什么：</strong> 主机拉低 20ms 发起始信号 → 检测响应 → 读 5 个字节 → 校验和比对。</p>
+          <p><strong>为什么这么写：</strong> <span class="inline-code">if(DHT==1) return 0</span> 是「传感器没响应」的保护：如果上拉电阻没接、传感器没接好，起始信号后线仍是高，直接判失败显示 Err，而不是读出一堆无效数。最后用校验和把关，只有前 4 字节加起来等于第 5 字节才认为数据可信。</p>
+          <p><strong>不写会怎样：</strong> 不校验 → 时序偶尔错位时屏幕上温湿度乱跳；不检测响应 → 接线松动时程序卡死在 while(DHT==0) 之类的等待里。</p>
+
+          <h3>第 4 段：main 主循环（第 54~66 行）</h3>
+          <p><strong>在做什么：</strong> 每秒读一次 DHT11，成功就格式化温湿度送 LCD，失败显示 Err。</p>
+          <p><strong>为什么这么写：</strong> DHT11 数据手册要求采样间隔至少 1 秒，读太频繁它来不及稳定输出。<span class="inline-code">%%</span> 是 sprintf 里打印一个 % 号的转义写法。</p>
+          <p><strong>不写会怎样：</strong> 间隔太短（如 100ms）→ 读数恒为 0 或跳变剧烈；不判失败就显示 → 用户看到错误数据以为是真的。</p>
+        </section>
+
+        <!-- ===== 七、现象演示说明 ===== -->
+        <section>
+          <h2 id="sec-demo">七、现象演示说明</h2>
+          <p>烧录后，LCD1602 第一行显示当前湿度（如 <span class="inline-code">Humi: 55%</span>），第二行显示当前温度（如 <span class="inline-code">Temp: 26 C</span>），每秒刷新一次。</p>
+          <p><strong>可量化的验证方法：</strong></p>
+          <ul>
+            <li><strong>哈气实验：</strong> 对着 DHT11 哈一口气，湿度数值应在 1~2 秒内明显上升（比如从 50% 跳到 70%+），过十几秒回落——证明湿度链路真的在测。</li>
+            <li><strong>手捏实验：</strong> 用手指捏住传感器金属帽，温度应从室温缓慢上升 1~3℃——证明温度链路有效。</li>
+            <li><strong>错误提示实验：</strong> 断开 DATA 线，屏幕应显示 <span class="inline-code">DHT11 Err</span> 而不是乱跳的数字——证明校验和保护起作用。</li>
+          </ul>
+        </section>
+
+        <!-- ===== 八、常见报错排查方案 ===== -->
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>一直显示 DHT11 Err</td><td>数据线没接上拉电阻 / 接线松</td><td>DATA 与 VCC 之间接 10kΩ 电阻，重插杜邦线</td></tr>
+              <tr><td>读数恒为 0 或固定乱值</td><td>微秒级延时不准导致时序错位</td><td>按 11.0592MHz 校准 delay_us，必要时适当加长等待时间</td></tr>
+              <tr><td>温度湿度数字跳变剧烈</td><td>读太频繁或校验没通过仍显示</td><td>校验和不对就不刷新显示，并把采样间隔保持 1 秒以上</td></tr>
+              <tr><td>LCD 与 DHT 共用 IO 互相干扰</td><td>引脚冲突</td><td>确认 LCD 用 P0/P2.0~2.2，DHT 单独用 P2.3，不共用</td></tr>
+              <tr><td>哈气湿度不变化</td><td>DHT11 是假货/坏件，或 VCC 只有 3.3V</td><td>换一颗正品 DHT11；确认 VCC 接 5V</td></tr>
+              <tr><td>开了定时器/串口中断后 DHT11 读数随机错</td><td>读 40 位的微秒级时序被中断打断，延时偏移导致位采样错位</td><td>DHT_Read() 期间用 EA=0 关总中断、读完再 EA=1 恢复；这是单总线/软件时序类驱动的通用考点</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <!-- ===== 九、课后练习与延伸 ===== -->
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（加串口输出）：</strong> 在 LCD 显示的同时，把温湿度也通过串口每秒打印一行（复用 UART 一课的代码）。提示：DHT_Read() 成功后调用 Send_Str，把 sprintf 好的字符串发出去。</p>
+          <p><strong>练习 2（超限报警）：</strong> 当温度超过 30℃ 或湿度低于 30% 时，点亮 P1.0 的 LED 作为报警。提示：在 DHT_Read() 成功后加 <span class="inline-code">if(tem_int&gt;30 || hum_int&lt;30) LED=0; else LED=1;</span>。</p>
+          <p><strong>练习 3（显示小数）：</strong> 换用 DHT22（精度更高、有小数位），把温度显示成 26.5℃。提示：DHT22 数据格式不同，hum_int/hum_dec 要按新格式解析，sprintf 改成 <span class="inline-code">"Temp: %d.%d C"</span> 传两个参数。</p>
+          <p><strong>延伸学习：</strong></p>
+          <ul>
+            <li><a href="#xxx" data-placeholder>上一篇：LCD1602 液晶驱动（mcu51-lcd1602.html）</a></li>
+            <li><a href="#xxx" data-placeholder>DS18B20 单总线温度传感器（同协议，精度更高，占位）</a></li>
+            <li><a href="#xxx" data-placeholder>ESP32 上用 OneWire 库读 DHT11（占位）</a></li>
+          </ul>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="mcu51-lcd1602.html" class="btn btn-outline btn-sm">← 上一篇：LCD1602 液晶驱动</a>
+          <a href="mcu51-segment.html" class="btn btn-outline btn-sm">下一篇：数码管显示（静态与动态扫描） →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

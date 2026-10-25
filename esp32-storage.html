@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - EEPROM/NVS 掉电存储</title>
+  <meta name="description" content="ESP32 掉电存储零基础教程：RAM 与 Flash 区别、Preferences(NVS) 库 vs EEPROM 库、putInt/getInt 读写、开机次数计数器与配网信息持久化实战。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link active" aria-current="page">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>EEPROM/NVS 掉电存储</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：ESP32</span>
+          <span class="badge badge-orange">进阶</span>
+          <span class="badge badge-gray">更新：2026-10-25</span>
+        </div>
+
+        <p class="text-secondary mb-6">WiFi 密码、设备编号、开机次数、传感器校准值——这些数据断电就丢，每次重启都要重新配网，体验很差。ESP32 有 NVS（非易失存储）分区，专门保存这类「小配置数据」。本课讲透 RAM vs Flash 的区别，教 Preferences 库的读写用法，做一个「开机次数计数器 + 记住配网信息」的完整示例。</p>
+
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>说清 RAM、Flash、EEPROM 的区别，理解「掉电存储」的硬件本质。</li>
+            <li>会用 Preferences 库（NVS）读写 int/float/String，会删除键。</li>
+            <li>做开机次数计数器和 WiFi 配网信息持久化。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识（对应学习路线阶段 5）：</strong></p>
+          <ul>
+            <li>WiFi 基础（esp32-wifi.html）：本课的配网持久化依赖 WiFi.begin(ssid, pwd)。</li>
+            <li>中断与定时（esp32-interrupt.html）：结合练习会用到 volatile 与按键。</li>
+            <li>C 语言字符串：Preferences 用字符串做键名。</li>
+          </ul>
+          <p><strong>本课会出现的新名词：</strong>RAM、Flash、EEPROM、NVS、Preferences、命名空间/键、putInt/getInt、begin/end、擦写寿命。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. RAM vs Flash：记忆的两张桌子</h3>
+          <p><strong>生活类比</strong>：RAM 是「白板」（写上去快、擦掉也快、擦黑板=断电全没）；Flash 是「笔记本」（写上去慢、要整页擦、但合上本子=断电内容还在）。程序跑的时候在白板上打草稿，重要的配置抄进笔记本。</p>
+          <p><strong>一句话定义</strong>：<strong>RAM</strong>（内存）：断电丢失，变量都住这；<strong>Flash</strong>（闪存）：断电保留，程序本体就存在 Flash 里。ESP32 的 NVS 就是 Flash 里专门划出的一个小分区，用来存配置数据。</p>
+          <p><strong>例子</strong>：你 loop 里的变量 count 放 RAM，断电归零；用 Preferences 存的 count 放 Flash 的 NVS，断电保留。</p>
+
+          <h3>2. NVS 与 Preferences：ESP32 的「官方笔记本」</h3>
+          <p><strong>一句话定义</strong>：<strong>NVS</strong>（Non-Volatile Storage，非易失存储）是 ESP32 固件里 Flash 的一个分区，专门存键值对数据；<strong>Preferences 库</strong> 是 Arduino 环境下操作 NVS 的官方库——像一个小型「设置中心」，按「命名空间 + 键」存取任意类型数据。</p>
+          <p><strong>例子</strong>：命名空间 <span class="inline-code">"device"</span> 下存 <span class="inline-code">"bootCount"</span>（整数）和 <span class="inline-code">"ssid"</span>（字符串）——两个键互不干扰。</p>
+
+          <h3>3. Preferences 的五步法：begin → put → get → 可选 remove → end</h3>
+          <p><strong>一句话定义</strong>：<span class="inline-code">preferences.begin("命名空间", 只读模式)</span> 打开一个命名空间；<span class="inline-code">putInt/putFloat/putString(键, 值)</span> 写入；<span class="inline-code">getInt/getFloat/getString(键, 默认值)</span> 读取（键不存在返回默认值）；<span class="inline-code">remove(键)</span> 删除；<span class="inline-code">end()</span> 关闭。写模式用 <span class="inline-code">false</span>（默认），读模式 <span class="inline-code">true</span>。</p>
+          <p><strong>例子</strong>：<span class="inline-code">prefs.begin("cfg", false); prefs.putInt("boot", 3); int b = prefs.getInt("boot", 0); prefs.end();</span></p>
+
+          <h3>4. 擦写寿命：笔记本的页数有限</h3>
+          <p><strong>一句话定义</strong>：Flash 每个扇区的擦写次数有限（W25Q64 约 10 万次）。虽然 ESP32 的 NVS 有磨损均衡设计，但<strong>不要在 loop 里高频 put</strong>（每秒写 NVS 会提前耗尽寿命）；配置类数据「变了才写、上电才读」即可。写太频繁还会拖慢程序（一次 NVS 写入几 ms）。</p>
+          <p><strong>例子</strong>：开机计数器每次上电写一次没问题；但如果每秒写一次，一年 3000 万次——几个月就把寿命写没了。</p>
+        </section>
+
+          <h3>5. NVS vs SPIFFS/FFat：存「小配置」还是存「大文件」</h3>
+          <p><strong>生活类比</strong>：NVS 像手机的「设置项」（开关、密码几个字），键值对、小而快；SPIFFS/FFat 像手机的「文件系统」，能存网页、图片、日志这种大块文件——两者都住在 Flash 里，但分工不同。</p>
+          <p><strong>一句话定义</strong>：ESP32 的 Flash 存储空间分两类用法——<strong>NVS</strong>：键值存储，适合几字节~几百字节的配置（WiFi 密码、开机次数）；<strong>SPIFFS / FFat</strong>：在 Flash 上跑的小型文件系统，适合存 HTML 网页、CSS、传感器日志等「按文件名读写」的大块数据。课程设计做 Web 服务器时用的网页文件就放在 SPIFFS 里。</p>
+          <p><strong>例子</strong>：存 WiFi 密码用 NVS（Preferences）；存一个 index.html 网页文件给 Web 服务器用，就用 SPIFFS（<span class="inline-code">SPIFFS.open("/index.html")</span>）。两者的底层都是 Flash，也都有磨损均衡，区别只在「键值 vs 文件」的抽象层。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-principle">三、原理介绍：一次 NVS 读写到底发生了什么</h2>
+          <p>ESP32 没有独立的 EEPROM 芯片，所谓「掉电存储」其实都写在同一块 Flash 里。Preferences 是乐鑫官方 NVS（Non-Volatile Storage，非易失存储）的 Arduino 封装。理解 Flash「只能整片擦除、写前必须先擦」的物理特性，才能理解 NVS 为什么用键值对、为什么要磨损均衡。</p>
+          <p>一次保存配置的链路：begin 打开命名空间 → put 写一条键值 → end 提交 → 数据落在 Flash 的 NVS 分区，断电不丢。</p>
+
+          <h3>原理 1：Flash 的物理限制——为什么不能直接改一个字节</h3>
+          <p>Flash 存储器有个硬特性：<strong>写入只能把 1 变成 0，擦除才能把 0 变回 1，而擦除必须按整块（sector，一般 4KB）进行</strong>。这意味着你想把已存的 count=7 改成 count=8，不能「原地改一个字节」——那一位从 1→0 可以，从 0→1 就得把整个 4KB 块擦掉重写。NVS 的解法是<strong>追加式写入</strong>：旧条目标记为废弃，新键值写到旁边的新位置，整个块写满后才擦除回收。</p>
+
+          <h3>原理 2：键值条目与命名空间——为什么用字符串 key 而不是地址</h3>
+          <p>NVS 里存的是一条条「键名 → 二进制值」的小记录：<span class="inline-code">putInt("count", 7)</span> 就是写一条 <span class="inline-code">count=7</span>；<span class="inline-code">getInt("count", 0)</span> 按键名查回来。<strong>命名空间</strong>（begin 的第一个参数，≤15 字符）是隔离不同模块的文件夹——WiFi 模块存自己的 key、你的程序存自己的，互不覆盖。这比传统 EEPROM「按字节地址存」友好得多：不用记「配置存在偏移 0x100 还是 0x200」。</p>
+
+          <h3>原理 3：磨损均衡与写寿命——为什么不能 loop 里高频写</h3>
+          <p>Flash 每个块大约只能擦写 <strong>1 万次</strong>就会老化。如果每次都擦同一块，这块很快就坏了。NVS 的<strong>磨损均衡</strong>机制是：把写入均匀分散到 NVS 分区的各个块，轮流擦写，整体寿命被摊薄。但这救不了「高频写」——如果你 loop 里每秒 putInt 一次，理论上几万秒就把分区写穿了。<strong>工程规矩</strong>：只在配置改变时写一次、写完 end；温度采集这类高频数据不要每条都存 NVS。</p>
+          <blockquote>记忆点：Flash 写 1→0 容易、0→1 必须整块擦；NVS 用追加式写入+磨损均衡绕开这个限制；存的是「键名→值」条目，命名空间隔离模块；Flash 寿命约 1 万次擦写，别在 loop 高频写。</blockquote>
+        </section>
+
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <p>本课纯软件功能（NVS 在芯片内部 Flash），只需要观察设备：</p>
+          <table>
+            <thead>
+              <tr><th>模块</th><th>接线</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>USB 串口</td><td>板载 CH340/CP210x</td><td>串口 115200 打印计数与配网状态</td></tr>
+              <tr><td>按键（练习用）</td><td>GPIO15 接 GND</td><td>触发写入动作</td></tr>
+              <tr><td>LED（可选）</td><td>GPIO4</td><td>配网成功指示</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么不需要额外接线</strong>：NVS 是芯片内置 Flash 分区，没有任何外部引脚。你看到的现象全在串口：开机次数递增、配网成功后连上路由器——这正好说明「掉电存储」是纯软件 + 芯片硬件的能力。</p>
+          <div class="tip-warn mt-4"><span class="tip-label">避坑</span>
+            <strong>重复烧录会怎样</strong>：普通烧录不擦除 NVS 分区，计数器会继续累加；勾选「Erase All Flash Before Upload」或擦除整片后 NVS 清空，计数归零——排查「为什么重启后数据没了」先想到是不是整片擦除过。</div>
+        </section>
+
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p><strong>示例 1：开机次数计数器（每次上电 +1）</strong></p>
+          <pre><code class="language-cpp">/* 开机计数器：NVS 持久化，断电不归零 */
+#include &lt;Preferences.h&gt;
+
+Preferences prefs;              /* 全局对象 */
+
+void setup() {
+  Serial.begin(115200);
+
+  /* 1. 打开命名空间 "device"（false = 读写模式） */
+  prefs.begin("device", false);
+
+  /* 2. 读上次计数（不存在则默认 0） */
+  int bootCount = prefs.getInt("bootCount", 0);
+
+  /* 3. 计数 +1 并写回 */
+  bootCount++;
+  prefs.putInt("bootCount", bootCount);
+
+  /* 4. 关闭（把数据真正落进 Flash） */
+  prefs.end();
+
+  Serial.printf("Boot count = %d\n", bootCount);
+}
+
+void loop() {
+  /* 什么都不用做：配置读取都在 setup 完成 */
+}</code></pre>
+          <p><strong>示例 2：WiFi 配网信息持久化（记住 SSID 与密码）</strong></p>
+          <pre><code class="language-cpp">/* WiFi 配置持久化：先读 NVS，没有则用默认值 */
+#include &lt;Preferences.h&gt;
+#include &lt;WiFi.h&gt;
+
+Preferences prefs;
+
+/* 默认配置（首次上电用；之后以 NVS 里的为准） */
+const char *DEF_SSID = "your_wifi";
+const char *DEF_PWD  = "your_password";
+
+String ssid, pwd;
+
+void loadConfig() {
+  prefs.begin("wifi", false);          /* 打开命名空间 */
+  ssid = prefs.getString("ssid", DEF_SSID);  /* 读，缺省用默认 */
+  pwd  = prefs.getString("pwd",  DEF_PWD);
+  prefs.end();
+  Serial.printf("SSID=%s\n", ssid.c_str());
+}
+
+void saveConfig(const char *s, const char *p) {
+  prefs.begin("wifi", false);
+  prefs.putString("ssid", s);          /* 写入新值 */
+  prefs.putString("pwd",  p);
+  prefs.end();
+  Serial.println("Config saved.");
+}
+
+void setup() {
+  Serial.begin(115200);
+  loadConfig();                        /* 上电读配置 */
+  WiFi.begin(ssid.c_str(), pwd.c_str());  /* 用存的配置连网 */
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nConnected!");
+  /* saveConfig 可放这里演示：把当前配置写回 NVS（改密码场景） */
+}
+
+void loop() {
+}</code></pre>
+        </section>
+
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第一段：getInt 的默认值参数</h3>
+          <p><span class="inline-code">prefs.getInt("bootCount", 0)</span> 的第二个参数是关键设计：<strong>键不存在时返回 0</strong>。<strong>为什么必须有默认值</strong>：首次烧录时 NVS 是空的，没有 bootCount 键——没有默认值就会读到垃圾或崩溃；有了默认值，「首次上电 = 从 0 开始」的语义就清晰了。所有 get 都该给默认值，这是 Preferences 的规范用法。</p>
+
+          <h3>第二段：putInt + end 的「落盘」时机</h3>
+          <p><span class="inline-code">bootCount++; prefs.putInt(...); prefs.end();</span> 三连。<strong>为什么先读、改、再写</strong>：NVS 是按键覆盖写，不存在「自增」指令——你必须先 get 出来、内存里加 1、再 put 回去（读-改-写）。<strong>为什么 end 不能省</strong>：end 把缓冲区真正刷进 Flash；不 end 就断电，这次计数可能没存上。</p>
+
+          <h3>第三段：getString 的 String 对象</h3>
+          <p><span class="inline-code">prefs.getString("ssid", DEF_SSID)</span> 返回 String 对象，然后 <span class="inline-code">ssid.c_str()</span> 转成 C 字符串给 WiFi.begin。<strong>为什么要有 c_str()</strong>：WiFi.begin 需要 <span class="inline-code">const char*</span>，而 Preferences 返回的是 String——类型不匹配，必须转。<strong>小坑</strong>：String 用完注意内存（ESP32 内存够用，但别在循环里频繁拼 String）。</p>
+
+          <h3>第四段：saveConfig 的「变更才写」思想</h3>
+          <p>示例 2 里 saveConfig 只在你主动改配置时调用——这正是第 2 章「别高频写」的落地。<strong>为什么读要频繁、写要克制</strong>：读不损耗 Flash，写会；每次上电 loadConfig 一次、改动 saveConfig 一次，就是最优频率。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-demo">七、现象演示与验证</h2>
+          <ul>
+            <li><strong>计数器</strong>：串口每次上电打印 <span class="inline-code">Boot count = 1、2、3…</span> 递增；断电重启不归零。</li>
+            <li><strong>配网</strong>：首次用默认 SSID/密码连网（连不上会一直打点，先改成你自己的 WiFi）；配置存在 NVS，重启后仍用同一配置。</li>
+          </ul>
+          <p><strong>验证方法：</strong></p>
+          <ol>
+            <li>烧录示例 1 → 重启 3 次 → 计数 1、2、3；点 ESP32 的 Reset 键（软复位）计数继续加——证明 NVS 持久化。</li>
+            <li>在 Arduino IDE 勾选「Erase All Flash」再烧录 → 计数从 1 重新开始——理解整片擦除与 NVS 的关系。</li>
+            <li>在示例 2 串口里加指令：输入新 SSID/密码调用 saveConfig，重启后用新配置连接——模拟「配网保存」流程。</li>
+          </ol>
+        </section>
+
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>数据断电后丢了</td><td>烧录时擦了整片 Flash / 没 end()</td><td>别勾 Erase All Flash；确保写入后 prefs.end()</td></tr>
+              <tr><td>getInt 返回乱码/崩溃</td><td>键不存在且没给默认值</td><td>get 时总带默认值参数（第二个参数）</td></tr>
+              <tr><td>写入失败无反应</td><td>命名空间名超长（≤15 字符）/ 键名超长</td><td>命名空间 ≤15、键名 ≤15 字符，用简短英文名</td></tr>
+              <tr><td>loop 里写 NVS 后程序变卡</td><td>写入耗时长且频繁（每次几 ms）</td><td>配置「变更才写」，别每秒写；重活放主循环外</td></tr>
+              <tr><td>数据读到旧值</td><td>上次写入未 end 就断电 / 多命名空间同名键</td><td>保证 end；命名空间唯一，别乱复用</td></tr>
+              <tr><td>重启计数有时不增</td><td>断电发生在 put 与 end 之间</td><td>把 put+end 放同一步，尽量靠近逻辑终点</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（必做）</strong>：把开机计数器改成「累计运行秒数」：loop 里每秒 get+put（注意这是演示，工程上应 30s 才写一次），断电再开看秒数续传。</p>
+          <p><strong>练习 2</strong>：结合 <a href="esp32-interrupt.html">按键中断</a>：按键按一次把 pressCount 存 NVS，重启不归零——中断 + 持久化计数器。</p>
+          <p><strong>练习 3（进阶）</strong>：把示例 2 扩展成「配网模式」：首次上电无有效配置时开 AP 热点，手机连上后通过串口/网页输入 WiFi 密码，saveConfig 保存——这是智能硬件「一键配网」的雏形（结合 <a href="esp32-wifi.html">WiFi 教程</a>）。</p>
+          <p><strong>延伸学习</strong>：会存数据了，下一课学 <a href="esp32-deepsleep.html">Deep Sleep 低功耗</a>——电池供电设备怎么把「数据 + 省电」结合起来，是物联网落地的最后一环。</p>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="esp32-interrupt.html" class="btn btn-outline btn-sm">← 上一篇：定时器与中断</a>
+          <a href="esp32-deepsleep.html" class="btn btn-outline btn-sm">下一篇：Deep Sleep 低功耗 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

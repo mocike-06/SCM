@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - 定时器与中断（事件驱动编程）</title>
+  <meta name="description" content="ESP32 定时器与中断零基础教程：轮询 vs 中断、attachInterrupt 外部中断、硬件定时器 Ticker 定时任务、millis 与中断上下文，实现按键计数与定时采样。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link active" aria-current="page">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>定时器与中断（事件驱动编程）</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：ESP32</span>
+          <span class="badge badge-orange">进阶</span>
+          <span class="badge badge-gray">更新：2026-10-25</span>
+        </div>
+
+        <p class="text-secondary mb-6">loop() 里轮询按键、轮询时间，能跑但浪费 CPU、响应还慢。中断才是嵌入式「事件驱动」的真相：按键按下、定时到了，芯片自动跳到中断函数处理，处理完回来继续 main。本课讲透轮询 vs 中断、外部中断 attachInterrupt、硬件定时器 Ticker，以及中断里的三大禁忌。</p>
+
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>说清轮询与中断的区别，判断什么场景该用中断。</li>
+            <li>用 attachInterrupt 写按键外部中断，正确处理抖动与中断上下文。</li>
+            <li>用 Ticker 库做定时任务（定时采样/定时翻转），理解它和 delay/millis 的差别。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识（对应学习路线阶段 5）：</strong></p>
+          <ul>
+            <li>GPIO 基础（esp32-gpio.html）：按键输入、INPUT_PULLUP。</li>
+            <li>ADC 采样（esp32-adc.html）：本课的定时采样会复用它。</li>
+            <li>51 中断概念（阶段 2）：中断优先级、边沿触发这些术语是通用的。</li>
+          </ul>
+          <p><strong>本课会出现的新名词：</strong>中断、中断服务函数（ISR）、轮询、边沿触发/电平触发、attachInterrupt、中断上下文、Ticker、回调、volatile。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. 轮询 vs 中断：等 vs 被打断</h3>
+          <p><strong>生活类比</strong>：轮询像客服一直盯着门口看有没有人来（忙等）；中断像前台装了个门铃——人来了门铃响，前台立刻放下手头的事去接待，接待完接着干（事件驱动）。</p>
+          <p><strong>一句话定义</strong>：<strong>轮询</strong>：程序循环里反复查某个状态（if (按键按下)），简单但占 CPU、响应靠循环速度；<strong>中断</strong>：硬件事件到来时 CPU 暂停当前任务，自动跳去执行<strong>中断服务函数</strong>（ISR），执行完回来继续——不占 CPU、响应即时。</p>
+          <p><strong>例子</strong>：100 个按键用轮询每圈查一遍，按 10 次/秒没问题；但如果同时要干重活（WiFi 重连），轮询可能漏按键，中断则一次不漏。</p>
+
+          <h3>2. attachInterrupt：给引脚装门铃</h3>
+          <p><strong>一句话定义</strong>：<span class="inline-code">attachInterrupt(引脚, 回调函数, 触发模式)</span> 把某个引脚的跳变「注册」成中断。触发模式：<span class="inline-code">RISING</span>（上升沿：从低到高）、<span class="inline-code">FALLING</span>（下降沿：从高到低）、<span class="inline-code">CHANGE</span>（任何变化）。按键接地接 FALLING 最常用。</p>
+          <p><strong>例子</strong>：<span class="inline-code">attachInterrupt(15, onPress, FALLING);</span> 按键按下（高→低）时自动调用 onPress()。</p>
+
+          <h3>3. 中断服务函数的三条铁律</h3>
+          <p><strong>一句话定义</strong>：ISR 里禁止三件事：<strong>不能用 delay()</strong>（阻塞中断）、<strong>不能 Serial.print</strong>（串口在中断里会死锁/卡顿）、<strong>不能做复杂计算</strong>（中断时间越短越好）。正确姿势：ISR 里只置一个 <span class="inline-code">volatile</span> 标志/计数器，主循环看到标志再处理「重活」。</p>
+          <p><strong>例子</strong>：按键 ISR 里 <span class="inline-code">pressCount++;</span> 就完事，串口打印放到 loop 里。</p>
+
+          <h3>4. Ticker：硬件定时器的「闹钟」</h3>
+          <p><strong>生活类比</strong>：delay() 像「睡着了等」，期间什么都干不了；millis() 像「看表」，主循环自己比对时间；Ticker 像「订闹钟」——闹钟响时自动执行一次回调，主循环不用管。</p>
+          <p><strong>一句话定义</strong>：<span class="inline-code">Ticker</span> 库把 ESP32 的硬件定时器封装成「定时回调」：<span class="inline-code">ticker.attach_ms(500, 函数)</span> 每 500ms 自动调用一次函数（在中断里执行）；<span class="inline-code">detach()</span> 停止。<strong>注意</strong>：Ticker 回调也在中断上下文，同样遵守 ISR 铁律。</p>
+          <p><strong>例子</strong>：温度每 2 秒采一次、LED 每 1 秒翻转一次，各用一个 Ticker，主循环只管显示。</p>
+        </section>
+
+          <h3>5. IRAM_ATTR：把中断函数搬进「快车道」</h3>
+          <p><strong>生活类比</strong>：普通函数存在 Flash（仓库），用的时候才搬到 RAM 执行；中断要求「门铃一响立刻开门」，若函数还在 Flash 里等着搬运，就会慢半拍——IRAM_ATTR 就是把这个门岗函数提前搬到门口（RAM），随叫随到。</p>
+          <p><strong>一句话定义</strong>：<span class="inline-code">IRAM_ATTR</span> 是一个宏，告诉编译器把这个 ISR 函数编译进 <strong>IRAM（指令 RAM）</strong>而不是留在 Flash。原因是 ESP32 跑 WiFi/蓝牙时，Flash 总线可能正被占用，若 ISR 还在 Flash 里，中断到来时取指会被 Flash 读取延迟卡住，甚至崩溃——教材（ESP-IDF 文档）明确要求中断处理函数加 IRAM_ATTR。</p>
+          <p><strong>例子</strong>：<span class="inline-code">void IRAM_ATTR onPress() { pressCount++; }</span>——函数本体在 IRAM，中断一来毫秒级响应，不受 Flash 读延迟影响。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-principle">三、原理介绍：一次按键中断的完整旅程</h2>
+          <p>轮询是「一直盯着门口等有人来」，中断是「门铃一响再去开门」。理解中断的硬件响应流程（CPU 怎么突然停下手里的活跳去执行你的函数），才能搞懂为什么 ISR 必须极短、为什么不能在里面 Serial.print。</p>
+          <p>一次按键中断的链路：attachInterrupt 注册 → 引脚电平跳变 → 中断控制器发请求 → CPU 保存现场跳 ISR → ISR 只置个标志 → 回主循环看标志处理。</p>
+
+          <h3>原理 1：中断 vs 轮询——事件驱动为什么省 CPU</h3>
+          <p>轮询方式是 loop 里不停 <span class="inline-code">digitalRead(btnPin)</span>——按键没按的绝大多数时间 CPU 也在白读。中断方式是<strong>把监视工作交给硬件</strong>：你用 <span class="inline-code">attachInterrupt(pin, fn, FALLING)</span> 告诉中断控制器「这个引脚出现下降沿时叫我」，之后 CPU 随便干别的，引脚一出现下降沿，硬件自动打断它。对慢事件（按键、传感器数据就绪）这能省掉 99% 的空转。</p>
+
+          <h3>原理 2：中断响应的硬件流程——CPU 是怎么「突然跳走」的</h3>
+          <p>按键按下引脚拉低 → 外部中断控制器捕获这个跳变 → 向 CPU 发中断请求。CPU 完成当前这条指令后，自动做三件事：<strong>保存现场</strong>（程序计数器、寄存器压栈）→ 跳转到你注册的 ISR 函数入口 → ISR 跑完后<strong>恢复现场</strong>出栈，从被打断的那条指令继续——主循环甚至感觉不到「被打断过」。这一切是硬件自动完成的，微秒级。<span class="inline-code">Ticker</span> 定时器中断是同一机制，只是触发源从「引脚跳变」换成「时钟数到」。</p>
+
+          <h3>原理 3：ISR 三条铁律——为什么不能 delay、不能 print、不能干重活</h3>
+          <p>ISR 运行时<strong>主循环被冻结、其他中断被挂起</strong>，所以 ISR 里 delay 1 秒 = 整个系统「失聪」1 秒：WiFi 心跳断了、定时采样停了、甚至看门狗超时把你复位。规矩是：</p>
+          <ul>
+            <li><strong>不 delay、不做长任务</strong>：ISR 只做最小动作。</li>
+            <li><strong>不 Serial.print</strong>：串口发送本身是另一套中断驱动的机制，在 ISR 里发可能和它自己嵌套、死锁。</li>
+            <li><strong>只置 volatile 标志位（或发个队列消息）</strong>：ISR 里 <span class="inline-code">flag = true</span> 就立刻返回，真正的处理放 loop 里看 flag 做——按键消抖就是「ISR 记下时刻，loop 里延时确认」。</li>
+          </ul>
+          <blockquote>记忆点：轮询=盯门空转，中断=门铃一响再来；响应流程=保存现场→跳 ISR→恢复现场（硬件自动、微秒级）；ISR 三不：不 delay、不 print、不重活，只置 volatile 标志；Ticker=定时闹钟，回调也在中断上下文。</blockquote>
+        </section>
+
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <p>两个实验：按键中断（GPIO15）+ 定时采样（复用 ADC 光敏或电位器 GPIO34）：</p>
+          <table>
+            <thead>
+              <tr><th>模块引脚</th><th>ESP32 引脚</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>按键一端</td><td>GPIO15</td><td>内部上拉 INPUT_PULLUP</td></tr>
+              <tr><td>按键另一端</td><td>GND</td><td>按下 FALLING 触发</td></tr>
+              <tr><td>电位器（可选）</td><td>两端 3.3V/GND、抽头 GPIO34</td><td>定时采样演示用</td></tr>
+              <tr><td>LED（可选）</td><td>GPIO4</td><td>Ticker 定时翻转演示</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么按键用内部上拉 + FALLING</strong>：GPIO15 配 INPUT_PULLUP，平时读到高；按下接地变低。FALLING（下降沿）只响应「按下」这一下，不会像 CHANGE 那样「按下+松开」触发两次。<strong>为什么消抖不在 ISR 里做</strong>：抖动发生在按下瞬间的几毫秒内，若在 ISR 里 delay 消抖就违反铁律——标准做法是 ISR 只记时间戳，loop 里确认「稳定低电平超过 20ms」再算一次有效按键。</p>
+          <div class="tip-warn mt-4"><span class="tip-label">避坑</span>
+            ESP32 并非所有引脚都适合做外部中断输入：GPIO6~11 被 Flash 占用不可用；GPIO34~39 只能输入不能输出（可作中断输入，但外接上拉/按键要注意只能下拉或依赖内部上拉的限制）；GPIO0/2/15 是启动模式引脚，按键中断要选不会影响启动电平的接法。日常选 GPIO4/5/15 等常规引脚最稳。</div>
+        </section>
+
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p><strong>示例 1：按键外部中断计数（ISR 置标志，loop 处理+打印）</strong></p>
+          <pre><code class="language-cpp">/* 按键中断计数：ISR 只加计数，串口打印放主循环 */
+const int keyPin = 15;
+
+volatile unsigned long pressCount = 0;   /* volatile：中断里会改 */
+volatile unsigned long lastIsrMs = 0;    /* 上次按下时刻（消抖用） */
+
+/* 中断服务函数：必须短、无参数、无返回值 */
+void IRAM_ATTR onPress() {
+  /* 消抖：距上次触发不足 30ms 视为抖动，忽略 */
+  unsigned long now = millis();
+  if (now - lastIsrMs &gt; 30) {
+    pressCount++;              /* 只做计数，别 print、别 delay */
+    lastIsrMs = now;
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(keyPin, INPUT_PULLUP);
+  /* 注册中断：下降沿触发，绑定 onPress */
+  attachInterrupt(keyPin, onPress, FALLING);
+}
+
+void loop() {
+  /* 中断里的事拿到主循环来做 */
+  Serial.print("press=");
+  Serial.println(pressCount);
+  delay(200);
+}</code></pre>
+          <p><strong>示例 2：Ticker 定时任务（每 1s 翻 LED，每 2s 采一次光敏）</strong></p>
+          <pre><code class="language-cpp">/* Ticker：两个定时任务并行跑，主循环空转 */
+#include &lt;Ticker.h&gt;
+
+const int ledPin = 4;
+const int adcPin = 34;
+
+Ticker tickerLed;      /* 对象1：翻灯 */
+Ticker tickerAdc;      /* 对象2：采样 */
+
+volatile bool ledOn = false;
+volatile int lastAdc = 0;
+
+void flipLed() {                       /* 每 1 秒被调用一次（中断上下文） */
+  ledOn = !ledOn;
+  digitalWrite(ledPin, ledOn ? HIGH : LOW);
+}
+
+void sampleAdc() {                     /* 每 2 秒被调用一次 */
+  lastAdc = analogRead(adcPin);        /* 读光敏，存全局变量 */
+}
+
+void setup() {
+  pinMode(ledPin, OUTPUT);
+  analogSetPinAttenuation(adcPin, ADC_11db);
+  tickerLed.attach_ms(1000, flipLed);  /* 1000ms 回调 */
+  tickerAdc.attach_ms(2000, sampleAdc);/* 2000ms 回调 */
+}
+
+void loop() {
+  /* 主循环可以专心做重活（如 WiFi 处理），定时任务由 Ticker 负责 */
+}</code></pre>
+        </section>
+
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第一段：IRAM_ATTR 与 volatile</h3>
+          <p><span class="inline-code">IRAM_ATTR</span> 把 ISR 放进 IRAM（内部 RAM），保证中断响应不被 Flash 读取拖慢——ESP32 的官方推荐写法。<span class="inline-code">volatile unsigned long pressCount</span> 是中断与主循环共享变量的<strong>标配修饰</strong>：编译器不知道 ISR 会改它，不写 volatile 可能优化掉主循环的读取，计数显示不更新。</p>
+
+          <h3>第二段：ISR 里的软件消抖</h3>
+          <p><span class="inline-code">millis() - lastIsrMs &gt; 30</span> 判断两次触发间隔。<strong>为什么用时间差消抖而不是延时</strong>：延时是「睡过去等」，时间差是「记下时刻、下次比对」——后者不阻塞 ISR，符合铁律。抖动（约 5~20ms）在 30ms 窗口内被过滤，而真实连按（间隔几百 ms）正常计数。</p>
+
+          <h3>第三段：Ticker 的两个独立对象</h3>
+          <p>两个 Ticker 对象 = 两个独立闹钟，各自 <span class="inline-code">attach_ms(间隔, 回调)</span>。回调每 1s/2s 自动执行。<strong>为什么两个不用 delay 串起来</strong>：delay 只能串行等（先 1s 再 2s，错开混乱）；Ticker 并行计时、互不阻塞，主循环完全空出来。<strong>注意</strong>：回调也在中断上下文，所以 sampleAdc 只「读值存全局」，显示处理留在主循环（示例简化为空转，工程上在 loop 里用 lastAdc）。</p>
+
+          <h3>第四段：主循环空转的意义</h3>
+          <p>示例 2 的 loop 是空的——这不是「没写完」，而是演示「定时任务不占主循环」。真实项目里 loop 去跑 WiFi 重连、MQTT 发送、屏幕刷新等重活，1s/2s 的采样翻灯由硬件定时器后台完成。这是「事件驱动」与「时间片」编程的精髓。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-demo">七、现象演示与验证</h2>
+          <ul>
+            <li><strong>按键计数</strong>：串口持续打印 <span class="inline-code">press=N</span>；每按一次键 N+1，快速连按不漏、抖动不误计。</li>
+            <li><strong>Ticker</strong>：LED 每 1 秒精确翻转；光敏值每 2 秒更新一次（把 lastAdc 打印出来观察）。</li>
+          </ul>
+          <p><strong>验证方法：</strong></p>
+          <ol>
+            <li>快速连按 20 次，计数应为 20（证明中断不丢事件）；再用手指「颤着按」（制造抖动），计数不跳（证明 30ms 消抖生效）。</li>
+            <li>把 attach_ms 的 1000 改成 300，LED 翻转明显变快（3 倍）——验证定时周期可调。</li>
+            <li>在 flipLed 里故意加 <span class="inline-code">delay(2000)</span>，观察按键计数是否明显变卡——亲手体验「ISR 里 delay 的后果」。</li>
+          </ol>
+        </section>
+
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>attachInterrupt 报错</td><td>引脚不可用（GPIO6~11 被 Flash 占用）或中断号映射问题</td><td>换 GPIO4/5/15 等常规引脚；用 digitalPinToInterrupt 显式指定</td></tr>
+              <tr><td>按一次计数多次</td><td>没消抖或 CHANGE 触发（按+松两次）</td><td>ISR 里加 30ms 时间差过滤；改 FALLING</td></tr>
+              <tr><td>计数不更新/永远 0</td><td>变量没 volatile，被编译器优化</td><td>共享变量加 volatile；确认 attachInterrupt 参数顺序</td></tr>
+              <tr><td>ISR 里 print 后系统卡死</td><td>违反铁律：串口阻塞在中断里</td><td>把 print 移到 loop；ISR 只置标志/计数</td></tr>
+              <tr><td>Ticker 回调不执行</td><td>attach_ms 后没保持对象存活 / 语法错</td><td>Ticker 对象放全局；核对 <span class="inline-code">attach_ms(ms, func)</span> 参数</td></tr>
+              <tr><td>WiFi 连上后定时不规律</td><td>WiFi 中断优先级高，抢占 Ticker 时间</td><td>接受轻度抖动；重活尽量移出定时回调</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（必做）</strong>：把按键计数改成「长按识别」：ISR 记下按下时间，loop 里判断按住超过 1 秒输出 "LONG"——用中断 + 时间戳实现状态判断。</p>
+          <p><strong>练习 2</strong>：用 Ticker 每 500ms 采样一次 ADC，主循环里把最近 10 次采样打印成简易曲线——定时采样 + 数据显示的完整链路。</p>
+          <p><strong>练习 3（进阶）</strong>：把按键 ISR 与 <a href="esp32-storage.html">NVS 存储</a>结合：每次按键把 pressCount 写进 NVS，掉电重启不归零——中断 + 持久化的物联网计数器原型。</p>
+          <p><strong>延伸学习</strong>：事件驱动会了，下一课学 <a href="esp32-storage.html">EEPROM/NVS 掉电存储</a>——让设备的「记忆」不随断电消失，物联网设备的标配能力。</p>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="esp32-adc.html" class="btn btn-outline btn-sm">← 上一篇：ADC 模拟读取</a>
+          <a href="esp32-storage.html" class="btn btn-outline btn-sm">下一篇：EEPROM/NVS 掉电存储 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - ESP32 WiFi 连接（STA 模式）零基础</title>
+  <meta name="description" content="零基础学 ESP32 WiFi：STA 与 AP 模式区别、SSID 与密码、IP 地址、WiFi.begin 连接路由器、HTTPClient 发起 HTTP GET 请求、为什么 ESP32 只支持 2.4GHz。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link active" aria-current="page">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>WiFi 连接（STA 模式）与 HTTP 请求</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：ESP32</span>
+          <span class="badge badge-green">入门</span>
+          <span class="badge badge-gray">更新：2026-10-25</span>
+        </div>
+
+        <p class="text-secondary mb-6">让 ESP32 像手机一样连上家里的 2.4GHz 路由器，拿到内网 IP，再通过 HTTPClient 库向公网接口发起一次 GET 请求。本讲从零讲清 STA/AP 区别、SSID 与密码、IP 地址是什么、为什么 ESP32 只认 2.4GHz，初步体验「设备上云」。</p>
+
+        <!-- ===== 一、本课目标与前置知识 ===== -->
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>理解 STA 与 AP 两种 WiFi 角色的区别，知道家里路由器属于哪一种。</li>
+            <li>用 <span class="inline-code">WiFi.begin(ssid, password)</span> 让 ESP32 连上路由器，并拿到 IP 地址。</li>
+            <li>用 HTTPClient 库向 <span class="inline-code">httpbin.org/get</span> 发起一次 GET 请求并打印返回内容。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识（对应学习路线阶段 5 前两篇）：</strong></p>
+          <ul>
+            <li>环境搭建（esp32-env.html）：能烧录、会开串口监视器。</li>
+            <li>GPIO 基础（esp32-gpio.html）：会写 setup/loop、会用 Serial.println 调试。</li>
+            <li>C 语言字符串：知道 <span class="inline-code">const char*</span> 是什么。</li>
+          </ul>
+          <p><strong>本课会出现的新名词：</strong>STA、AP、SSID、密码、IP 地址、DHCP、WiFi.begin、WiFi.status、WiFi.localIP、HTTPClient、HTTP GET、状态码 200、2.4GHz 频段。</p>
+        </section>
+
+        <!-- ===== 二、基础概念铺垫 ===== -->
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. STA 与 AP：ESP32 当「手机」还是当「路由器」</h3>
+          <p><strong>生活类比</strong>：WiFi 世界里有两种角色。AP（Access Point）像「路由器/热点」，负责向外广播信号、发号施令；STA（Station）像「手机/电脑」，是过来连热点的终端。你家的小米/华为路由器就是 AP，你的手机、笔记本就是 STA。</p>
+          <p><strong>一句话定义</strong>：STA 模式下 ESP32 是一台无线终端，去连接已存在的路由器（AP），由路由器分配 IP、做上网转发；AP 模式下 ESP32 自己当热点，手机直连它但没有外网。</p>
+          <p><strong>例子</strong>：本课用 STA 模式——ESP32 连你家路由器，从而能访问互联网；如果用 AP 模式，手机能连 ESP32 但上不了网。</p>
+
+          <h3>2. SSID 与密码：WiFi 的「名字」和「门钥匙」</h3>
+          <p><strong>生活类比</strong>：SSID 就是 WiFi 的名字（你手机 WiFi 列表里看到的那个名字，如「ChinaNet-xxx」），密码就是进这个房间的钥匙。ESP32 要先报名字和钥匙，路由器才放行。</p>
+          <p><strong>一句话定义</strong>：SSID 是 WiFi 网络的字符串标识，密码是 WPA2 加密密钥；<span class="inline-code">WiFi.begin(ssid, password)</span> 就是把这两样交给路由器去握手。</p>
+          <p><strong>例子</strong>：<span class="inline-code">WiFi.begin("MyHomeWiFi", "12345678");</span> 表示要连名为 MyHomeWiFi、密码 12345678 的路由器。注意大小写敏感。</p>
+
+          <h3>3. IP 地址：局域网里的「门牌号」</h3>
+          <p><strong>生活类比</strong>：连上路由器后，路由器会给每台设备分配一个内网门牌号，比如 192.168.1.100。有了这个号，ESP32 才能和路由器、和其他设备互相找到对方。</p>
+          <p><strong>一句话定义</strong>：IP 地址是设备在网络中的逻辑地址（如 192.168.x.x），由路由器通过 DHCP 自动分配；用 <span class="inline-code">WiFi.localIP()</span> 可以读回 ESP32 拿到的 IP。</p>
+          <p><strong>例子</strong>：连接成功后串口打印 <span class="inline-code">WiFi.localIP()</span>，可能输出 <span class="inline-code">192.168.1.105</span>——这就是 ESP32 在你家局域网里的门牌号。</p>
+
+          <h3>4. WiFi.status()：连接状态的「仪表盘」</h3>
+          <p><strong>生活类比</strong>：WiFi.begin 发起连接后，不是马上就连上了——像打电话拨号，要等几秒对方接。status() 就是那个「拨号中/已接通/占线」的状态灯。</p>
+          <p><strong>一句话定义</strong>：<span class="inline-code">WiFi.status()</span> 返回一个枚举值，<span class="inline-code">WL_CONNECTED</span>（值 3）表示连上了，其它值表示还在连或失败。</p>
+          <p><strong>例子</strong>：用 <span class="inline-code">while (WiFi.status() != WL_CONNECTED) { delay(500); }</span> 死等，直到状态变成已连接再继续往下走，避免读到 0.0.0.0 的假 IP。</p>
+
+          <h3>5. 2.4GHz 频段：ESP32 只听这一段</h3>
+          <p><strong>生活类比</strong>：WiFi 信号分两个频道——2.4GHz（穿墙好、速度慢）和 5GHz（速度快、穿墙差）。ESP32 这台收音机只能调到 2.4GHz 那个频段，5GHz 的信号它根本收不到。</p>
+          <p><strong>一句话定义</strong>：ESP32 硬件只支持 2.4GHz WiFi，不支持 5GHz。双频路由器若把 2.4G/5G 合并成同一个 SSID，ESP32 偶尔会连不上，需要在路由器后台单独开一个 2.4G 的 SSID。</p>
+          <p><strong>例子</strong>：你家路由器若叫「HomeWiFi」同时跑 2.4G 和 5G，建议在后台再开一个「HomeWiFi_2.4G」专门给 ESP32 用，避免它随机连到 5G 而失败。</p>
+          <h3>6. TCP/IP 五层模型：一次联网请求经过了哪几层</h3>
+          <p><strong>生活类比</strong>：你寄一个快递，要经过打包（应用层内容）→ 贴面单（传输端口）→ 写收件地址（网络层 IP）→ 选路段（链路层）→ 装车上路（物理层）。网络数据也是这样一层一层封装、一层一层拆开的。</p>
+          <p><strong>一句话定义</strong>：教材把互联网协议栈分为五层——<strong>物理层</strong>（电磁波）、<strong>链路层</strong>（802.11 WiFi 帧）、<strong>网络层</strong>（IP 地址路由）、<strong>传输层</strong>（TCP/UDP 端口）、<strong>应用层</strong>（HTTP/MQTT/NTP）。ESP32 的 WiFi 属于链路层，IP 属网络层，TCP 属传输层，HTTP GET 属应用层。</p>
+          <p><strong>例子</strong>：本课发 HTTP GET，数据在应用层是 <span class="inline-code">GET /get HTTP/1.1</span> 文本 → 下封成 TCP 段（带端口 80）→ 再封成 IP 包（带目的 IP）→ 再封成 802.11 无线帧 → 变成 2.4GHz 电磁波发出去。对面服务器一层层拆包，原理完全对称。</p>
+        </section>
+
+        <!-- ===== 三、原理介绍 ===== -->
+        <section>
+          <h2 id="sec-principle">三、原理介绍</h2>
+          <p>ESP32 联网发 HTTP 请求，背后是四层协议栈叠在一起：802.11 无线帧 → WiFi 固件 → TCP/IP → HTTP。你写的 <span class="inline-code">WiFi.begin</span>、<span class="inline-code">HTTPClient</span> 只是最上面一层 API，下面每一步都有真实的握手与报文。</p>
+          <p>一次「连上路由器并 GET 到网页」的链路：扫描 → 认证 → 关联 → DHCP 拿 IP → 建 TCP 连接 → 发 HTTP 请求 → 收响应。</p>
+
+          <h3>原理 1：STA 关联四步——WiFi.begin 背后发生了什么</h3>
+          <ol>
+            <li><strong>扫描</strong>：ESP32 在 2.4GHz 的 1~13 信道上各发探测请求，路由器回应自己的 SSID。</li>
+            <li><strong>认证</strong>：双方按 WPA2 算法四次握手，验证「你知道密码」——密码错在这一步就被拒。</li>
+            <li><strong>关联</strong>：认证通过后正式挂到路由器，建立 802.11 链路。</li>
+            <li><strong>DHCP</strong>：ESP32 在局域网里广播「请给我分配一个 IP」，路由器回一个 192.168.x.x——拿到 IP 后状态才变成 <span class="inline-code">WL_CONNECTED</span>。</li>
+          </ol>
+          <p><strong>为什么要等 1~3 秒</strong>：这四步里 WPA2 四次握手 + DHCP 都要多次无线往返，比网线慢一个数量级。这就是为什么 <span class="inline-code">WiFi.status() != WL_CONNECTED</span> 要轮询等待，而不是 begin 完立刻就能上网。</p>
+
+          <h3>原理 2：为什么 ESP32 只支持 2.4GHz</h3>
+          <p>无线射频是有硬件成本的：5GHz 射频前端（PA、滤波器、天线匹配电路）比 2.4GHz 贵且耗电。ESP32 定位是低功耗 IoT，芯片里只集成了 2.4GHz 射频（2412~2484MHz，14 个信道）。<strong>副作用</strong>：2.4GHz 很挤——蓝牙、微波炉、邻居的 WiFi 都挤在这一段，所以教程建议离路由器近、远离微波炉。这也是「频段限制」提示框背后的物理原因。</p>
+
+          <h3>原理 3：HTTP GET 报文——http.GET() 到底发了什么</h3>
+          <p>连上路由器后，ESP32 就是一台有 IP 的设备。它和服务器之间先由 WiFi 固件自动完成 TCP 三次握手，然后在这条连接上发一段纯文本请求：首行是 <span class="inline-code">GET /get HTTP/1.1</span>，再带一行 <span class="inline-code">Host: httpbin.org</span>。服务器回：状态行 <span class="inline-code">HTTP/1.1 200 OK</span> + 响应头 + 空行 + 响应体（JSON 或 HTML）。</p>
+          <p><span class="inline-code">http.GET()</span> 的返回值就是那个 200；<span class="inline-code">http.getString()</span> 读出响应体；<span class="inline-code">http.end()</span> 关闭 TCP。<strong>为什么 end() 不能忘</strong>：每条 TCP 连接都占内存和端口号，不关就泄漏，几次请求后 WiFi 就动不了了。公网测试用 <span class="inline-code">httpbin.org/get</span>——它会把你的请求头、来源公网 IP 回显成 JSON，最适合验证「ESP32 真的上了网」。</p>
+          <blockquote>记忆点：联网四步=扫描→WPA2 认证→关联→DHCP 拿 IP；握手慢所以要轮询等；ESP32 只有 2.4GHz 射频（硬件决定，不是设置问题）；HTTP=文本请求-响应，200=成功；end() 必须关 TCP 否则泄漏。</blockquote>
+        </section>
+
+        <!-- ===== 四、硬件接线说明 ===== -->
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <p>WiFi 是片上外设，不需要任何外部接线，仅靠 USB 供电即可。请确保无线路由器开启 2.4GHz 且密码已知。</p>
+          <table>
+            <thead>
+              <tr><th>模块引脚</th><th>单片机引脚</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>USB 供电</td><td>板载 USB 口</td><td>WiFi 发射时峰值电流约 200mA，建议用电脑后置 USB 口或 5V/1A 以上电源</td></tr>
+              <tr><td>天线</td><td>板载 PCB 天线</td><td>不需要外接，远离金属遮挡即可</td></tr>
+              <tr><td>串口</td><td>GPIO1 / GPIO3（已接板载 USB）</td><td>用于查看连接状态与 IP，无需手动接线</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么这样接：</strong></p>
+          <ul>
+            <li><strong>为什么 WiFi 不用接线？</strong> WiFi 芯片和天线都集成在 ESP32 芯片和 PCB 上，软件初始化后直接用，不占外部 IO。</li>
+            <li><strong>为什么强调供电？</strong> WiFi 射频发射瞬间电流可达 200mA，劣质 USB 线或前置口会导致电压跌到 3.0V 以下，ESP32 反复重启、WiFi 断连。</li>
+            <li><strong>为什么要远离金属？</strong> PCB 天线靠电磁波辐射，金属外壳或紧贴桌面金属板会严重屏蔽信号，导致距离一远就断。</li>
+          </ul>
+        </section>
+
+        <!-- ===== 五、完整代码 ===== -->
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p>把下面代码中的 <span class="inline-code">ssid</span> 与 <span class="inline-code">password</span> 改成你自己的 2.4GHz 路由器名称和密码（示例值，必须替换）。</p>
+          <pre><code class="language-cpp">/* ESP32 STA 模式连接 WiFi，并定期发起 HTTP GET 请求（零基础注释版） */
+#include &lt;WiFi.h&gt;
+#include &lt;HTTPClient.h&gt;
+
+const char* ssid     = "YourWiFiName";      // TODO 改成你的 WiFi 名（仅 2.4GHz）
+const char* password = "YourWiFiPassword";  // TODO 改成你的 WiFi 密码
+
+void setup() {
+  Serial.begin(115200);
+  delay(200);
+
+  WiFi.begin(ssid, password);                 // 发起连接
+  Serial.print("正在连接 WiFi");
+  while (WiFi.status() != WL_CONNECTED) {     // 死等到连上
+    delay(500);
+    Serial.print(".");                        // 每 500ms 打一个点
+  }
+  Serial.println();
+  Serial.print("WiFi 已连接，IP 地址：");
+  Serial.println(WiFi.localIP());            // 打印拿到的内网 IP
+}
+
+void loop() {
+  if (WiFi.status() == WL_CONNECTED) {        // 已联网才发请求
+    HTTPClient http;
+    http.begin("http://httpbin.org/get");     // 公共回显接口
+    int httpCode = http.GET();                // 发起 GET，返回状态码
+
+    if (httpCode &gt; 0) {                       // 状态码 &gt;0 表示有响应
+      String payload = http.getString();       // 读响应体
+      Serial.print("HTTP 状态码：");
+      Serial.println(httpCode);
+      Serial.println(payload);
+    } else {
+      Serial.println("请求失败：" + http.errorToString(httpCode));
+    }
+    http.end();                               // 必须释放连接
+  } else {
+    Serial.println("WiFi 已断开，尝试重连…");
+    WiFi.reconnect();
+  }
+  delay(10000);                               // 每 10 秒请求一次
+}</code></pre>
+          <p><strong>第二个实例：断线自动重连（事件驱动，适合长期不掉电的设备）</strong>——主程序用的是「轮询 + 手动 reconnect」，这个变体改用 WiFi 事件回调，断开瞬间就触发重连：</p>
+          <pre><code class="language-cpp">/* WiFi 变体：事件驱动的断线自动重连 */
+#include &lt;WiFi.h&gt;
+
+const char *ssid     = "你的WiFi";
+const char *password = "你的密码";
+
+void onWiFiEvent(WiFiEvent_t event) {
+  switch (event) {
+    case WIFI_STA_DISCONNECTED:        // 掉线事件
+      Serial.println("WiFi 断开，正在重连…");
+      WiFi.begin(ssid, password);      // 立即重新发起连接
+      break;
+    case WIFI_STA_GOT_IP:              // 拿到 IP 事件
+      Serial.print("已连接，IP: ");
+      Serial.println(WiFi.localIP());
+      break;
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  WiFi.onEvent(onWiFiEvent);           // 注册事件回调
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+}
+
+void loop() {
+  delay(2000);                         // 业务代码这里写
+}</code></pre>
+          <p>想换个测试目标？把 <span class="inline-code">http.begin("http://httpbin.org/get")</span> 改成 <span class="inline-code">http.begin("http://example.com")</span>，就能看到 example.com 的 HTML 源码打印在串口里。</p>
+        </section>
+
+        <!-- ===== 六、代码逐段讲解 ===== -->
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第 1 段：头文件与 WiFi 账号（第 2~6 行）</h3>
+          <p><strong>在做什么：</strong> 引入 WiFi.h（连路由器）和 HTTPClient.h（发 HTTP）两个库，再定义两个字符串常量存 SSID 和密码。</p>
+          <p><strong>为什么这么写：</strong> 库不 include 会编译不过；把账号密码放顶部常量，换 WiFi 时只改这两行，不用在代码里到处找。</p>
+          <p><strong>不写会怎样：</strong> 漏掉 include，IDE 报「WiFi 未定义」；账号密码写错或留占位，串口会一直打点、永远连不上。</p>
+
+          <h3>第 2 段：setup() 里连接 WiFi（第 8~18 行）</h3>
+          <p><strong>在做什么：</strong> 打开串口 → 调 WiFi.begin → 用 while 循环等 WiFi.status() 变成 WL_CONNECTED → 打印 IP。</p>
+          <p><strong>为什么这么写：</strong> WiFi.begin 只是发起动作，真正握手要 1~5 秒；不等就连读 IP，会读到 0.0.0.0。while 循环里打「.」是让你在串口里看到「正在拨号」的进度感。</p>
+          <p><strong>不写会怎样：</strong> 去掉 while 直接读 localIP，多半打印 0.0.0.0；后续 http.begin 也会因为没网而失败。</p>
+
+          <h3>第 3 段：loop() 里发 HTTP GET（第 20~35 行）</h3>
+          <p><strong>在做什么：</strong> 检查 WiFi 还连着 → 建 HTTPClient → begin 网址 → GET → 状态码大于 0 就读响应体打印 → end 释放。</p>
+          <p><strong>为什么这么写：</strong> httpCode &gt; 0 表示服务器回了状态码（200/404 等），≤0 表示连不上/DNS 失败。getString 一次性读全部响应，对入门演示够用；end 不调会导致内存逐渐耗尽、几轮后崩溃。</p>
+          <p><strong>不写会怎样：</strong> 漏掉 http.end，跑一段时间 ESP32 会因为内存泄漏反复重启；不判断 httpCode 直接 getString，失败时会打印空字符串误导你。</p>
+
+          <h3>第 4 段：断网重连（第 36~39 行）</h3>
+          <p><strong>在做什么：</strong> 每轮 loop 先看 WiFi.status()，如果不是 CONNECTED 就打日志并调 WiFi.reconnect()。</p>
+          <p><strong>为什么这么写：</strong> 路由器重启、ESP32 走远都会导致断连；不主动重连的话，程序就一直躺在「已断开」状态里再也不联网。</p>
+          <p><strong>不写会怎样：</strong> 断一次就永久失去联网能力，必须手动按复位键才能恢复。</p>
+          <h3>第 5 段：WiFi 事件 ↔ Arduino API 三层对照（教材视角）</h3>
+          <p>和 GPIO 一样，WiFi 也是分层封装：Arduino 的 <span class="inline-code">WiFi 类</span>底下是乐鑫 ESP-IDF 的 <span class="inline-code">esp_wifi_* / esp_event</span> 驱动 API，最底下才是 802.11 固件与射频硬件。教材常见对照如下：</p>
+          <table>
+            <thead>
+              <tr><th>你写的 Arduino 函数</th><th>底层 ESP-IDF API / 事件</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><span class="inline-code">WiFi.begin(ssid,pwd)</span></td><td><span class="inline-code">esp_wifi_set_config() + esp_wifi_connect()</span></td><td>配置 STA 并发起连接</td></tr>
+              <tr><td><span class="inline-code">WiFi.onEvent(cb)</span></td><td><span class="inline-code">esp_event_handler_register(WIFI_EVENT, …)</span></td><td>注册 WiFi/IP 事件回调</td></tr>
+              <tr><td><span class="inline-code">WIFI_STA_GOT_IP</span> 事件</td><td><span class="inline-code">IP_EVENT_STA_GOT_IP</span></td><td>DHCP 拿到 IP 的事件</td></tr>
+              <tr><td><span class="inline-code">WiFi.localIP()</span></td><td><span class="inline-code">esp_netif_get_ip_info()</span></td><td>读 netif 里的 IP</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么重要</strong>：课程设计里若要用事件驱动重连（见第二个实例），理解「<span class="inline-code">WiFi.onEvent</span> 就是封装 esp_event」后，你就能看懂官方例程里 <span class="inline-code">WIFI_STA_DISCONNECTED / WIFI_STA_GOT_IP</span> 这些事件名从哪来。</p>
+        </section>
+
+        <!-- ===== 七、现象演示说明 ===== -->
+        <section>
+          <h2 id="sec-demo">七、现象演示说明</h2>
+          <ul>
+            <li><strong>现象 1</strong>：上电后串口先打印一串「.」，约 2~5 秒后停止，并输出「WiFi 已连接，IP 地址：192.168.x.x」。</li>
+            <li><strong>现象 2</strong>：每隔 10 秒打印一段 JSON，其中 <span class="inline-code">"origin"</span> 字段就是 ESP32 当前出口公网 IP。</li>
+            <li><strong>现象 3（验证上行）</strong>：登录路由器后台查看「已连接设备」，应能看到一个名为「espressif…」的设备，IP 与串口打印一致。</li>
+            <li><strong>现象 4（断网测试）</strong>：关掉路由器 2.4G，串口应打印「WiFi 已断开，尝试重连…」；路由器恢复后 ESP32 自动重连并继续打印 JSON。</li>
+          </ul>
+          <p><strong>可量化的验证方法：</strong></p>
+          <ul>
+            <li><strong>数间隔</strong>：从两行「已发布」之间掐表，应约为 10 秒（delay(10000) 决定）。</li>
+            <li><strong>改间隔看变化</strong>：把 delay(10000) 改成 delay(3000)，打印频率应变快到 3 秒一次。</li>
+            <li><strong>查 origin IP</strong>：串口 JSON 里的 origin 应该和你电脑浏览器访问 ip.cn 看到的公网 IP 一致（同一出口）。</li>
+          </ul>
+        </section>
+
+        <!-- ===== 八、常见报错排查方案 ===== -->
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>串口一直打「.」，最终卡在 WL_DISCONNECTED</td><td>SSID 是 5GHz / 密码错误 / 信号太弱</td><td>确认路由器开了 2.4G；密码注意大小写；板子靠近路由再试</td></tr>
+              <tr><td>状态码 -1 或 httpCode 一直为 0</td><td>DNS 解析失败 / 目标不可达 / 用了 https 但证书问题</td><td>先 ping 通 httpbin.org；URL 改成纯 http；确认路由器能上网</td></tr>
+              <tr><td>能拿到 IP 但 HTTP 请求超时</td><td>防火墙 / 运营商拦截 80 端口</td><td>换 http://example.com 测试；本机搭 python -m http.server 验证</td></tr>
+              <tr><td>串口打印的 IP 是 0.0.0.0</td><td>DHCP 未完成就被读取</td><td>确保 while 循环真正等到 WL_CONNECTED 后再读 localIP</td></tr>
+              <tr><td>ESP32 频繁重启、WiFi 连接不稳定</td><td>USB 供电不足，发射峰值电流拉低电压</td><td>换质量好的 USB 线，改用 5V/1A 以上外接电源</td></tr>
+              <tr><td>能扫到别的网却连不上自家路由 / 换个地方就连不上</td><td>路由器信道设到了 12/13 以上或区域码（regulatory domain）不一致</td><td>路由器后台把 2.4G 信道固定为 1/6/11；确认加密方式为 WPA2-PSK（WEP/企业级 802.1x 不支持）</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <!-- ===== 九、课后练习与延伸 ===== -->
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（改目标网址）：</strong> 把 http.begin 改成 <span class="inline-code">"http://example.com"</span>，观察串口打印的 HTML 源码；再改成 <span class="inline-code">"http://baidu.com"</span>，对比状态码。</p>
+          <p><strong>练习 2（改上报频率）：</strong> 把 delay(10000) 改成 delay(2000)，观察串口打印频率。注意太频繁会被 httpbin.org 限流。</p>
+          <p><strong>练习 3（加 LED 指示）：</strong> 连接成功后点亮板载 LED，断网时熄灭——提示：在 while 循环结束后 digitalWrite(HIGH)，在 else 分支里 digitalWrite(LOW)。</p>
+          <p><strong>延伸学习：</strong></p>
+          <ul>
+            <li><a href="#xxx" data-placeholder>ESP32 蓝牙串口通信 SPP 透传（esp32-bluetooth.html）</a></li>
+            <li><a href="#xxx" data-placeholder>HTTPS（TLS）请求与证书校验（占位）</a></li>
+            <li><a href="#xxx" data-placeholder>ESP32 同时连 WiFi 并开 AP（占位）</a></li>
+          </ul>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="esp32-gpio.html" class="btn btn-outline btn-sm">← 上一篇：ESP32 GPIO 控制</a>
+          <a href="esp32-bluetooth.html" class="btn btn-outline btn-sm">下一篇：蓝牙串口通信 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - RTC 实时时钟（日历与闹钟）</title>
+  <meta name="description" content="STM32 RTC 零基础教程：LSE 32.768kHz 时钟、BCD 格式时间、HAL_RTC_SetTime/GetTime、闹钟与备份寄存器，实现掉电走时的日历时钟。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link active" aria-current="page">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>RTC 实时时钟（日历与闹钟）</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：STM32</span>
+          <span class="badge badge-orange">进阶</span>
+          <span class="badge badge-gray">更新：2026-10-25</span>
+        </div>
+
+        <p class="text-secondary mb-6">电子钟、记录仪、定时开关——真实设备都要「知道现在几点几分」。SysTick 只能数毫秒，RTC 才是管「真实日历」的外设：靠一颗 32.768kHz 晶振独立走时，主系统断电（有后备电池）它照样走。本课讲透 RTC 的时钟源、BCD 格式、HAL 读写 API，做出「上电对时、串口报时、断电续走」的日历钟。</p>
+
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>说清 RTC 为什么用 32.768kHz 晶振、掉电后靠什么继续走时。</li>
+            <li>理解 BCD 格式，会用 HAL_RTC_SetTime / HAL_RTC_GetTime 对时与读时。</li>
+            <li>做出串口报时的日历钟，并设置一个闹钟中断。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识（对应学习路线阶段 4）：</strong></p>
+          <ul>
+            <li>时钟树（stm32-clock.html）：LSE/LSI 时钟源的概念，RTC 用的是 LSE。</li>
+            <li>SysTick 时基（stm32-systick.html）：毫秒与日历是两回事，本课是升级版。</li>
+            <li>串口（stm32-usart.html）：报时输出用 printf。</li>
+          </ul>
+          <p><strong>本课会出现的新名词：</strong>RTC、LSE 32.768kHz、BCD 码、备份域（Backup Domain）、后备电池 VBAT、HAL_RTC_SetTime/GetTime、闹钟 Alarm、RTC 校准。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. RTC 是什么：芯片里的「独立电子表」</h3>
+          <p><strong>生活类比</strong>：主板上的 BIOS 时钟靠纽扣电池供电，电脑关机时间照样走。STM32 的 RTC（实时时钟）就是芯片内置的「电子表」：有自己的时钟源、自己的电源域（备份域），主电源断电后只要 VBAT 有电，它就继续走。</p>
+          <p><strong>一句话定义</strong>：RTC 是一组独立供电的计数器 + 日历寄存器，能维护年/月/日/星期/时分秒，并支持闹钟（Alarm）中断和周期性唤醒。它走时靠 <strong>LSE（32.768kHz 外部晶振）</strong>，因为 2¹⁵ = 32768，直接二分频 15 次就是精确的 1 秒。</p>
+          <p><strong>例子</strong>：智能电表记录「每日电量」要用真实日期；RTC 就是为这类需求设计的。</p>
+
+          <h3>2. 为什么偏偏是 32.768kHz</h3>
+          <p><strong>一句话定义</strong>：32768 = 2¹⁵，用 15 级二分频电路正好得到 <strong>1Hz</strong>（每秒跳一次）——数字电路里做「除 2 的幂」最简单省电，所以钟表晶振都选 32.768kHz。<strong>精度</strong>：普通晶振日误差约 ±1~2 秒，温补晶振（TCXO）可到 ±2ppm。</p>
+          <p><strong>例子</strong>：RTC 预分频器设 32767（计数 32768 次 = 1 秒），每秒产生一个「秒脉冲」驱动日历进位。</p>
+
+          <h3>3. BCD 格式：为什么时间是 0x12 而不是 12</h3>
+          <p><strong>生活类比</strong>：BCD（二进制编码十进制）就像「算盘珠表示」：每个十进制位用 4 位二进制表示——12 点写成 0x12（高 4 位 = 1，低 4 位 = 2），而不是普通的 0x0C。</p>
+          <p><strong>一句话定义</strong>：RTC 的时间寄存器用 <strong>BCD 码</strong>存储：<span class="inline-code">0x12</span> 表示 12 点、<span class="inline-code">0x59</span> 表示 59 分。HAL 库里时间结构体的字段本来就是 BCD 值，读出来直接用 <span class="inline-code">printf</span> 打印时要注意：<span class="inline-code">%02X</span> 打印 BCD 正好是十进制外观，<span class="inline-code">%d</span> 打印 0x12 会输出 18——新手常见困惑。</p>
+          <p><strong>例子</strong>：<span class="inline-code">sTime.Hours = 0x14;</span> 表示设成 14 点，不是十进制 20 点。</p>
+
+          <h3>4. 备份域与 VBAT：断电续走的关键</h3>
+          <p><strong>一句话定义</strong>：RTC 的寄存器和后备寄存器住在一个叫 <strong>备份域</strong>（Backup Domain）的独立供电区域：主电源 VDD 断电时，由 <strong>VBAT 引脚</strong>（接纽扣电池 CR1220 等）继续供电，RTC 照常走时、数据不丢。<strong>没有后备电池</strong>：主电源一断 RTC 就停，上电后时间是上次烧录值——很多板子没焊 VBAT，演示时要有这个预期。</p>
+          <p><strong>例子</strong>：开发板留了 VBAT 焊盘，焊上纽扣电池座，断电 1 小时再上电，时间还是准的。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-principle">三、原理介绍：RTC 的配置与读写流程</h2>
+          <p>RTC 是一个掉电还在走的独立日历。它靠一个特殊晶振和一套 BCD 寄存器工作，跟主 CPU 的 72MHz 完全无关。</p>
+          <p><strong>整条链路：</strong>LSE 32.768kHz → 异步+同步预分频 → 1Hz 秒脉冲 → 日历寄存器(BCD)自动累加分秒时日 → VBAT 电池供电，主电断了继续走。</p>
+
+          <h3>原理 1：LSE 与分频——32.768kHz 怎么变成「秒」</h3>
+          <p>RTC 的时钟是 <strong>LSE 外部 32.768kHz 晶振</strong>。为什么偏偏是这个数？因为 32768 = 2¹⁵，用异步预分频 ÷128、同步预分频 ÷256 两次分频（128×256=32768），正好得到 1Hz 秒脉冲，分频系数全是整齐的 2 的幂。换别的频率，分频系数就不整、精度差。它可由 VBAT 纽扣电池供电，主电源断了仍以 µA 级功耗继续走——这就是「断电还能看时间」的来源。<strong>为什么不用 LSI</strong>：内部 LSI≈40kHz 精度差（±5%），一天能差好几分钟，只够做粗略秒计时。</p>
+
+          <h3>原理 2：BCD 日历寄存器——0x12 为什么就是 12 点</h3>
+          <p>RTC 把时、分、秒、日、月、年各存成一个寄存器，用 <strong>BCD 码</strong>：一个字节高 4 位是十位、低 4 位是个位，所以 0x12 直接就表示「12 点」，不用再算二进制换算。周一是 1、周日是 7（不是 0！）。读时间要 <span class="inline-code">HAL_RTC_GetTime</span> 再 <span class="inline-code">HAL_RTC_GetDate</span>——<strong>为什么这个顺序不能反</strong>：读 Date 会触发影子寄存器更新，而先 GetTime 才会把日历快照进影子寄存器；反着读，日期可能是一秒前甚至昨天的缓存值。</p>
+
+          <h3>原理 3：备份域——为什么第二次上电不要重写时间</h3>
+          <p>RTC 和少量「备份寄存器」住在<strong>备份域</strong>，它由 VBAT 供电、不受主复位影响。所以第二次上电 RTC 还在自己走，时间没丢。<strong>坑点</strong>：若每次上电都强制 SetTime，之前对好的时就被覆盖。标准做法是在备份寄存器写个魔数（如 0xA5A5）标记「已对过时」，上电先查这个标志：没对过才 SetTime、对过就跳过。闹钟则是设好时分秒并开 RTC 闹钟中断，到点进回调做动作。</p>
+          <p><strong>教材必考点：备份域默认写保护，必须先「解锁」。</strong>RTC 和备份寄存器属于 APB1 上的备份域，复位后为防误写是锁死的。改 RTC 时钟源、写备份寄存器前，必须两步解锁：① 开 PWR 时钟（<span class="inline-code">__HAL_RCC_PWR_CLK_ENABLE()</span>）；② 置 <strong>PWR_CR 的 DBP 位</strong>（备份域写访问允许），HAL 里就是 <span class="inline-code">HAL_PWR_EnableBkUpAccess()</span>。不解锁直接写 RTC/BKP 寄存器会「写不进去且不报错」——这是教材实验里「配置 RTC 时钟源或备份寄存器毫无反应」的头号原因。CubeMX 生成的 MX_RTC_Init 已自动帮你做了这两步，但手写寄存器时极易漏。</p>
+          <blockquote>记忆点：RTC 走 LSE 32.768k（=2¹⁵，两级分频整到 1Hz），VBAT 供电断电续走；时间用 BCD（0x12=12 点、周一=1 周日=7）；读必须先 GetTime 再 GetDate；备份寄存器写魔数判「已对时」，别每次覆盖。</blockquote>
+        </section>
+
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <p>RTC 主体在芯片内，关键外部元件是晶振与后备电池：</p>
+          <table>
+            <thead>
+              <tr><th>元件</th><th>接法</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>32.768kHz 晶振</td><td>OSC32_IN / OSC32_OUT</td><td>配 6pF 负载电容；部分板子已焊</td></tr>
+              <tr><td>纽扣电池座（VBAT）</td><td>VBAT 引脚 + GND</td><td>CR1220 等，断电续走用</td></tr>
+              <tr><td>USB 串口</td><td>PA9/PA10</td><td>打印当前时间观察走时</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么演示时可以没有晶振和电池</strong>：CubeMX 可选 LSI 作为 RTC 时钟源（内部 40kHz，误差大但能跑），没有 32.768k 晶振也能演示「时间会走」。<strong>要精确走时</strong>：必须 LSE 晶振 + 校准。<strong>要断电续走</strong>：必须 VBAT 电池。</p>
+          <div class="tip-warn mt-4"><span class="tip-label">避坑</span>
+            LSE 晶振容易不起振（32.768kHz 是低功耗晶振，起振慢、对负载电容敏感）。CubeMX 里 LSE 起振失败常表现为 HAL_RTC_Init 卡住或时间不动——可勾选 <span class="inline-code">LSE Drive Capability</span> 提高驱动，或先换 LSI 验证程序逻辑。</div>
+        </section>
+
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p>CubeMX 配置要点：RTC 时钟源 LSE、Activate Calendar 勾选、Format BCD。示例 1 对时 + 串口报时；示例 2 闹钟。</p>
+          <p><strong>示例 1：上电对时一次 + 每秒串口报时（带初始化标志）</strong></p>
+          <pre><code class="language-c">/* RTC 日历钟：首次上电对时，之后断电续走，串口每秒报时 */
+#include "main.h"
+#include &lt;stdio.h&gt;
+
+extern RTC_HandleTypeDef hrtc;
+
+#define RTC_INIT_FLAG  0xA5A5   /* 备份寄存器标志：已对过时 */
+
+void rtc_set_initial_time(void)
+{
+    RTC_TimeTypeDef sTime = {0};
+    RTC_DateTypeDef sDate = {0};
+
+    /* 时间：14 点 30 分 00 秒（BCD 写法！） */
+    sTime.Hours   = 0x14;
+    sTime.Minutes = 0x30;
+    sTime.Seconds = 0x00;
+    HAL_RTC_SetTime(&amp;hrtc, &amp;sTime, RTC_FORMAT_BCD);
+
+    /* 日期：2026 年 10 月 25 日，星期日（RTC 星期约定：周一=1 … 周日=7） */
+    sDate.WeekDay = 7;
+    sDate.Month   = 0x10;
+    sDate.Date    = 0x25;
+    sDate.Year    = 0x26;
+    HAL_RTC_SetDate(&amp;hrtc, &amp;sDate, RTC_FORMAT_BCD);
+}
+
+void print_rtc_time(void)
+{
+    RTC_TimeTypeDef t = {0};
+    RTC_DateTypeDef d = {0};
+
+    /* 注意顺序：先读时间，再读日期 */
+    HAL_RTC_GetTime(&amp;hrtc, &amp;t, RTC_FORMAT_BCD);
+    HAL_RTC_GetDate(&amp;hrtc, &amp;d, RTC_FORMAT_BCD);
+
+    /* BCD 用 %02X 打印正好显示成十进制外观（0x14 → "14"） */
+    printf("20%02X-%02X-%02X %02X:%02X:%02X\r\n",
+           d.Year, d.Month, d.Date, t.Hours, t.Minutes, t.Seconds);
+}
+
+int main(void)
+{
+    HAL_Init();
+    SystemClock_Config();
+    MX_GPIO_Init();
+    MX_RTC_Init();
+
+    /* 只在首次初始化时对时（备份寄存器标志判断） */
+    if (HAL_RTCEx_BKUPRead(&amp;hrtc, RTC_BKP_DR1) != RTC_INIT_FLAG) {
+        rtc_set_initial_time();
+        HAL_RTCEx_BKUPWrite(&amp;hrtc, RTC_BKP_DR1, RTC_INIT_FLAG);
+    }
+
+    while (1) {
+        print_rtc_time();          /* 每秒打印一次 */
+        HAL_Delay(1000);
+    }
+}</code></pre>
+          <p><strong>示例 2：设置闹钟（每天 14:31 触发一次）</strong></p>
+          <pre><code class="language-c">/* RTC 闹钟：到点触发回调（如翻转 LED / 串口提示） */
+#include "main.h"
+
+extern RTC_HandleTypeDef hrtc;
+
+void rtc_set_alarm(void)
+{
+    RTC_AlarmTypeDef sAlarm = {0};
+
+    sAlarm.AlarmTime.Hours   = 0x14;   /* 14 点 */
+    sAlarm.AlarmTime.Minutes = 0x31;   /* 31 分 */
+    sAlarm.AlarmTime.Seconds = 0x00;
+    sAlarm.Alarm = RTC_ALARM_A;
+    sAlarm.AlarmMask = RTC_ALARMMASK_DATEWEEKDAY; /* 忽略日期，每天触发 */
+    HAL_RTC_SetAlarm(&amp;hrtc, &amp;sAlarm, RTC_FORMAT_BCD);
+
+    HAL_NVIC_EnableIRQ(RTC_Alarm_IRQn);
+    HAL_NVIC_SetPriority(RTC_Alarm_IRQn, 1, 0);
+}
+
+/* 闹钟回调：HAL 自动调用（函数名固定） */
+void HAL_RTC_AlarmAEventCallback(RTC_HandleTypeDef *hrtc)
+{
+    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);   /* 翻转 LED */
+    printf("Alarm!\r\n");
+}</code></pre>
+        </section>
+
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第一段：BCD 赋值——0x14 是 14 点</h3>
+          <p><span class="inline-code">sTime.Hours = 0x14;</span> 设的是 14 点。<strong>为什么不是 14</strong>：RTC 寄存器按 BCD 存储，0x14 高 4 位是 1、低 4 位是 4——HAL 的 sTime 结构体直接对应寄存器字段，所以必须给 BCD 值。<strong>手写 BCD 容易错</strong>（0x10 到底是 10 还是 16？），工程上常用工具函数把十进制转 BCD（<span class="inline-code">(v / 10) &lt;&lt; 4 | (v % 10)</span>）。</p>
+
+          <h3>第二段：备份寄存器标志——「别每次覆盖时间」</h3>
+          <p><span class="inline-code">HAL_RTCEx_BKUPRead(&amp;hrtc, RTC_BKP_DR1)</span> 读后备寄存器 1（备份域里的 16 位小存储）。<strong>为什么用它</strong>：RTC 断电续走，第二次上电时间还在——如果每次上电都 SetTime，就把对好的时覆盖回 14:30 了。<strong>标志法</strong>：首次写 0xA5A5，之后读到 0xA5A5 就跳过对时。这是所有「带 RTC 产品」的标准写法。</p>
+
+          <h3>第三段：GetTime 与 GetDate 的顺序</h3>
+          <p>注释里特意标注「先读时间再读日期」。<strong>为什么顺序敏感</strong>：HAL 的 GetTime 会把日历快照进影子寄存器，GetDate 读的是影子——先 GetDate 会拿到上次快照（可能差一天）。顺序写对，读数才新鲜。</p>
+
+          <h3>第四段：AlarmMask 的意义</h3>
+          <p><span class="inline-code">RTC_ALARMMASK_DATEWEEKDAY</span> 表示「日期和星期不参与匹配」，只比时分秒——于是闹钟<strong>每天</strong>的这个时刻都触发。<strong>如果 mask 了时间字段会怎样</strong>：被掩码的字段任意都匹配，全掩码 = 每秒触发（可以当秒中断用）。mask 字段 = 「忽略谁」，理解这点就懂 Alarm 的精髓。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-demo">七、现象演示与验证</h2>
+          <ul>
+            <li><strong>报时</strong>：串口每秒打印 <span class="inline-code">2026-10-25 14:30:00 → 14:30:01 → …</span>，秒数递增。</li>
+            <li><strong>闹钟</strong>：到 14:31 时 LED 翻转一次、串口打印 Alarm!。</li>
+            <li><strong>断电续走</strong>（有 VBAT）：拔电源等 1 分钟再上电，时间仍是当前时刻（继续走，不是回到 14:30）。</li>
+          </ul>
+          <p><strong>验证方法：</strong></p>
+          <ol>
+            <li>把 sTime.Hours 改成 0x08 烧录，观察打印 08 点——验证 BCD 与 %02X 打印。</li>
+            <li>注释掉备份寄存器判断（每次都 SetTime），烧录后时间被重置回 14:30——验证标志的必要性。</li>
+            <li>把 AlarmMask 改成 <span class="inline-code">RTC_ALARMMASK_NONE</span>（全匹配）配合固定日期，闹钟只在当天触发——对比 mask 的效果。</li>
+          </ol>
+        </section>
+
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>时间不走 / HAL_RTC_Init 卡住</td><td>LSE 晶振没起振</td><td>换 LSI 先验证逻辑；加大 LSE 驱动能力；检查晶振负载电容</td></tr>
+              <tr><td>时间打印成 18 点而不是 12 点</td><td>把 BCD 当十进制用 %d 打印</td><td>用 <span class="inline-code">%02X</span> 打印 BCD 字段</td></tr>
+              <tr><td>断电后时间回 14:30</td><td>每次都 SetTime（没标志判断）或没 VBAT</td><td>加备份寄存器标志；焊纽扣电池到 VBAT</td></tr>
+              <tr><td>日期读出旧值 / 差一天</td><td>先 GetDate 后 GetTime</td><td>严格先 <span class="inline-code">GetTime</span> 再 <span class="inline-code">GetDate</span></td></tr>
+              <tr><td>闹钟不触发</td><td>AlarmMask 掩错了字段 / 中断没开</td><td>确认只掩 DATEWEEKDAY；HAL_NVIC_EnableIRQ 已调用</td></tr>
+              <tr><td>时间每天快/慢几十秒</td><td>LSE 晶振精度不够 / 没做校准</td><td>用秒表对时后，调 <span class="inline-code">RTC_CALIBRATION</span> 或换 TCXO</td></tr>
+              <tr><td>复位后 RTC 配置丢失</td><td>备份域被复位（BDRST）</td><td>别在代码里清备份域复位；检查 CubeMX 是否勾了异常选项</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（必做）</strong>：写一个「十进制 → BCD」转换函数（<span class="inline-code">(v / 10) &lt;&lt; 4 | (v % 10)</span>），用变量设当前时间而不是写死 0x14——体会工程化写法。</p>
+          <p><strong>练习 2</strong>：把闹钟回调改成「闹钟响后自动关闭」（再 SetAlarmMask 全掩码或清中断），并加上按键取消闹钟。</p>
+          <p><strong>练习 3（进阶）</strong>：结合 <a href="stm32-adc.html">ADC</a> 做「定时记录仪」：RTC 每秒读一次电压存数组，整点打印——RTC 定时 + 采集的综合应用。</p>
+          <p><strong>延伸学习</strong>：日历会走了，下一课学 <a href="stm32-input-capture.html">定时器输入捕获</a>——用定时器「量」外部信号的频率和脉宽，红外遥控解码和测速都靠它。</p>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="stm32-systick.html" class="btn btn-outline btn-sm">← 上一篇：SysTick 系统定时器</a>
+          <a href="stm32-input-capture.html" class="btn btn-outline btn-sm">下一篇：定时器输入捕获 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

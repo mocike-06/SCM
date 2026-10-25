@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - STM32 HAL 库教程</title>
+  <meta name="description" content="STM32 HAL 库教程目录：Keil MDK 环境、GPIO、USART 串口、定时器 PWM、ADC、I2C、OLED、外部中断、电压表综合项目，底层原理：时钟、寄存器、SPI、DMA、看门狗，进阶：SysTick、RTC、输入捕获、CAN、内部Flash、低功耗。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <!-- ===== 顶部导航（全站统一） =====
+       说明：导航在 9 个页面之间使用真实相对路径，保证页面可互相跳转；
+       如需严格改为占位链接，直接把 href 改为 "#xxx" 即可。 -->
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link active" aria-current="page">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+
+    <h2 class="section-title">STM32 HAL 库教程</h2>
+    <p class="section-desc">基于 STM32F103C8T6 最小系统板 + CubeMX 图形化配置 + HAL 库开发。
+      前置要求：完成 51 阶段学习，理解寄存器、定时器、串口等基本概念。</p>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+
+      <a href="stm32-env.html" class="card card-hover card-pad block">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="num-chip">1</span>
+          <span class="badge badge-green">入门</span>
+        </div>
+        <h3 class="card-title">Keil MDK 环境搭建</h3>
+        <p class="card-desc">MDK 安装、芯片包安装、CubeMX 生成工程与烧录配置。</p>
+      </a>
+
+      <a href="stm32-gpio.html" class="card card-hover card-pad block">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="num-chip">2</span>
+          <span class="badge badge-green">入门</span>
+        </div>
+        <h3 class="card-title">STM32 GPIO 输入输出</h3>
+        <p class="card-desc">HAL_GPIO_WritePin 点亮 LED、按键输入检测与消抖。</p>
+      </a>
+
+      <a href="stm32-usart.html" class="card card-hover card-pad block">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="num-chip">3</span>
+          <span class="badge badge-green">入门</span>
+        </div>
+        <h3 class="card-title">USART 串口通信</h3>
+        <p class="card-desc">CubeMX 配置串口、printf 重定向、中断接收数据。</p>
+      </a>
+
+      <a href="stm32-pwm.html" class="card card-hover card-pad block">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="num-chip">4</span>
+          <span class="badge badge-orange">进阶</span>
+        </div>
+        <h3 class="card-title">定时器与 PWM 输出</h3>
+        <p class="card-desc">TIM 基本定时、PWM 频率占空比计算，呼吸灯实验。</p>
+      </a>
+
+      <a href="stm32-adc.html" class="card card-hover card-pad block">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="num-chip">5</span>
+          <span class="badge badge-orange">进阶</span>
+        </div>
+        <h3 class="card-title">ADC 模拟采集</h3>
+        <p class="card-desc">多通道 ADC 采样、电压换算，配合 DMA 传输。</p>
+      </a>
+
+      <a href="stm32-i2c-oled.html" class="card card-hover card-pad block">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="num-chip">6</span>
+          <span class="badge badge-orange">进阶</span>
+        </div>
+        <h3 class="card-title">I2C 通信、OLED 屏幕</h3>
+        <p class="card-desc">软件 I2C 时序、SSD1306 驱动，显示字符与图形。</p>
+      </a>
+
+      <a href="stm32-exti.html" class="card card-hover card-pad block">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="num-chip">7</span>
+          <span class="badge badge-orange">进阶</span>
+        </div>
+        <h3 class="card-title">外部中断</h3>
+        <p class="card-desc">EXTI 边沿触发、中断回调函数 HAL_GPIO_EXTI_Callback。</p>
+      </a>
+
+      <a href="stm32-voltmeter.html" class="card card-hover card-pad block">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="num-chip">8</span>
+          <span class="badge badge-orange">进阶</span>
+        </div>
+        <h3 class="card-title">综合项目：STM32 电压表</h3>
+        <p class="card-desc">ADC 采集 + OLED 显示 + 分压量程切换，完整工程实战。</p>
+      </a>
+
+    </div>
+
+    <h3 class="section-title mt-10">底层原理与教材外设拓展</h3>
+    <p class="section-desc">对应高校热门教材（正点原子 / 野火《STM32F103 开发指南》）章节体系：
+      RCC 时钟、存储器映射、SPI、DMA、看门狗。看不懂 HAL 库底层、程序莫名跑飞时，先学这几篇。</p>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mt-4">
+
+      <a href="stm32-clock.html" class="card card-hover card-pad block">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="num-chip">9</span>
+          <span class="badge badge-orange">进阶</span>
+        </div>
+        <h3 class="card-title">系统时钟树与 RCC 配置</h3>
+        <p class="card-desc">HSI/HSE、PLL 倍频、AHB/APB1/APB2 分频，读懂时钟树，排查跑飞与乱码。</p>
+      </a>
+
+      <a href="stm32-register.html" class="card card-hover card-pad block">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="num-chip">10</span>
+          <span class="badge badge-orange">进阶</span>
+        </div>
+        <h3 class="card-title">存储器映射与寄存器本质</h3>
+        <p class="card-desc">外设基地址与寄存器偏移、volatile、BSRR/ODR，看懂 HAL 函数底层。</p>
+      </a>
+
+      <a href="stm32-spi.html" class="card card-hover card-pad block">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="num-chip">11</span>
+          <span class="badge badge-orange">进阶</span>
+        </div>
+        <h3 class="card-title">SPI 通信与 W25Q64 Flash</h3>
+        <p class="card-desc">SPI 四线协议、CPOL/CPHA 时序模式，读写 Flash：读 ID、页编程、扇区擦除。</p>
+      </a>
+
+      <a href="stm32-dma.html" class="card card-hover card-pad block">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="num-chip">12</span>
+          <span class="badge badge-orange">进阶</span>
+        </div>
+        <h3 class="card-title">DMA 直接存储器访问</h3>
+        <p class="card-desc">数据搬运不占 CPU：通道映射、串口 DMA 收发、传输完成回调。</p>
+      </a>
+
+      <a href="stm32-iwdg.html" class="card card-hover card-pad block">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="num-chip">13</span>
+          <span class="badge badge-orange">进阶</span>
+        </div>
+        <h3 class="card-title">独立看门狗 IWDG</h3>
+        <p class="card-desc">LSI 时钟、预分频与重载值、喂狗时机，程序跑飞自动复位的最后防线。</p>
+      </a>
+
+    </div>
+
+    <h3 class="section-title mt-10">进阶应用：时基、日历与信号测量</h3>
+    <p class="section-desc">对应高校教材「定时器与系统时间」进阶章节：HAL_Delay 底层的 SysTick、真实日历 RTC、测频率与脉宽的输入捕获。</p>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mt-4">
+
+      <a href="stm32-systick.html" class="card card-hover card-pad block">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="num-chip">14</span>
+          <span class="badge badge-orange">进阶</span>
+        </div>
+        <h3 class="card-title">SysTick 系统定时器与 HAL_Delay 原理</h3>
+        <p class="card-desc">内核 24 位节拍器、uwTick 心跳机制、HAL_Delay 源码与中断里禁 delay 的原因。</p>
+      </a>
+
+      <a href="stm32-rtc.html" class="card card-hover card-pad block">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="num-chip">15</span>
+          <span class="badge badge-orange">进阶</span>
+        </div>
+        <h3 class="card-title">RTC 实时时钟（日历与闹钟）</h3>
+        <p class="card-desc">LSE 32.768kHz、BCD 格式时间、备份寄存器续走、闹钟中断。</p>
+      </a>
+
+      <a href="stm32-input-capture.html" class="card card-hover card-pad block">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="num-chip">16</span>
+          <span class="badge badge-orange">进阶</span>
+        </div>
+        <h3 class="card-title">定时器输入捕获（测频率与脉宽）</h3>
+        <p class="card-desc">CCR 边沿拍照、频率计与脉宽测量、红外遥控解码前置知识。</p>
+      </a>
+
+    </div>
+
+    <h3 class="section-title mt-10">工业与低功耗应用</h3>
+    <p class="section-desc">对应高校教材「通信接口 / 掉电存储 / 功耗管理」进阶章节：CAN 总线多机通信、内部 Flash 参数保存、低功耗三种模式与唤醒。</p>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mt-4">
+
+      <a href="stm32-can.html" class="card card-hover card-pad block">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="num-chip">17</span>
+          <span class="badge badge-orange">进阶</span>
+        </div>
+        <h3 class="card-title">CAN 总线通信（双机收发）</h3>
+        <p class="card-desc">差分信号与仲裁、标识符与波特率计算、TJA1050 收发器、HAL_CAN 双机互发消息。</p>
+      </a>
+
+      <a href="stm32-internal-flash.html" class="card card-hover card-pad block">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="num-chip">18</span>
+          <span class="badge badge-orange">进阶</span>
+        </div>
+        <h3 class="card-title">内部 Flash 读写（掉电保存参数）</h3>
+        <p class="card-desc">Flash 结构、扇区擦除与编程时序、页/扇区地址计算，参数掉电保存与读取恢复。</p>
+      </a>
+
+      <a href="stm32-lowpower.html" class="card card-hover card-pad block">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="num-chip">19</span>
+          <span class="badge badge-orange">进阶</span>
+        </div>
+        <h3 class="card-title">低功耗模式（睡眠/停止/待机）</h3>
+        <p class="card-desc">三档功耗对比、WFI 进入与 EXTI/RTC 唤醒、唤醒后重配时钟、备份寄存器跨待机保存。</p>
+      </a>
+
+    </div>
+
+    <div class="tip-warn mt-8">
+      <span class="tip-label">高频翻车点</span>
+      CubeMX 里时钟树配置错误会导致程序跑飞；HAL 库的
+      <span class="inline-code">HAL_UART_RxCpltCallback</span> 等回调函数名写错会静默失效——对照头文件逐个核对。
+    </div>
+  </main>
+
+  <!-- ===== 页脚 ===== -->
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

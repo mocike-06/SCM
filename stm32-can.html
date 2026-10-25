@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - CAN 总线通信（双机收发）</title>
+  <meta name="description" content="STM32 CAN 总线零基础教程：CANH/CANL 差分信号、120 欧姆终端电阻、报文帧结构、ID 仲裁、bxCAN 过滤器与邮箱、HAL_CAN 收发代码，车载与工业现场总线的核心。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link active" aria-current="page">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>CAN 总线通信（双机收发）</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：STM32</span>
+          <span class="badge badge-orange">进阶</span>
+          <span class="badge badge-gray">更新：2026-10-25</span>
+        </div>
+
+        <p class="text-secondary mb-6">汽车里上百个 ECU（发动机、ABS、车窗…）怎么互相通信？靠 CAN 总线——一条双绞线挂几十个节点，抗干扰、远距离、自带仲裁。教材「现场总线」章节与车载电子毕设的核心。本课讲透 CAN 的物理层（差分信号、终端电阻）、报文结构、ID 仲裁，用两块 STM32 通过 HAL_CAN 实现双机收发。</p>
+
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>说清 CAN 为什么用两根线差分传输、为什么两端要 120Ω 终端电阻。</li>
+            <li>理解 CAN 报文（帧）结构：ID、数据、DLC，以及 ID 仲裁机制。</li>
+            <li>用 CubeMX + HAL_CAN 配置收发，两块板子互通数据。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识（对应学习路线阶段 4）：</strong></p>
+          <ul>
+            <li>串口（stm32-usart.html）：点对点通信 vs 总线通信的对比基础。</li>
+            <li>时钟（stm32-clock.html）：CAN 挂在 APB1（36MHz），波特率由分频决定。</li>
+            <li>中断与回调（stm32-exti.html）：CAN 接收中断与回调模式。</li>
+          </ul>
+          <p><strong>本课会出现的新名词：</strong>CAN 总线、CANH/CANL 差分、终端电阻 120Ω、报文/帧、ID（标识符）、数据帧、仲裁、波特率、bxCAN、过滤器、收发邮箱、HAL_CAN。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. CAN 是什么：一条「会议室总线」</h3>
+          <p><strong>生活类比</strong>：CAN 像会议室：谁发言都通过同一条扩音线（总线）传给所有人，但<strong>每次只能一个人发言</strong>（同一时刻一个帧）；大家按「优先级」抢麦（仲裁），最紧急的先说。所有人听到全部内容（广播），按需取用。</p>
+          <p><strong>一句话定义</strong>：CAN（控制器局域网）是<strong>多主机的差分串行总线</strong>：多个节点共享两根线（CANH/CANL），以<strong>报文</strong>为单位广播，按 <strong>ID 仲裁</strong>决定谁先发，最高速率 1Mbps（高速 CAN）、最远约 1km（低速）。</p>
+          <p><strong>例子</strong>：车窗节点发出「车窗状态」报文，全车节点都能收，只有仪表盘节点关心并显示。</p>
+
+          <h3>2. 差分信号：为什么抗干扰强</h3>
+          <p><strong>一句话定义</strong>：CAN 用 <strong>CANH/CANL 两根线</strong>传差分信号：显性位 = CANH 高 + CANL 低（2.5V 上下各摆 1V 左右），隐性位 = 两线同电平。接收端看<strong>两线之差</strong>而不是单线对地——外界的共模干扰同时加在两根线上，差值不变，所以抗干扰极强（汽车点火、电机旁也能用）。</p>
+          <p><strong>例子</strong>：串口 TTL 是单线对地，地线抖动就错码；CAN 的差分管脚（CANH/CANL）对地噪声免疫。</p>
+
+          <h3>3. 报文与 ID：广播式的「带编号的信件」</h3>
+          <p><strong>一句话定义</strong>：CAN 传输单元是<strong>报文（帧）</strong>：包含 <strong>ID（11 位标准帧 / 29 位扩展帧）</strong>、DLC（数据长度 0~8 字节）、数据体、CRC、ACK 等字段。<strong>ID 越小优先级越高</strong>（仲裁时显性位优先）。任何节点都能发、都能收——用<strong>过滤器</strong>只接收关心的 ID。</p>
+          <p><strong>例子</strong>：报文「ID=0x123，DLC=8，数据=温度值」——一个帧就能传 8 字节，够仪表盘用了。</p>
+
+          <h3>4. 终端电阻：消除反射的「消声器」</h3>
+          <p><strong>一句话定义</strong>：CAN 总线两端必须各接一个 <strong>120Ω 终端电阻</strong>：匹配传输线阻抗，吸收信号到达末端时的反射——没有它，高速信号在末端反弹产生振铃，通信直接错乱。<strong>只有两端接</strong>，中间的节点不接。</p>
+          <p><strong>例子</strong>：两块板子互连 = 总线两端，每块板 CANH-CANL 间接 120Ω（有的开发板已焊，跳线确认）。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-principle">三、原理介绍：STM32 bxCAN 的收发流程</h2>
+          <p>CAN 是汽车/工业总线：两根差分线挂一堆节点、没有主机、谁紧急谁先发。它的底层全靠「位时序」和「ID 仲裁」两个机制。</p>
+          <p><strong>整条链路：</strong>填报文(ID+DLC+数据)→AddTxMessage 进发送邮箱→总线仲裁→发出；对端采样点收到→进 FIFO0 接收中断→GetRxMessage 取出。</p>
+
+          <h3>原理 1：位时序 SYNC+BS1+BS2——为什么一个位要拆三段</h3>
+          <p>CAN 没有时钟线，接收方只能靠位边沿自己对齐。一个位时间被切成若干时间片 tq：开头 <strong>SYNC_SEG(1tq)</strong> 用来对齐边沿，<strong>BS1</strong>、<strong>BS2</strong> 是两个相位段，采样点设在 BS1 与 BS2 之间。<strong>为什么要拆</strong>：总线有传播延迟，把采样点放在一位的 75~80% 处，就能容忍这点延迟、采到稳定电平。波特率 = APB1(36M) / (Prescaler × (1+BS1+BS2))，例 Prescaler=4、BS1=9、BS2=6 → 36M/(4×16)=562.5kbps。两端这套参数必须完全一致，否则采样错位、全是错误帧、最终 Bus-Off。</p>
+
+          <h3>原理 2：差分线与 120Ω——为什么抗干扰</h3>
+          <p>CAN 用 CANH/CANL 两根线<strong>差分</strong>传信号：显性位时两线压差约 2V、隐性位压差≈0。干扰是同时耦合到两根线上的「共模噪声」，接收端只看两线之差，共模噪声被抵消——这就是 CAN 抗干扰强、能跑几十米的原因。总线<strong>两端</strong>各并一个 120Ω 终端电阻做阻抗匹配，中间节点不用加。</p>
+
+          <h3>原理 3：ID 仲裁与收发流程——为什么漏 Start 就没反应</h3>
+          <p>多个节点同时发时，按 <strong>报文 ID 仲裁</strong>：ID 越小优先级越高（发 0 的节点能压住发 1 的），谁也不破坏对方数据。HAL 流程是：先 <span class="inline-code">HAL_CAN_Start</span> 让外设进入正常态，再 <span class="inline-code">HAL_CAN_AddTxMessage</span> 填发送邮箱发数据；接收要先开 FIFO0 中断，帧到了进 <span class="inline-code">HAL_CAN_RxFifo0MsgPendingCallback</span> 再 <span class="inline-code">HAL_CAN_GetRxMessage</span> 取。<strong>头号坑</strong>：漏调 HAL_CAN_Start，状态停在初始化态、收发全无——这是 CAN 调不通最常见原因。</p>
+          <blockquote>记忆点：CAN=差分双线+广播+ID 小优先；位时序=SYNC+BS1+BS2，采样点放 75~80%，波特率=36M/(Prescaler×(1+BS1+BS2))，两端必须一致；120Ω 只在总线两端；流程=先 Start 再 AddTx/GetRx，漏 Start 收发全无。</blockquote>
+
+          <h3>原理 4：bxCAN 寄存器 ↔ HAL 对照（教材查表）</h3>
+          <table>
+            <thead><tr><th>你做的事</th><th>对应寄存器 / 位</th><th>HAL 函数</th></tr></thead>
+            <tbody>
+              <tr><td>位时序/波特率</td><td>CAN_BTR（BRP 分频 + TS1/TS2 段）</td><td>hcan.Init.Prescaler / TimeSeg1 / TimeSeg2</td></tr>
+              <tr><td>初始化/正常模式</td><td>CAN_MCR（INRQ 初始化请求位）</td><td>HAL_CAN_Init() / HAL_CAN_Start()</td></tr>
+              <tr><td>填发送邮箱(ID+数据)</td><td>TIR(标识符) / TDTR(DLC) / TDLR(数据)</td><td>HAL_CAN_AddTxMessage()</td></tr>
+              <tr><td>读接收 FIFO</td><td>RFR（FIFO 释放）+ Rx 邮箱寄存器</td><td>HAL_CAN_GetRxMessage()</td></tr>
+              <tr><td>过滤器(按 ID 筛选)</td><td>FA1R / FS1R / FFA1R 过滤器组</td><td>HAL_CAN_ConfigFilter()</td></tr>
+              <tr><td>开接收中断</td><td>CAN_IER（FMPIE 中断使能）</td><td>HAL_CAN_ActivateNotification()</td></tr>
+            </tbody>
+          </table>
+          <p><strong>关键时钟前提：</strong>bxCAN 挂在 <strong>APB1(36MHz)</strong>，所以上面位时序公式分母用的是 36MHz 而不是 72MHz——别拿 72MHz 去配 Prescaler，否则实际波特率正好差一倍，两端对不上、全是错误帧。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <p>两块 F103 板互连（或一块 + USB-CAN 分析仪）：</p>
+          <table>
+            <thead>
+              <tr><th>节点 A</th><th>节点 B</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>CAN_TX (PA12)</td><td>CAN_RX (PA11)</td><td>交叉连接：发端接收端</td></tr>
+              <tr><td>CAN_RX (PA11)</td><td>CAN_TX (PA12)</td><td>交叉连接</td></tr>
+              <tr><td>GND</td><td>GND</td><td>共地（差分也要共地）</td></tr>
+              <tr><td>CANH-CANL 间 120Ω</td><td>CANH-CANL 间 120Ω</td><td>总线两端各一只（若板载已有可跳过）</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么 TX/RX 要交叉</strong>：和串口一样，发送端必须接到对方的接收端。<strong>为什么共地仍必要</strong>：CAN 差分能免疫共模干扰，但收发器内部仍需参考地——不共地会烧收发器或通信不稳。</p>
+          <div class="tip-warn mt-4"><span class="tip-label">避坑</span>
+            F103 的 CAN 引脚不是随便复用的：标准是 PA11/PA12，也可复用 PB8/PB9（重映射）。CubeMX 里别把「复用」选成「普通推挽输出」——CAN 收发器需要开漏+复用，配错则总线一直显性（错误帧风暴）。另外注意部分最小系统板没有板载 CAN 收发器（TJA1050），需要外接收发模块才能连总线。</div>
+        </section>
+
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p>CubeMX 配置：CAN 引脚 PA11/PA12、Prescaler=4、BS1=9、BS2=6、Mode Normal、使能 FIFO0 中断、勾选 Activate the reception interrupt。示例 1 发送；示例 2 中断接收。</p>
+          <p><strong>示例 1：CAN 发送（板 A：每秒发一帧）</strong></p>
+          <pre><code class="language-c">/* CAN 发送：ID=0x123，每 1 秒发一帧 8 字节递增数据 */
+#include "main.h"
+#include &lt;stdio.h&gt;
+
+extern CAN_HandleTypeDef hcan;
+extern UART_HandleTypeDef huart1;
+
+/* printf 重定向到串口 1（标准写法，需包含 stdio.h） */
+int fputc(int ch, FILE *f)
+{
+    HAL_UART_Transmit(&amp;huart1, (uint8_t *)&amp;ch, 1, 100);
+    return ch;
+}
+
+void can_send_test(void)
+{
+    CAN_TxHeaderTypeDef tx;
+    uint8_t data[8];
+    uint32_t mailbox = 0;
+    uint8_t i;
+
+    tx.ExtId = 0;
+    tx.IDE = CAN_ID_STD;          /* 标准帧：11 位 ID */
+    tx.RTR = CAN_RTR_DATA;        /* 数据帧 */
+    tx.DLC = 8;                   /* 8 字节 */
+    tx.StdId = 0x123;
+
+    for (i = 0; i &lt; 8; i++) data[i] = i;   /* 数据：0,1,2,...7 */
+
+    if (HAL_CAN_AddTxMessage(&amp;hcan, &amp;tx, data, &amp;mailbox) != HAL_OK) {
+        printf("CAN send fail\r\n");
+    } else {
+        printf("CAN send OK, mailbox=%lu\r\n", mailbox);
+    }
+}
+
+int main(void)
+{
+    HAL_Init();
+    SystemClock_Config();
+    MX_GPIO_Init();
+    MX_CAN_Init();            /* CubeMX 生成：Normal 模式 */
+    MX_USART1_UART_Init();
+
+    HAL_CAN_Start(&amp;hcan);     /* 关键：启动 CAN 外设 */
+
+    while (1) {
+        can_send_test();
+        HAL_Delay(1000);
+    }
+}</code></pre>
+          <p><strong>示例 2：CAN 中断接收（板 B：收到即打印）</strong></p>
+          <pre><code class="language-c">/* CAN 接收：FIFO0 中断，回调里取帧并串口打印 */
+#include "main.h"
+#include &lt;stdio.h&gt;
+
+extern CAN_HandleTypeDef hcan;
+extern UART_HandleTypeDef huart1;
+
+/* printf 重定向到串口 1 */
+int fputc(int ch, FILE *f)
+{
+    HAL_UART_Transmit(&amp;huart1, (uint8_t *)&amp;ch, 1, 100);
+    return ch;
+}
+
+/* 接收回调：帧到达 FIFO0 时自动进入（函数名固定） */
+void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
+{
+    CAN_RxHeaderTypeDef rx;
+    uint8_t data[8];
+    uint8_t i;
+
+    if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &amp;rx, data) == HAL_OK) {
+        printf("ID=0x%03lX DLC=%u data=", rx.StdId, rx.DLC);
+        for (i = 0; i &lt; rx.DLC; i++) printf("%02X ", data[i]);
+        printf("\r\n");
+    }
+}
+
+int main(void)
+{
+    HAL_Init();
+    SystemClock_Config();
+    MX_GPIO_Init();
+    MX_CAN_Init();
+    MX_USART1_UART_Init();
+
+    HAL_CAN_Start(&amp;hcan);
+
+    /* 使能 FIFO0 接收中断通知（配合 CubeMX 的中断勾选） */
+    HAL_CAN_ActivateNotification(&amp;hcan, CAN_IT_RX_FIFO0_MSG_PENDING);
+
+    while (1) {
+        HAL_Delay(1000);
+        /* 主循环空闲：接收全靠中断 */
+    }
+}</code></pre>
+        </section>
+
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第一段：TxHeader 的四个关键字段</h3>
+          <p><span class="inline-code">IDE = CAN_ID_STD</span> 选标准帧（11 位 ID）；<span class="inline-code">RTR = CAN_RTR_DATA</span> 表示数据帧（另一类是远程请求帧 RTR）；<span class="inline-code">DLC = 8</span> 数据长度；<span class="inline-code">StdId = 0x123</span> 帧 ID。<strong>为什么 ID 重要</strong>：接收端过滤器按它筛选、仲裁按它定优先级（0x123 比 0x456 优先）。<strong>扩展帧（29 位）</strong>：IDE 换 CAN_ID_EXT、填 ExtId——汽车 OBD 诊断常用扩展帧。</p>
+
+          <h3>第二段：AddTxMessage 的邮箱机制</h3>
+          <p><span class="inline-code">HAL_CAN_AddTxMessage(&amp;hcan, &amp;tx, data, &amp;mailbox)</span>：把帧放进三个<strong>发送邮箱</strong>之一（硬件有 3 个邮箱排队）。<strong>返回 HAL_OK 说明入队成功</strong>，不等于已发出——发出由硬件仲裁完成。<strong>邮箱满（3 个都忙）</strong>：函数返回 BUSY，重试或等中断回调。<strong>mailbox 输出参数</strong>告诉你用了几号邮箱。</p>
+
+          <h3>第三段：接收回调 + GetRxMessage</h3>
+          <p><span class="inline-code">HAL_CAN_RxFifo0MsgPendingCallback</span> 是固定回调名，帧进 FIFO0 时 HAL 调用它；在回调里 <span class="inline-code">HAL_CAN_GetRxMessage</span> 把帧取到 <span class="inline-code">rx</span> 与 <span class="inline-code">data</span>。<strong>为什么必须及时取</strong>：FIFO 深度有限（3 帧），不及时取会溢出丢帧——回调里做轻量处理（取帧+标记），重活放主循环。</p>
+
+          <h3>第四段：ActivateNotification 与 CubeMX 的关系</h3>
+          <p><span class="inline-code">HAL_CAN_ActivateNotification(&amp;hcan, CAN_IT_RX_FIFO0_MSG_PENDING)</span> 使能中断通知；CubeMX 里同时要勾选「Activate the reception interrupt」。<strong>两步缺一不可</strong>：CubeMX 生成 NVIC 使能，HAL 调用挂回调——漏了任一步，帧到了也没人通知。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-demo">七、现象演示与验证</h2>
+          <ul>
+            <li><strong>发送</strong>：板 A 串口每秒打印 <span class="inline-code">CAN send OK, mailbox=0</span>。</li>
+            <li><strong>接收</strong>：板 B 串口打印 <span class="inline-code">ID=0x123 DLC=8 data=00 01 02 03 04 05 06 07</span>。</li>
+            <li><strong>对端无响应</strong>：只开板 A，AddTxMessage 一直返回 OK（CAN 单发成功不要求对方在线），但对方没打印——理解 CAN「发了不代表对方收到」。</li>
+          </ul>
+          <p><strong>验证方法：</strong></p>
+          <ol>
+            <li>拔掉一根 CAN 线：板 A 仍打印 send OK（硬件能发出）；但示波器/分析仪上看总线报错——理解总线状态。</li>
+            <li>把板 B 波特率改成 250k（Prescaler=9），两板通信中断、出现错误帧——亲眼验证「波特率必须一致」。</li>
+            <li>用 USB-CAN 分析仪（如 PCAN）抓包，确认帧 ID/数据与代码一致。</li>
+          </ol>
+        </section>
+
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>收发完全无反应</td><td>漏了 HAL_CAN_Start</td><td>启动 CAN 外设再收发</td></tr>
+              <tr><td>通信错乱/错误帧</td><td>两端波特率不一致</td><td>核对 Prescaler/BS1/BS2 两板一致</td></tr>
+              <tr><td>总线上大量错误帧</td><td>没终端电阻 / 引脚复用错</td><td>两端加 120Ω；核对 PA11/PA12 复用配置</td></tr>
+              <tr><td>接收回调不触发</td><td>ActivateNotification 漏调 / NVIC 没开</td><td>补 ActivateNotification；CubeMX 勾接收中断</td></tr>
+              <tr><td>Bus-Off（外设锁死）</td><td>总线严重故障累积 256 次错误</td><td>检查接线/波特率/终端电阻；HAL_CAN_ResetError</td></tr>
+              <tr><td>只收不到自己发的</td><td>过滤器被配成只收特定 ID</td><td>默认过滤器设为全接收（掩码 0）先跑通</td></tr>
+              <tr><td>加上接收功能后发送变慢</td><td>回调里做串口阻塞打印</td><td>回调只存帧，打印放主循环</td></tr>
+              <tr><td>开发板无收发器</td><td>F103 引脚不是 CAN 电平，需外接 TJA1050</td><td>加 CAN 收发器模块再连总线</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（必做）</strong>：把发送数据改成「温湿度模拟值」（两字节温度 + 两字节湿度打包），接收端解析并串口打印——学会多字节打包。</p>
+          <p><strong>练习 2</strong>：配过滤器：板 B 只接收 ID=0x123，发 0x456 的帧应被丢弃——理解掩码筛选。</p>
+          <p><strong>练习 3（进阶）</strong>：三节点组网（两发一收），用不同 ID 区分数据源，收端按 ID 显示「来自谁」——体会多主机广播。</p>
+          <p><strong>延伸学习</strong>：CAN 会收发后，下一课学 <a href="stm32-internal-flash.html">内部 Flash 读写</a>——给 CAN 收到的参数找个「掉电不丢」的存储地。</p>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="stm32-input-capture.html" class="btn btn-outline btn-sm">← 上一篇：定时器输入捕获</a>
+          <a href="stm32-internal-flash.html" class="btn btn-outline btn-sm">下一篇：内部 Flash 读写 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

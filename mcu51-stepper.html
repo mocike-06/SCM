@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - 步进电机控制（ULN2003 四相八拍）</title>
+  <meta name="description" content="51 单片机步进电机零基础教程：四相步进电机、步距角与拍数、单四拍/双四拍/八拍通电顺序、ULN2003 驱动、正反转与速度控制，教材电机控制经典章节。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link active" aria-current="page">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>步进电机控制（ULN2003 四相八拍）</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：51 单片机</span>
+          <span class="badge badge-orange">进阶</span>
+          <span class="badge badge-gray">更新：2026-10-25</span>
+        </div>
+
+        <p class="text-secondary mb-6">智能小车、3D 打印机、云台、电风扇摇头——步进电机是「能精确转到指定角度」的执行器，也是教材与毕设的常客。本课讲透步进电机的工作原理（四相绕组、步距角、通电顺序），用 ULN2003 驱动 28BYJ-48 电机，写出正转、反转、变速、定角度的完整控制代码。</p>
+
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>说清步进电机怎么靠「轮流通电」一步一步转。</li>
+            <li>理解单四拍/双四拍/八拍三种通电方式与步距角关系。</li>
+            <li>用 51 控制电机：正反转、调速、转指定角度（角度=步数×步距角）。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识（对应学习路线阶段 2）：</strong></p>
+          <ul>
+            <li>IO 口输出（mcu51-led.html）：电机控制本质是精确时序的 IO 翻转。</li>
+            <li>延时（mcu51-timer.html）：拍间隔决定转速。</li>
+            <li>数组（c-array-pointer.html）：通电顺序表用数组存。</li>
+          </ul>
+          <p><strong>本课会出现的新名词：</strong>步进电机、定子/转子、绕组、相数、步距角、拍、单四拍/双四拍/八拍、ULN2003、28BYJ-48、减速比。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. 步进电机是什么：按「步」走的电机</h3>
+          <p><strong>生活类比</strong>：普通电机像「滑板」——给电就滑多远算多远；步进电机像「台阶」——每个脉冲跨一级台阶，跨几级完全可控。给它一个脉冲序列，它就精确地转对应的角度，不转就「锁住」。</p>
+          <p><strong>一句话定义</strong>：步进电机是把<strong>电脉冲转换为角位移</strong>的执行器：每输入一个脉冲，转子转过一个固定的<strong>步距角</strong>。步距角由电机结构决定（28BYJ-48 出厂步距角 5.625°，经 1/64 减速后轴端约 0.0879°）。</p>
+          <p><strong>例子</strong>：减速后转一圈需要 4096 步——想转 90°，发 1024 个脉冲。</p>
+
+          <h3>2. 四相绕组与转子齿：谁通电谁吸引</h3>
+          <p><strong>一句话定义</strong>：电机定子有 <strong>4 组线圈（A、B、C、D 相）</strong>，转子是带齿的永磁体。给某相通电，转子齿就被吸过去对齐——<strong>依次改变通电相，转子就一步步转</strong>。28BYJ-48 引出 4 根线（橙黄粉蓝对应 A/B/C/D），另两根是公共电源线。</p>
+          <p><strong>例子</strong>：只给 A 相通电，转子停在对齐 A 的位置；换成 B 相通电，转子转一步去对齐 B。</p>
+
+          <h3>3. 拍与通电顺序：四相八拍的节奏</h3>
+          <p><strong>一句话定义</strong>：<strong>单四拍</strong>：A→B→C→D 单相通电循环，每拍转 5.625°，但力矩小、易失步；<strong>双四拍</strong>：AB→BC→CD→DA 两相同时通，力矩大；<strong>八拍</strong>：A→AB→B→BC→C→CD→D→DA（单双交替），每拍转一半角度（2.8125°），<strong>精度最高、运行最稳</strong>——教材与工程默认用八拍。</p>
+          <p><strong>例子</strong>：八拍表 = <span class="inline-code">{0x01,0x03,0x02,0x06,0x04,0x0C,0x08,0x09}</span>（每位代表一相，1=通电）。</p>
+          <p><strong>教材角度/转速公式</strong>：转角 = 步数 × 步距角；28BYJ-48 经 1/64 减速后轴端每步约 0.0879°，转一整圈 360° 需要 360/0.0879 ≈ <strong>4096 步</strong>。转速 n(rpm) = 拍频(步/秒) × 60 / 每转步数。教材还强调两个工程考点：<strong>启动频率</strong>（不能一上来就给高拍频，否则转子跟不上磁场会失步/堵转，要加速起步）和<strong>自锁力矩</strong>（一相通电未松开时电机自己"抱住"轴，是步进电机制动的来源）。</p>
+
+          <h3>4. ULN2003：IO 口带不动的「大力士」</h3>
+          <p><strong>一句话定义</strong>：电机绕组电流可达几百 mA，51 的 IO 口只能输出约 20mA 且不能灌大电流——<strong>ULN2003 是达林顿管阵列驱动芯片</strong>：输入接 IO（低电平导通），输出接电机绕组到电源，内部续流二极管保护。IO 只给信号、芯片干重活。</p>
+          <p><strong>例子</strong>：P1.0~P1.3 → ULN2003 IN1~IN4 → 电机 A~D；公共线接 +5V。用「低电平有效」的驱动板时通电顺序表取反。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-principle">三、原理介绍：往 IO 送一串通电顺序，转子为什么就一步步转起来</h2>
+          <p>步进电机和普通电机最大不同：它<strong>不是连续转，而是「一步一步」走</strong>——每收到一个通电脉冲，转子转过固定角度。控制送多少个脉冲、什么顺序，就精确控制转多少度。</p>
+          <p><strong>从 IO 到转动的链条：</strong></p>
+          <ol>
+            <li>八拍表 <span class="inline-code">tab[8]</span> 存 8 种通电组合。</li>
+            <li><span class="inline-code">P1=tab[i]</span>：当前相组合通电，转子被磁力吸到对应位置。</li>
+            <li><span class="inline-code">delay(拍间隔)</span>：让转子稳定，间隔越短越快、太短失步。</li>
+            <li>i 递增/递减，循环——转 N 圈要 4096×N 拍。</li>
+          </ol>
+
+          <h3>原理 1：转子为什么会转——电磁铁轮流吸，磁场旋转起来</h3>
+          <p>步进电机定子上有 A/B/C/D 四个绕组(电磁铁)，中间是带小磁铁的转子。<strong>给 A 相通电，A 相电磁铁产生磁场，把转子吸到正对 A 的位置</strong>；然后断电 A、给 B 通电，磁场中心转到 B，转子被吸着跟着转过去一格；C、D 依次……<strong>只要按 A→AB→B→BC→C→CD→D→DA 的顺序轮流通电，磁场中心就在定子里一圈圈旋转，转子像被「领着走」一样一步步转起来</strong>。这就是八拍表的本质——它就是这张「电磁铁通电顺序表」。送表的速度=转速，送表的方向=正反转，送多少拍=转多少角度。</p>
+
+          <h3>原理 2：为什么用「八拍」而不是简单四拍</h3>
+          <p>简单四拍是 A→B→C→D 每次只通一相；八拍是 A→AB→B→BC→C→CD→D→DA，在两相之间插一个「两相同时通电」的中间态。<strong>好处</strong>：两相合力时力矩更大、转子定位更稳，而且相邻两步之间转子只转半步、走得更平滑——高速时不容易因为惯性「冲过头」。代价是同样圈数要多一倍拍数。<strong>这就是「失步」的根源</strong>：如果拍间隔太短、上一拍还没吸稳就切下一拍，转子跟不上磁场的旋转速度，磁力拉不住它——程序还在发脉冲，转子却停在原地抖，这就是丢步。所以拍间隔不能压到极限。</p>
+
+          <h3>原理 3：为什么 4096 步才转一圈——减速箱的换算</h3>
+          <p>28BYJ-48 转子本身步距角是 5.625°（直接转一圈要 64 拍），太粗。它内部带 <strong>1/64 减速齿轮箱</strong>：转子转 64×64=4096 步，输出轴才转完整一圈，于是输出轴每步只走 5.625°/64 ≈ 0.0879°——慢、但角度极准。<strong>所以「转一圈」= 4096 拍、「转 90°」= 1024 拍</strong>。这也是为什么同样是步进电机，28BYJ-48 适合云台/机械臂这种「慢而准」的场合；要高速就得用无减速的步进+细分驱动。</p>
+          <blockquote>记忆点：步进电机=电磁铁轮流通电、把转子一步步吸着转，通电顺序表就是八拍表；八拍比四拍力矩平滑、间隔太短转子跟不上就失步丢步；28BYJ-48 带1/64减速箱，输出轴4096步/圈、每步0.0879°，转90°=1024拍；IO只给信号、电流重活全交ULN2003。</blockquote>
+        </section>
+
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <table>
+            <thead>
+              <tr><th>ULN2003 模块</th><th>接 51</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>IN1~IN4</td><td>P1.0~P1.3</td><td>控制信号输入（模块内高电平有效居多）</td></tr>
+              <tr><td>VCC / GND</td><td>+5V / GND</td><td>模块供电（接电机用）</td></tr>
+              <tr><td>电机橙/黄/粉/蓝</td><td>模块 A/B/C/D 端</td><td>四相绕组</td></tr>
+              <tr><td>电机红</td><td>模块 +V（或单独 5V）</td><td>公共电源线</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么 IO 不直接接电机</strong>：绕组电流远超 IO 驱动能力，直接接会拉垮 P1 口甚至烧引脚。<strong>为什么模块要 5V 供电</strong>：28BYJ-48 额定 5V；有些模块用 5V 逻辑 + 外置电源给电机，大负载时分两路供电（共地即可）。</p>
+          <div class="tip-warn mt-4"><span class="tip-label">避坑</span>
+            通电顺序接错的表现是电机「嗡嗡响但不转」或乱抖——先确认 A/B/C/D 与橙黄粉蓝一一对应。另外拍间隔别小于 1ms（28BYJ-48 极限约 800µs），否则转子跟不上脉冲，出现「丢步」：程序还在发脉冲，电机已停下或抖动——角度就不准了。</div>
+        </section>
+
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p>示例 1 八拍正反转；示例 2 定角度旋转。</p>
+          <p><strong>示例 1：八拍正转 1 圈 → 反转 1 圈，循环</strong></p>
+          <pre><code class="language-c">/* 步进电机八拍控制：P1.0~P1.3 接 ULN2003 IN1~IN4 */
+#include "reg52.h"
+
+/* 八拍通电顺序表（高电平有效模块）：A AB B BC C CD D DA */
+unsigned char code tab[8] = {
+    0x01, 0x03, 0x02, 0x06, 0x04, 0x0C, 0x08, 0x09
+};
+
+/* 八拍方式下，减速后轴端转一圈 ≈ 4096 拍（28BYJ-48 通行值） */
+#define STEP_PER_TURN  4096
+
+void delay_ms(unsigned int ms);   /* 软延时函数 */
+
+/* 走 steps 步：dir=1 正转，dir=0 反转；delay_ms 控制速度 */
+void stepper_run(unsigned int steps, unsigned char dir, unsigned int ms)
+{
+    unsigned char i = 0;
+    while (steps--) {
+        P1 = tab[i];            /* 输出当前拍 */
+        delay_ms(ms);           /* 拍间隔：决定转速 */
+        if (dir) i = (i + 1) &amp; 0x07;   /* 正转：顺序递增 */
+        else    i = (i + 7) &amp; 0x07;   /* 反转：顺序递减（-1 等价 +7） */
+    }
+    P1 = 0;                     /* 停止后全部断电（省电，防过热） */
+}
+
+void main(void)
+{
+    while (1) {
+        stepper_run(STEP_PER_TURN, 1, 3);   /* 正转一圈，拍间隔 3ms */
+        delay_ms(500);
+        stepper_run(STEP_PER_TURN, 0, 3);   /* 反转一圈 */
+        delay_ms(500);
+    }
+}</code></pre>
+          <p><strong>示例 2：转指定角度（角度 → 步数）</strong></p>
+          <pre><code class="language-c">/* 定角度旋转：转 90° = 4096 步/圈 ÷ 4 = 1024 步 */
+#include "reg52.h"
+
+unsigned char code tab[8] = {
+    0x01, 0x03, 0x02, 0x06, 0x04, 0x0C, 0x08, 0x09
+};
+
+/* 减速后每步 0.0879°，一圈 4096 步 */
+#define STEPS_360  4096
+
+void delay_ms(unsigned int ms);
+
+void stepper_run(unsigned int steps, unsigned char dir, unsigned int ms)
+{
+    unsigned char i = 0;
+    while (steps--) {
+        P1 = tab[i];
+        delay_ms(ms);
+        if (dir) i = (i + 1) &amp; 0x07;
+        else    i = (i + 7) &amp; 0x07;
+    }
+    P1 = 0;
+}
+
+void main(void)
+{
+    /* 转 90°：4096/4 = 1024 步 */
+    stepper_run(STEPS_360 / 4, 1, 3);
+    delay_ms(1000);
+    /* 转回 -90° */
+    stepper_run(STEPS_360 / 4, 0, 3);
+    while (1);
+}</code></pre>
+        </section>
+
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第一段：八拍表与位定义</h3>
+          <p><span class="inline-code">0x01</span> = 只 A 相通电（bit0=1），<span class="inline-code">0x03</span> = A+B 同通（bit0、bit1=1）……表里 8 个值就是 8 种通电组合。<strong>为什么用 code</strong>：表是常量，放程序存储器省 RAM。<strong>为什么 0x09 后回到 0x01</strong>：第 8 拍是 D+A（bit3+bit0），下一拍又该 A——循环闭合。</p>
+
+          <h3>第二段：正转 i+1、反转 i+7 的取模技巧</h3>
+          <p><span class="inline-code">i = (i + 1) &amp; 0x07</span>：i 从 0 增到 7 后 &amp; 0x07 回到 0——等价于 i%8（&amp; 对 2 的幂更快）。反转用 <span class="inline-code">(i + 7) &amp; 0x07</span>：加 7 = 减 1（模 8），从 0 退到 7。<strong>为什么反转不能简单倒序输出表</strong>：倒序也反转，但「先停 A 再停…」的时序和正向表不同，可能出现转子回退半步；用递增/递减同一张表更标准。</p>
+
+          <h3>第三段：stepper_run 的参数设计</h3>
+          <p>函数把「步数 / 方向 / 速度」三要素参数化：<span class="inline-code">steps</span> 决定角度、<span class="inline-code">dir</span> 决定方向、<span class="inline-code">ms</span> 决定拍间隔（速度）。<strong>为什么结束时 P1=0</strong>：不转时全部断电——绕组一直通电会发热、费电；需要「锁住保持位置」时才保持最后一拍通电。</p>
+
+          <h3>第四段：角度换算</h3>
+          <p>28BYJ-48 减速比 1:64 → 轴端 4096 步/圈 → 每步 360/4096 ≈ 0.0879°。<strong>90° = 1024 步</strong>。换算公式：<span class="inline-code">步数 = 目标角度 ÷ 每步角度</span>。<strong>为什么不是所有电机都 4096</strong>：42 步进电机（1.8°、无减速）一圈 200 步，90° 只要 50 步——换电机先查 datasheet 的步距角。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-demo">七、现象演示与验证</h2>
+          <ul>
+            <li><strong>正反转</strong>：电机正转一圈、停 0.5s、反转一圈，循环。</li>
+            <li><strong>定角度</strong>：转 90° 停 1s 再转回——轴上贴指针能看到精确角度。</li>
+            <li><strong>调速</strong>：把拍间隔从 3ms 改成 10ms，转速明显变慢。</li>
+          </ul>
+          <p><strong>验证方法：</strong></p>
+          <ol>
+            <li>给轴贴胶带做指针，数电机每转一圈的拍数：八拍 + 减速后应约 4096 拍/圈（用串口/示波器统计拍数验证）。</li>
+            <li>拍间隔改成 0.5ms 观察失步（抖动/停走）——亲眼看「太快跟不上的后果」。</li>
+            <li>把八拍表换成单四拍表（0x01,0x02,0x04,0x08），步距角翻倍、力矩变小——对比拍数。</li>
+          </ol>
+        </section>
+
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>电机嗡嗡响但不转</td><td>通电顺序错 / 相线接错</td><td>核对橙黄粉蓝 ↔ A/B/C/D 顺序；先跑单四拍看方向</td></tr>
+              <tr><td>高速抖动、丢步</td><td>拍间隔太短，转子跟不上</td><td>加大拍间隔（≥1ms）；不要突然变速</td></tr>
+              <tr><td>只转一点就停</td><td>电源功率不足 / 绕组过热保护</td><td>电机单独供电；确认模块 5V 电流足够</td></tr>
+              <tr><td>方向反了</td><td>相序顺序相反</td><td>换 dir 参数或把 A/C 两根线对调</td></tr>
+              <tr><td>上电后电机发热</td><td>停止后没断电（P1 保持通电）</td><td>停止调用后 P1=0；长时间不用关电源</td></tr>
+              <tr><td>转的角度不准</td><td>丢步 / 减速比记错</td><td>核对 4096 步/圈；降低速度减少丢步</td></tr>
+              <tr><td>IO 口被烧</td><td>没经 ULN2003 直驱电机</td><td>检查驱动电路；用万用表确认 IO 无大电流</td></tr>
+              <tr><td>Proteus 仿真不动</td><td>仿真模型没设电压/负载</td><td>电机模型接 12V/5V 供电；用虚拟示波器看 P1 波形先验证软件</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（必做）</strong>：加两个按键（正转/反转）和一个电位器调速——把按钮与 ADC 知识（mcu51-key.html、mcu51-adc.html）串起来。</p>
+          <p><strong>练习 2</strong>：写「转圈计数」：记录电机累计转了多少圈并串口打印（每 512 拍 +1 圈）。</p>
+          <p><strong>练习 3（进阶）</strong>：双电机驱动（智能小车）：两个电机分别正反转组合实现前进/后退/转弯——为 project.html 的智能小车做准备。</p>
+          <p><strong>延伸学习</strong>：会转电机了，下一课学 <a href="mcu51-ledmatrix.html">LED 点阵屏</a>——把「时序」换成「显示」，用扫描点亮汉字与图形。</p>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="mcu51-dac.html" class="btn btn-outline btn-sm">← 上一篇：DAC0832 模拟量输出</a>
+          <a href="mcu51-ledmatrix.html" class="btn btn-outline btn-sm">下一篇：LED 点阵屏 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

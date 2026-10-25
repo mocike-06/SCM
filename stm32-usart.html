@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - STM32 USART 串口通信（printf 与中断接收）零基础</title>
+  <meta name="description" content="零基础学 STM32 串口：USART 与 UART 区别、波特率 115200、printf 重定向 fputc 改写原理、MicroLIB、HAL_UART_Receive_IT 中断接收与 RxCpltCallback 回调、环形缓冲概念。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link active" aria-current="page">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>USART 串口通信（printf 与中断接收）</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：STM32</span>
+          <span class="badge badge-green">入门</span>
+          <span class="badge badge-gray">更新：2026-10-24</span>
+        </div>
+
+        <p class="text-secondary mb-6">串口是单片机「printf 调试」的生命线：把数据发去电脑看现象，再用中断接收上位机发来的指令。本讲从零讲透 USART 与 UART 的区别、波特率、为什么要重定向 fputc 才能 printf、MicroLIB 的作用、以及为什么中断收完一个字节后必须重新开启接收。</p>
+
+        <!-- ===== 一 ===== -->
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>说清楚 USART 和 UART 的区别、波特率 115200 是什么意思、为什么收发双方必须约定相同波特率。</li>
+            <li>在 CubeMX 配置 USART1（PA9/PA10，115200 8N1），并用 printf 把变量打印到电脑串口助手。</li>
+            <li>用 HAL_UART_Receive_IT 中断接收电脑发来的字节，在回调里原样回显，理解为什么要重新开接收。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识：</strong></p>
+          <ul>
+            <li>环境搭建（stm32-env.html）：CubeMX 生成工程、Keil 编译下载、72MHz 时钟树。</li>
+            <li>GPIO（stm32-gpio.html）：引脚复用概念——本讲 PA9/PA10 被自动配成串口复用功能。</li>
+            <li>C 语言：printf、指针、回调函数的基本概念。</li>
+          </ul>
+          <p><strong>本课新名词：</strong>USART/UART、TX/RX、波特率、8N1、USB 转 TTL（CH340）、fputc 重定向、MicroLIB、HAL_UART_Receive_IT、HAL_UART_RxCpltCallback、环形缓冲。</p>
+        </section>
+
+        <!-- ===== 二 ===== -->
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. USART 与 UART：一根线还是两根线的聊天</h3>
+          <p><strong>生活类比</strong>：串口像两个人用传话筒聊天——一人一句，交替说话。UART 是「异步传话筒」（没有共同节拍线，靠事先约定的语速同步），USART 是在 UART 基础上还能外接一根时钟线的「升级版」。STM32 我们只用它的异步模式，所以说 USART 就是 UART 用法。</p>
+          <p><strong>一句话定义</strong>：UART（通用异步收发器）只用 TX、RX 两根线，双方靠事先约定的速率逐位收发字节；USART（通用同步异步收发器）额外支持同步模式，单片机上习惯仍叫它串口。</p>
+          <p><strong>例子</strong>：本讲 PA9=TX（发）、PA10=RX（收），接 USB 转 TTL 模块连电脑，实现单片机和电脑互发文字。</p>
+
+          <h3>2. 波特率：双方约定的「说话速度」</h3>
+          <p><strong>生活类比</strong>：波特率就是两个人说话的语速。一个人每秒说 115200 个位，另一个人也必须用同样语速去听，否则听到的全是乱码。</p>
+          <p><strong>一句话定义</strong>：波特率（Baud Rate）是串口每秒传输的位数，本讲用最常见的 <strong>115200</strong>；「8N1」表示每帧 8 位数据、无校验位、1 位停止位。收发双方波特率必须完全一致。</p>
+          <p><strong>例子</strong>：CubeMX 里 Baud Rate 填 115200，电脑串口助手也必须选 115200, 8, N, 1；如果一边 115200 一边 9600，收到的就是乱码。</p>
+
+          <h3>3. printf 重定向：让 printf 从串口「吐」出来</h3>
+          <p><strong>生活类比</strong>：printf 本来是写给「调试窗口」看的，像一封信写好却投错了邮筒。我们改写 fputc（C 库最底层那个「吐一个字符」的函数），等于把邮筒改成串口——以后 printf 的每个字符都从串口发出去。</p>
+          <p><strong>一句话定义</strong>：Keil 默认 printf 输出到调试器看不到；我们重写 <span class="inline-code">int fputc(int ch, FILE *f)</span>，让它调 <span class="inline-code">HAL_UART_Transmit</span> 把字节从 USART1 发出，printf 就「跑」到串口上了。注意必须在 Keil 勾选 <strong>Use MicroLIB</strong> 才生效。</p>
+          <p><strong>例子</strong>：写完 fputc 后，直接 <span class="inline-code">printf("uptime: %d s\r\n", n)</span>，串口助手就能看到打印。</p>
+
+          <h3>4. 中断接收与 RxCpltCallback：快递到了自动敲门</h3>
+          <p><strong>生活类比</strong>：轮询接收像你每隔 1 分钟就跑到门口看一次快递，浪费时间；中断接收像快递员到了直接按门铃（触发中断），你放下手里的事去取即可。</p>
+          <p><strong>一句话定义</strong>：调一次 <span class="inline-code">HAL_UART_Receive_IT</span> 后，单片机平时该干嘛干嘛，串口每来 1 字节就自动进中断、收完后触发回调 <span class="inline-code">HAL_UART_RxCpltCallback</span>。关键：回调跑完必须再调一次 Receive_IT 重新开接收，否则只能收一个字节。</p>
+          <p><strong>例子</strong>：本讲回调里把收到的字节原样发回（回显），再调一次 Receive_IT 等下一个字节。</p>
+
+          <h3>5. 环形缓冲：一个不会溢出的传送带</h3>
+          <p><strong>生活类比</strong>：环形缓冲像一条首尾相接的环形传送带——快递员（中断）放一个包裹到头，传送带转一圈又回到开头位置，只要有人及时取走，就永远不会堆满。</p>
+          <p><strong>一句话定义</strong>：环形缓冲（ring buffer）是一块定长数组配合「读指针、写指针」循环使用：中断负责往写指针放数据，主循环负责从读指针取数据，两边互不等待，避免丢字节。</p>
+          <p><strong>例子</strong>：本讲教学版一次只收 1 字节并立刻回显；真实项目（如收 GPS 数据）会把收到的字节放进环形缓冲，主循环再拼成完整一行去解析。</p>
+        </section>
+
+        <!-- ===== 三 ===== -->
+        <section>
+          <h2 id="sec-principle">三、原理介绍：一个字节是怎么从串口飞出去的</h2>
+          <p>printf 打印一个字符，看起来只是一行代码，背后是「软件写寄存器 → 硬件移位发送 → 对方逐位采样」三个层次。下面把它拆成三个机制讲透。</p>
+          <p><strong>整条链路：</strong>你调 printf → fputc 把这个字节交给 HAL_UART_Transmit → 它写 USART 的数据寄存器 DR → 发送移位寄存器一位位搬到 TX 引脚 → 对方 RX 按同样波特率采样、拼装回一个字节。</p>
+
+          <h3>原理 1：UART 帧与波特率——异步双方靠什么对齐</h3>
+          <p>UART 没有时钟线，收发双方事先约定「每位持续多久」。发一个字节要排成一帧，教材里的标准波形描述（空闲态→起始→数据→停止）：<strong>总线空闲时为高电平；发方先拉低 1 位「起始位」提醒对方开始；接着逐位发 8 位数据（低位在前）；最后拉高 1 位「停止位」结束，回到空闲高</strong>。接收方在起始位的下降沿启动，按约定的位时长，在每个数据位的中间采样一次。</p>
+          <p>波特率 115200 = 每位约 8.68µs。两端必须用同一波特率，否则你按 8.68µs 采、对方按 104µs 发，必然错位读到乱码。这就是本课最大坑的本质：<strong>乱码不是数据坏了，是采样节奏对不上</strong>。</p>
+          <p><strong>教材式波特率公式（RM0008 USART_BRR 章节）：</strong>硬件把外设时钟分频得到波特率，公式为 <span class="inline-code">波特率 = fPCLK / (16 × USARTDIV)</span>。以 USART1（挂 APB2，fPCLK=72MHz）、115200 为例：USARTDIV = 72000000 / (16×115200) ≈ 39.0625。这个 39.0625 不是整数，所以 BRR 寄存器把它拆成两部分：<strong>DIV_Mantissa[15:4]（整数部分=39）+ DIV_Fraction[3:0]（小数部分=0.0625×16=1，即 0x1）</strong>，于是 BRR = 39&lt;&lt;4 | 1 = 0x271。HAL_UART_Init 就是按这个公式替你算 BRR 写进去的——所以时钟树错了，BRR 算出来的真实波特率就偏。</p>
+
+          <h3>原理 2：TXE / RXNE 标志与移位寄存器——中断为什么只触发一次</h3>
+          <p>USART 内部有两个缓冲：发送时你先写 <strong>DR（数据寄存器）</strong>，硬件把它搬进<strong>发送移位寄存器</strong>逐位发走。DR 空出来时硬件把 <strong>TXE 标志</strong>置 1，表示「可以再写下一个字节了」。接收则反过来：移位寄存器收满一帧后把字节搬进 DR，同时置 <strong>RXNE 标志</strong>，表示「DR 里有新数据可读」。</p>
+          <p>HAL 的中断接收就是盯着 RXNE：每收满 1 字节硬件置 RXNE → 触发中断 → HAL 读走 DR 自动清 RXNE → 调 RxCpltCallback。<strong>为什么回调里必须再调一次 Receive_IT</strong>：HAL 中断模式是「武装一次收一个」，进过一次回调后它就解除了 RXNE 中断的武装，不重新调 Receive_IT 就再也不响应新字节——这就是「只能收一个字符」坑的根源。</p>
+
+          <h3>原理 3：printf 重定向——fputc 是怎么把字送到串口的</h3>
+          <p>C 库的 printf 并不认识串口，它最终只会调一个最底层的 <span class="inline-code">fputc(ch, f)</span>，把单个字符交给「标准输出设备」。Keil 默认这个设备是调试通道，你看不到。我们重写 fputc，让它内部调 <span class="inline-code">HAL_UART_Transmit</span> 把字符从 PA9 发出——以后任何 printf 都自动走串口。</p>
+          <pre><code class="language-c">int fputc(int ch, FILE *f)
+{
+  HAL_UART_Transmit(&amp;huart1, (uint8_t *)&amp;ch, 1, 0xFFFF);  /* 把 ch 从串口发出 */
+  return ch;
+}</code></pre>
+          <p><strong>为什么必须勾 Use MicroLIB</strong>：默认标准库的 fputc 链到一堆文件 IO，裁剪麻烦；MicroLIB 是精简 C 库，它的 fputc 是个干净的弱钩子，重写后立刻接管，且体积小。不勾 MicroLIB，重写的 fputc 常常不生效或链接不过。</p>
+          <blockquote>记忆点：UART 帧=1起始+8数据+1停止，波特率=采样节奏、两端必须一致；TXE=发送缓冲空、RXNE=收到新字节，HAL 中断收完一字节自动解除武装、回调里必须再调 Receive_IT；printf 靠重写 fputc→HAL_UART_Transmit 跑串口，必须勾 MicroLIB。</blockquote>
+        </section>
+
+        <!-- ===== 四 ===== -->
+        <section>
+          <h2 id="sec-wiring">四、硬件接线说明</h2>
+          <table>
+            <thead>
+              <tr><th>模块引脚（USB-TTL）</th><th>单片机引脚</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>TXD</td><td>PA10（USART1_RX）</td><td>交叉连接：电脑发 → 板子收</td></tr>
+              <tr><td>RXD</td><td>PA9（USART1_TX）</td><td>交叉连接：板子发 → 电脑收</td></tr>
+              <tr><td>GND</td><td>GND</td><td>必须共地</td></tr>
+              <tr><td>3.3V / 5V</td><td>3.3V / 5V</td><td>板子自供电可只接 GND；模块 3.3V 电平接 STM32 最稳</td></tr>
+            </tbody>
+          </table>
+          <p><strong>为什么这样接：</strong></p>
+          <ul>
+            <li><strong>为什么 TX/RX 要交叉？</strong> 发送方的输出必须接到接收方的输入。STM32 的 TX(PA9) 是输出，接模块的 RXD（输入）；STM32 的 RX(PA10) 是输入，接模块的 TXD（输出）。接反了双方各说各的，谁也收不到。</li>
+            <li><strong>为什么必须共地？</strong> 电平是相对 GND 测量的。没有公共地，3.3V 的「高电平」在对方眼里没有基准，会被误判。</li>
+            <li><strong>为什么模块要用 3.3V 档？</strong> STM32 是 3.3V 系统，若模块用 5V 电平把 5V 灌进 PA10，长期可能损伤引脚。</li>
+          </ul>
+          <div class="tip-info mt-4"><span class="tip-label">CubeMX 配置要点</span>
+            Connectivity 选 <span class="inline-code">USART1</span>，Mode 异步通信，参数 Baud Rate=115200、Word Length=8、Parity=None、Stop Bits=1；切到 <strong>NVIC Settings</strong> 勾选 <span class="inline-code">USART1 global interrupt</span>。生成工程后，Keil 魔术棒 → Target 页勾上 <strong>Use MicroLIB</strong>。</div>
+        </section>
+
+        <!-- ===== 五 ===== -->
+        <section>
+          <h2 id="sec-code">五、完整代码</h2>
+          <p>下面代码做三件事：重定向 fputc 让 printf 走串口；启动中断接收；主循环每秒打印 uptime；收到字节就在回调里回显并重新开接收。</p>
+          <pre><code class="language-c">/* main.c：printf 重定向 + 中断接收回显（零基础注释版） */
+#include &lt;stdio.h&gt;
+
+UART_HandleTypeDef huart1;
+uint8_t uartRxByte;   /* 每次中断收 1 字节放这里 */
+
+/* 重定向 fputc：printf 的每个字节都从 USART1 发出 */
+int fputc(int ch, FILE *f)
+{
+  HAL_UART_Transmit(&amp;huart1, (uint8_t *)&amp;ch, 1, 0xFFFF);
+  return ch;
+}
+
+/* 串口接收完成回调（每收完 1 字节自动调用一次） */
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+  if (huart-&gt;Instance == USART1)
+  {
+    HAL_UART_Transmit(&amp;huart1, &amp;uartRxByte, 1, 100); /* 收到什么，原样发回 */
+    HAL_UART_Receive_IT(&amp;huart1, &amp;uartRxByte, 1);   /* 关键：重新开启下一次接收 */
+  }
+}
+
+int main(void)
+{
+  HAL_Init();
+  SystemClock_Config();
+  MX_GPIO_Init();
+  MX_USART1_UART_Init();
+
+  printf("STM32 USART Ready!\r\n");   /* 串口助手应能看到这行 */
+
+  HAL_UART_Receive_IT(&amp;huart1, &amp;uartRxByte, 1);  /* 启动第一次中断接收 */
+
+  while (1)
+  {
+    printf("uptime: %d s\r\n", (int)(HAL_GetTick() / 1000));
+    HAL_Delay(1000);
+  }
+}</code></pre>
+          <p>如果只是想单向打印、不收数据，连中断都不用开，最简单写法：</p>
+          <pre><code class="language-c">printf("voltage = %.2f V\r\n", v);   /* 先重定向好 fputc */
+HAL_Delay(500);</code></pre>
+        </section>
+
+        <!-- ===== 六 ===== -->
+        <section>
+          <h2 id="sec-code-explain">六、代码逐段讲解</h2>
+
+          <h3>第 1 段：fputc 重定向（第 6~10 行）</h3>
+          <p><strong>在做什么：</strong> 重写 fputc，把 printf 要吐的每个字符 ch 通过 HAL_UART_Transmit 从 USART1 发出。</p>
+          <p><strong>为什么这么写：</strong> C 库 printf 最终靠 fputc 输出一个字符。改这一个函数，所有 printf（包括 %d、%f、%s）自动都走串口。最后参数 0xFFFF 是超时时间，足够短字节发送。</p>
+          <p><strong>不写会怎样：</strong> 不重定向，printf 在 Keil 默认去输出调试通道，串口助手什么都收不到。</p>
+
+          <h3>第 2 段：中断接收回调（第 13~21 行）</h3>
+          <p><strong>在做什么：</strong> 每收完 1 字节自动进 RxCpltCallback；判断是 USART1 后，把收到的字节 uartRxByte 原样发回（回显），再调一次 Receive_IT 武装下一次。</p>
+          <p><strong>为什么这么写：</strong> 回调是 HAL 库留的「弱定义」钩子，我们重写它就能插入自己的处理。末尾再调 Receive_IT 是核心——HAL 中断接收是「一次性」的，武装一次只收一个字节，不重新武装就停了。</p>
+          <p><strong>不写会怎样：</strong> 漏掉末尾的 Receive_IT，现象就是「电脑发一个字符能回显一次，之后再也收不到」——本讲最经典的坑。</p>
+
+          <h3>第 3 段：main 初始化与主循环</h3>
+          <p><strong>在做什么：</strong> 初始化后打印 Ready，调一次 Receive_IT 启动接收；主循环每秒打印 uptime（HAL_GetTick 是系统毫秒节拍，除以 1000 得秒）。</p>
+          <p><strong>为什么这么写：</strong> Receive_IT 只需在开头武装一次，之后靠回调里自持续。主循环只管打印，收数据完全由中断异步完成，两不耽误。</p>
+          <p><strong>不写会怎样：</strong> 不开第一次 Receive_IT，中断接收根本没启动，回调永远不执行。</p>
+        </section>
+
+        <!-- ===== 七 ===== -->
+        <section>
+          <h2 id="sec-demo">七、现象演示说明</h2>
+          <ol>
+            <li>先做关键一步：Keil 点 <strong>魔术棒 → Target 页 → 勾选右上角 Use MicroLIB</strong>，再按 F7 重编译——不勾这步 printf 永远无输出。</li>
+            <li>插上 USB-TTL，电脑设备管理器确认 COM 口号，打开任意串口助手，设为 <strong>115200, 8, N, 1</strong>。</li>
+            <li>打开串口后，立刻看到 <span class="inline-code">STM32 USART Ready!</span>，之后每秒打印一行 <span class="inline-code">uptime: n s</span>，数字每秒 +1。</li>
+            <li>在串口助手发送框敲一个字母（如 <span class="inline-code">A</span>）点发送，接收区立刻回显一个 <span class="inline-code">A</span>——证明中断接收正常工作。</li>
+          </ol>
+          <p><strong>可量化的验证方法：</strong></p>
+          <ul>
+            <li><strong>数秒数</strong>：观察 uptime 行，数字应严格每 1 秒 +1。若跳动忽快忽慢，说明 HAL_Delay 不准——回头查时钟是否 72MHz。</li>
+            <li><strong>连发多字节测回显</strong>：串口助手连续发送 <span class="inline-code">12345</span>，应逐字节回显 <span class="inline-code">12345</span>。若只回一个 1 就没了，说明回调里漏了第二次 Receive_IT。</li>
+            <li><strong>改波特率测乱码</strong>：把串口助手改成 9600，应看到满屏乱码——改回 115200 恢复正常，直观验证波特率必须一致。</li>
+          </ul>
+          <p>如果看到乱码而不是上面的文字，基本就是波特率或系统时钟不对，查第八节。</p>
+        </section>
+
+        <!-- ===== 八 ===== -->
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>串口收到全是乱码</td><td>波特率不一致；或系统时钟没跑到 72MHz（用了内部 HSI 8M），实际波特率被算偏</td><td>串口助手核对 115200；CubeMX 时钟树确认 HSE+PLL 到 72MHz，重新生成工程</td></tr>
+              <tr><td>printf 完全无输出，或编译报 printf 未定义</td><td>没勾选 Use MicroLIB</td><td>Keil 魔术棒 → Target 页勾选 Use MicroLIB，重新编译下载</td></tr>
+              <tr><td>只能收到一个字符，之后再也收不到</td><td>回调函数里忘了再次调用 HAL_UART_Receive_IT</td><td>在 HAL_UART_RxCpltCallback 末尾重新调用 Receive_IT 启动下一次接收</td></tr>
+              <tr><td>电脑发数据板子收不到</td><td>TX/RX 接反了</td><td>交叉对调：STM32 的 PA9(TX) 接模块 RXD，PA10(RX) 接模块 TXD</td></tr>
+              <tr><td>回调函数写了但从不执行</td><td>NVIC 里没使能 USART1 中断</td><td>CubeMX → USART1 → NVIC Settings 勾选 USART1 global interrupt，重新生成</td></tr>
+              <tr><td>回调函数名拼错（如写成 HAL_UART_RxCallBack / HAL_UART_ReciveIT），编译 0 错误却永远不进（教材经典坑）</td><td>HAL 的回调是「弱符号(weak)」——你写错名字时，链接器不会报未定义错误，而是静默使用 HAL 默认的空回调，等于你那份根本没被挂上</td><td>回调名必须与 stm32f1xx_hal_uart.c 里的弱定义逐字符一致：<span class="inline-code">HAL_UART_RxCpltCallback</span>（Cplt 不是 CallBack）。想确认挂上没，可在回调里放一句 printf 断点，或在工程里搜 weak 定义对照拼写</td></tr>
+              <tr><td>中断服务函数里调 printf / HAL_UART_Transmit 卡死（教材并发坑）</td><td>中断里用了带超时阻塞的发送，或 printf 不可重入，被高优先级中断打断时死等 TXE 标志</td><td>中断里只做「搬数据进环形缓冲」这种极短操作，把打印放到主循环；确需在中断发数据要用中断/DMA 方式，不要用带 timeout 的阻塞 Transmit</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <!-- ===== 九 ===== -->
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（改打印内容）：</strong> 让板子每秒打印一行自己的名字和一个递增计数器，如 <span class="inline-code">LJB count=0</span>、<span class="inline-code">count=1</span>……。提示：用一个 int 变量自增，printf 里用 %d 输出。</p>
+          <p><strong>练习 2（改波特率）：</strong> 把波特率改成 9600，电脑串口助手同步改成 9600，确认仍能正常打印回显。提示：CubeMX 改 Baud Rate 重新生成，同时确认时钟仍 72MHz。</p>
+          <p><strong>练习 3（命令控制 LED）：</strong> 收到字符 'o' 就点亮 PA5 LED，收到 'f' 就熄灭。提示：在回调里判断 uartRxByte == 'o' 时调 HAL_GPIO_WritePin 写电平。</p>
+          <p><strong>延伸学习：</strong></p>
+          <ul>
+            <li><a href="#xxx" data-placeholder>定时器与 PWM 输出：用串口打印占空比（stm32-pwm.html）</a></li>
+            <li><a href="#xxx" data-placeholder>ADC 模拟采集：用串口打印电压（stm32-adc.html）</a></li>
+            <li><a href="#xxx" data-placeholder>环形缓冲与命令行解析：收完整字符串再处理</a></li>
+          </ul>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="stm32-gpio.html" class="btn btn-outline btn-sm">← 上一篇：STM32 GPIO 输入输出</a>
+          <a href="stm32-pwm.html" class="btn btn-outline btn-sm">下一篇：定时器与 PWM 输出 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

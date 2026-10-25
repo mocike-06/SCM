@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>McuStudy - Proteus 入门与原理图绘制</title>
+  <meta name="description" content="Proteus 仿真零基础第一课：认识仿真软件、新建工程、放置元件、连线、电源网络，亲手画出 51 最小系统原理图。">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23165DFF' stroke-width='2'%3E%3Crect x='3' y='3' width='18' height='14' rx='2'/%3E%3Cpath d='M8 3v14M16 3v14M3 10h18'/%3E%3C/svg%3E">
+
+  <script src="js/tailwind.js"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="js/theme.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="flex flex-col min-h-screen">
+
+  <header class="site-header">
+    <nav class="nav-container" aria-label="主导航">
+      <a href="index.html" class="nav-brand">
+        <svg class="nav-brand-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M8 3v14M16 3v14M3 10h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M7 20.5h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        McuStudy
+      </a>
+      <button id="menuBtn" class="menu-btn" aria-label="打开菜单" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="index.html" class="nav-link">首页</a></li>
+        <li><a href="route.html" class="nav-link active" aria-current="page">学习路线</a></li>
+        <li><a href="mcu51.html" class="nav-link">51单片机</a></li>
+        <li><a href="stm32.html" class="nav-link">STM32</a></li>
+        <li><a href="esp32.html" class="nav-link">ESP32</a></li>
+        <li><a href="tools.html" class="nav-link">在线工具</a></li>
+        <li><a href="resource.html" class="nav-link">资料下载</a></li>
+        <li><a href="project.html" class="nav-link">实训毕设</a></li>
+      </ul>
+      <button id="themeBtn" class="theme-btn" aria-label="切换主题">
+        <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8">
+
+      <aside class="toc hidden lg:block" aria-label="文章目录">
+        <div class="card card-pad">
+          <p class="font-bold mb-2">本页目录</p>
+          <nav id="tocNav"></nav>
+        </div>
+      </aside>
+
+      <article class="prose card card-pad">
+
+        <h1>Proteus 入门与原理图绘制</h1>
+
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+          <span class="badge badge-blue">系列：Proteus 仿真</span>
+          <span class="badge badge-green">入门</span>
+          <span class="badge badge-gray">更新：2026-10-25</span>
+        </div>
+
+        <p class="text-secondary mb-6">学习路线的第 3 站：仿真先行、再碰实物。本课从零认识 Proteus，学会新建工程、放元件、连线和接电源网络，亲手画出 51 最小系统原理图——下一课加载 HEX 程序就能看到它「跑」起来。</p>
+
+        <section>
+          <h2 id="sec-goal">一、本课目标与前置知识</h2>
+          <p><strong>学完本课你能做到：</strong></p>
+          <ul>
+            <li>说清「仿真」和「实物」的关系，知道 Proteus 能做什么、不能做什么。</li>
+            <li>新建 Proteus 工程，放置单片机、电阻、LED、晶振、电容、按键等元件。</li>
+            <li>完成连线并正确布置电源网络（VCC/GND），画出可运行的 51 最小系统。</li>
+          </ul>
+          <p><strong>需要提前掌握的前置知识：</strong></p>
+          <ul>
+            <li><a href="mcu51-minisys.html">51 最小系统电路原理</a>：知道电源、晶振、复位三要素，本课就是把它搬到电脑里。</li>
+            <li>C 语言基础三篇：知道程序要编译成 hex 文件。</li>
+          </ul>
+          <p><strong>本课会出现的新名词：</strong>仿真、原理图、元件库、放置/连线、网络标号、电源端子、电气规则检查（ERC）。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-concept">二、基础概念铺垫</h2>
+
+          <h3>1. 仿真：在电脑里「虚拟搭电路」</h3>
+          <p><strong>生活类比</strong>：仿真就像玩「电路版模拟城市」——不用买电阻、不用焊板子，在软件里拖元件、连线，软件按真实器件特性帮你算电压电流，甚至能跑程序。</p>
+          <p><strong>一句话定义</strong>：Proteus 是英国 Labcenter 出品的电路仿真软件，既画原理图又跑仿真：把 Keil 编译出的 hex 文件加载进虚拟单片机，就能看到 LED 闪烁、数码管跳动、串口收发，原理与实物完全一致。</p>
+          <p><strong>例子</strong>：没有开发板时，用 Proteus 就能完成 51 全系列实验；但要注意仿真≠实物——仿真里晶振精度、器件温度、接线接触问题都不存在，实物可能因这些原因不工作，所以仿真通过后仍需谨慎上实物。</p>
+
+          <h3>2. 元件库：Proteus 的「电子元件超市」</h3>
+          <p><strong>一句话定义</strong>：Proteus 左侧的元件选择面板就是库，搜索关键字放元件。本课常用：<span class="inline-code">AT89C52</span>（51 单片机，仿真用 AT89C52 代替 STC89C52）、<span class="inline-code">RES</span>（电阻）、<span class="inline-code">LED-RED</span>（发光二极管）、<span class="inline-code">CAP</span>（电容）、<span class="inline-code">CRYSTAL</span>（晶振）、<span class="inline-code">BUTTON</span>（按键）、<span class="inline-code">POWER</span>（电源端子 VCC/GND）。</p>
+          <p><strong>例子</strong>：搜不到某个元件不一定是库里没有，可能是分类名不同（如电容的电解是 <span class="inline-code">CAP-ELEC</span>）；实在没有再走 <a href="proteus-library.html">元件库导入教程</a>。</p>
+
+          <h3>3. 网络标号与电源端子：不画线也能「连接」</h3>
+          <p><strong>生活类比</strong>：同一栋楼的房间里都标着「NET-01」，表示它们属于同一条线路——网络标号就是给导线起名字，名字相同=电气上相连，即使图上没直接画线。</p>
+          <p><strong>一句话定义</strong>：把鼠标放导线/引脚端点会变成 ✎ 符号，点击即可输入<strong>网络标号</strong>；<span class="inline-code">POWER</span> 元件拖出 <span class="inline-code">VCC</span>、<span class="inline-code">GND</span> 端子接到对应位置，就是「电源网络」——51 最小系统里几十个引脚的电源不能靠一根根线拉，全靠这两个端子。</p>
+          <p><strong>例子</strong>：单片机 40 脚 VCC、9 脚复位电容、LED 阳极都接 <span class="inline-code">VCC</span> 端子；20 脚 GND、LED 阴极、晶振电容都接 <span class="inline-code">GND</span> 端子。</p>
+
+          <h3>4. 电气规则检查（ERC）</h3>
+          <p><strong>一句话定义</strong>：画完图后 Proteus 可以检查「有没有接错的电」——比如两个输出端接在一起、电源没接、悬空引脚等，用 <span class="inline-code">System → Check Electrical Rules</span> 或快捷键调出。新手先知道这个功能存在，出现红色波浪标记就去查。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-principle">三、原理介绍：Proteus 凭什么能在电脑里「演」出一块真电路板</h2>
+          <p>从写代码到仿真出画面，完整链条：</p>
+          <ol>
+            <li>Keil 写 C 编译出 <span class="inline-code">.hex</span>（机器码）。</li>
+            <li>Proteus 画原理图：放元件、连线、接电源网络。</li>
+            <li>双击单片机 → 加载 hex（相当于把程序烧进虚拟芯片）。</li>
+            <li>点左下角 ▶ 运行：虚拟芯片逐条执行，LED 亮灭、串口输出可见。</li>
+          </ol>
+
+          <h3>原理 1：仿真引擎怎么工作——每个元件都是一段「行为模型」</h3>
+          <p>Proteus 里的 8051、LED、电阻并不是真硬件，而是<strong>每个元件背后挂着一段描述它行为的模型文件(.MOD)</strong>。你放一颗虚拟 8051，它内部是一个<strong>指令集模拟器</strong>：你加载的 hex 被它逐条取指执行，每个机器码对应的 IO 寄存器(如 P1)状态变化，再实时反映到连在 P1 上的虚拟 LED 模型上。数字元件按「电平高低」跳变，模拟元件(电阻/电容/运放)按电路方程算电压电流——<strong>数字+模拟混合仿真</strong>。这就是为什么「数字逻辑层面」(代码、IO 电平、定时器、串口字节)和实物高度一致。</p>
+
+          <h3>原理 2：ERC 为什么能查出「悬空 / 短路」</h3>
+          <p>ERC(电气规则检查)是在你点运行前，先按元件模型里声明的<strong>引脚类型</strong>扫一遍整张图：每个引脚模型都标了它是「输出型/输入型/电源型/无源型」。于是它能机械地判出两类错：<strong>两个输出脚接在同一根网线上</strong>（一个推高一个拉低=硬件短路，模型标为冲突）、<strong>该接信号的输入脚悬空没接</strong>（模型标为 floating）。它不懂你的设计意图，只按引脚类型做规则匹配——所以红色波浪线=模型认为这里电气上不对，先去查。</p>
+
+          <h3>原理 3：为什么「仿真能跑」不等于「实物能跑」——仿真把缺陷理想化掉了</h3>
+          <p><strong>仿真天然理想化掉的部分</strong>：①每根线理想导通，没有虚接/接触不良/杜邦线干扰；②晶振绝对精准(实物有±20ppm 漂移、温度影响)；③没有驱动能力边界——仿真一个引脚随便点多少 LED 都不衰减(实物要算灌/拉电流)；④第三方元件模型(如 DHT11)只演时序应答，不演真实上电自检/校准。<strong>结论</strong>：仿真负责提前消灭「程序逻辑+时序+接线拓扑」这三类最容易错的问题；实物最后还要单独过「供电、接触、驱动余量」三关——所以本站坚持「先仿真后实物」，把能在电脑里消灭的 bug 先消灭掉。</p>
+          <blockquote>记忆点：Proteus仿真=每个元件背后一段行为模型(.MOD)，虚拟8051是指令集模拟器、逐条跑你的hex；ERC按引脚类型机械查「两输出短接/输入悬空」，不懂意图只对规则；仿真理想化掉了虚接/晶振漂移/驱动边界，所以仿真过了实物仍要过供电与接触关。</blockquote>
+        </section>
+
+        <section>
+          <h2 id="sec-wiring">四、工程搭建步骤（跟着做）</h2>
+          <p><strong>第 1 步：新建工程</strong>。打开 Proteus 8，点 <span class="inline-code">File → New Project</span>，填名称与保存路径，一路 Next 直到出现原理图编辑区（蓝色网格）。</p>
+          <p><strong>第 2 步：放置单片机</strong>。左侧面板点 <span class="inline-code">P</span>（Pick Devices），搜索 <span class="inline-code">AT89C52</span> 双击放入，再按同样方法放：8 个 <span class="inline-code">RES</span>（阻值双击改 220）、8 个 <span class="inline-code">LED-RED</span>、1 个 <span class="inline-code">CRYSTAL</span>（12MHz）、2 个 <span class="inline-code">CAP</span>（22pF）、1 个 <span class="inline-code">CAP-ELEC</span>（10µF）、1 个 <span class="inline-code">RES</span>（10kΩ）、1 个 <span class="inline-code">BUTTON</span>。</p>
+          <p><strong>第 3 步：搭最小系统外围</strong>。按 <a href="mcu51-minisys.html">最小系统原理</a> 连接：40 脚接 VCC、20 脚接 GND；<strong>31 脚 EA 必须接 VCC</strong>（使能内部程序存储器，否则单片机无法执行内部 Flash 里的程序）；19/18 脚（XTAL1/XTAL2）接晶振两端，晶振两脚<strong>各接</strong> 22pF 电容到 GND（电容是并联到地，不是串联）；9 脚 RST 接 10µF 电解电容正极（电容负极接 VCC），RST 节点（电容正极）再经 10kΩ 电阻接地——上电瞬间 RST 被电容充电拉高、随后经电阻泄放回低，形成复位脉冲（具体极性以实物教程为准，仿真重在看结构）。</p>
+          <p><strong>第 4 步：接 LED 电路</strong>。8 颗 LED 阳极统一接 <span class="inline-code">VCC</span> 端子，阴极各自经 220Ω 电阻接到 P1.0~P1.7（DIP40 封装的 <strong>1~8 脚</strong>，不是 21~28 脚——那是 P2 口）。</p>
+          <p><strong>第 5 步：接按键</strong>。BUTTON 一脚接 <span class="inline-code">GND</span>，另一脚接 P3.2（12 脚）。P3 口是准双向口、自带弱上拉：按键松开读回高电平、按下拉低，<strong>无需外接上拉电阻</strong>。</p>
+          <p><strong>第 6 步：布置电源网络</strong>。在元件搜索框搜 <span class="inline-code">POWER</span>，拖出 <span class="inline-code">VCC</span> 和 <span class="inline-code">GND</span> 端子（同名可复制多个），把刚才标记的每个 VCC/GND 位置都用端子接好。</p>
+          <p><strong>第 7 步：保存并检查</strong>。Ctrl+S 保存工程；之后点 <span class="inline-code">System → Check Electrical Rules</span> 看是否有红色错误标记。</p>
+
+          <p><strong>怕漏看？照着这张「点哪里 → 应看到什么」清单逐项打勾：</strong></p>
+          <table>
+            <thead>
+              <tr><th>动作</th><th>点哪里</th><th>做对了应看到什么</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>新建工程</td><td>顶部菜单 <span class="inline-code">File → New Project</span>，向导一路 Next</td><td>出现蓝色网格原理图编辑区，左侧是器件/工具条</td></tr>
+              <tr><td>打开取器件窗</td><td>左侧元件模式下点 <span class="inline-code">P</span> 字按钮（Pick Devices）</td><td>弹出搜索窗，左列是结果、右列是预览封装</td></tr>
+              <tr><td>搜单片机</td><td>搜索框输 <span class="inline-code">AT89C52</span>，双击左列结果</td><td>它出现在左侧「已选器件」清单里；关闭搜索窗后在画布点一下放上去</td></tr>
+              <tr><td>改电阻阻值</td><td>双击画布上的电阻 → <span class="inline-code">Value</span> 栏填 220</td><td>电阻旁标注从 RES 变成「220」；8 个 LED 各串一个</td></tr>
+              <tr><td>改晶振频率</td><td>双击晶振 → Frequency 填 12MHz</td><td>晶振旁标注 12MHz（默认是 1MHz，不改时间全错）</td></tr>
+              <tr><td>起一条连线</td><td>鼠标移到引脚端点，出现绿色小方块 ✎ 后按住拖到另一引脚</td><td>线变实线、两端引脚都「吸附」上去；没吸附上线会悬空发红</td></tr>
+              <tr><td>放电源端子</td><td>左侧 Terminals 模选 <span class="inline-code">POWER</span>/<span class="inline-code">GROUND</span>，拖到图上</td><td>端子旁标注 VCC / GND；拖到导线端点即完成连接</td></tr>
+              <tr><td>加网络标号</td><td>导线端点出现 ✎ 时按键盘，输入名字如 <span class="inline-code">VCC</span></td><td>同名标号的线在电气上自动连通，不用真拉线</td></tr>
+              <tr><td>查错</td><td><span class="inline-code">System → Check Electrical Rules</span></td><td>无红色告警弹窗；若报悬空/电源错，回到对应引脚补端子</td></tr>
+            </tbody>
+          </table>
+          <table>
+            <thead>
+              <tr><th>连接对象</th><th>Proteus 元件 / 网络</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>单片机</td><td>AT89C52</td><td>仿真替代 STC89C52，指令兼容</td></tr>
+              <tr><td>晶振电路</td><td>CRYSTAL 12MHz + 2×CAP 22pF</td><td>19/18 脚；电容各接晶振两脚到 GND</td></tr>
+              <tr><td>复位电路</td><td>CAP-ELEC 10µF + RES 10kΩ</td><td>9 脚 RST；电容正极接 RST、负极接 VCC，RST 经 10kΩ 到 GND</td></tr>
+              <tr><td>程序存储器使能</td><td>EA 直接接 VCC</td><td>31 脚，必须接高才能执行内部 Flash 程序</td></tr>
+              <tr><td>LED 驱动</td><td>8×LED-RED + 8×RES 220Ω</td><td>阳极 VCC，阴极经电阻接 P1.0~P1.7（1~8 脚）</td></tr>
+              <tr><td>按键</td><td>BUTTON</td><td>一端 GND，一端 P3.2</td></tr>
+            </tbody>
+          </table>
+          <div class="tip-warn mt-4"><span class="tip-label">避坑</span>
+            元件属性要双击修改：电阻默认 10kΩ 改成 220Ω，晶振默认 1MHz 改成 12MHz——不改属性，仿真会「看似正常但现象不对」（如 LED 过暗、时间完全不对）。</div>
+        </section>
+
+        <section>
+          <h2 id="sec-code">五、配套程序准备</h2>
+          <p>画完图先不急，本课不加载程序；但建议把下一课要用的 hex 提前编译好。在 Keil 里新建工程（型号 STC89C52），粘贴 <a href="c-basics.html">C 语言基础入门</a> 里的 LED 闪烁代码，编译通过后记录 hex 输出路径（默认在工程目录的 Objects 或 Output 文件夹，文件名为工程名.hex）。</p>
+          <pre><code class="language-c">/* 配套程序：P1 口 8 颗 LED 闪烁（编译生成 led.hex 备用） */
+#include &lt;reg52.h&gt;
+
+void delay_ms(unsigned int ms) {
+    unsigned int i, j;
+    for (i = 0; i &lt; ms; i++)
+        for (j = 0; j &lt; 120; j++);
+}
+
+void main(void) {
+    while (1) {
+        P1 = 0x00;          /* 全亮 */
+        delay_ms(300);
+        P1 = 0xFF;          /* 全灭 */
+        delay_ms(300);
+    }
+}</code></pre>
+
+          <p><strong>第二实例：单灯跑马灯（同一套 Proteus 电路可直接仿真）</strong>。把上面「全亮全灭」换成「一颗灯从 P1.0 移到 P1.7」，烧进同一个 hex 就能在仿真里看到移动效果——<strong>同一张电路图、只换 hex 就能对比不同程序</strong>，这正是仿真调试的便利：</p>
+          <pre><code class="language-c">void delay_ms(unsigned int t) {   /* 11.0592MHz 下粗略延时 */
+    unsigned int i, j;
+    for (i = 0; i &lt; t; i++)
+        for (j = 0; j &lt; 114; j++);
+}
+
+void main(void) {
+    unsigned char i;
+    while (1) {
+        for (i = 0; i &lt; 8; i++) {
+            P1 = ~(1 &lt;&lt; i);   /* 只让第 i 位为0=那颗灯亮，其余灭 */
+            delay_ms(250);
+        }
+    }
+}</code></pre>
+          <p><strong>为什么它能直接在你刚画好的图上跑</strong>：它和全闪程序用的是同一套 P1 口接线（8 颗 LED），只是内部逻辑从「整字节翻转」变成「逐位移位」。这说明<strong>Proteus 仿真里改程序不用重新画图</strong>——重编 hex、在单片机属性里重新指一下 hex 路径即可。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-code-explain">六、程序与工程的配合逻辑</h2>
+          <p>很多新手困惑「为什么画图课要编译程序」——因为 Proteus 的仿真对象是 <strong>hex 文件</strong>，不是 .c 文件。链条是：</p>
+          <ol>
+            <li>Keil 把 <span class="inline-code">.c</span> 编译成 <span class="inline-code">.hex</span>（纯机器码，芯片能读懂）。</li>
+            <li>Proteus 双击 AT89C52 → <span class="inline-code">Program File</span> 一栏选这个 hex → 点 OK。</li>
+            <li>运行仿真时，虚拟 CPU 从 hex 里读指令执行——和真实烧录到 Flash 是一回事。</li>
+          </ol>
+          <p>所以「程序」和「电路」是两条独立的生产线，在 hex 加载这一步汇合。本课把 hex 准备好，下一课直接双击单片机加载即可；如果你现在就想看效果，也可以直接跳到 <a href="proteus-simulate.html">仿真调试教程</a> 边画边跑。</p>
+          <blockquote>记忆点：Keil 产 hex（软件生产线），Proteus 跑 hex（硬件仿真线），加载 hex 那一刻两条线合并。</blockquote>
+        </section>
+
+        <section>
+          <h2 id="sec-demo">七、本课成果检查</h2>
+          <ul>
+            <li><strong>画面完整</strong>：AT89C52 周围有晶振、复位、电源、8 颗 LED、按键，无悬空的引脚标记（绿点）。</li>
+            <li><strong>电源网络</strong>：所有 VCC 处都有 VCC 端子、所有 GND 处都有 GND 端子，而不是空着。</li>
+            <li><strong>属性正确</strong>：双击每个元件确认：晶振 12MHz、电阻 220Ω、电解电容 10µF。</li>
+          </ul>
+          <p><strong>验证方法</strong>：执行电气规则检查（System → Check Electrical Rules），不应出现红色错误项；把鼠标悬停每个引脚，能看到连线跟随移动，说明连接有效。</p>
+        </section>
+
+        <section>
+          <h2 id="sec-faq">八、常见报错排查方案</h2>
+          <table>
+            <thead>
+              <tr><th>报错现象</th><th>可能原因</th><th>解决方法</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>元件搜索不到（如 STC89C52）</td><td>Proteus 标准库没有 STC 系列</td><td>用指令兼容的 AT89C52 替代仿真；或导入第三方 STC 库（见元件库教程）</td></tr>
+              <tr><td>连线总是不成功 / 线变红</td><td>从元件的「脚」上起线而不是从元件体上</td><td>把鼠标移到引脚端点出现 ✎ 再点击起线；终点也要落在另一引脚端点上</td></tr>
+              <tr><td>电气规则检查报 Power/Output 错误</td><td>电源端子漏放、或两个输出端直接相连</td><td>补齐 VCC/GND 端子；检查是否有两个元件输出脚短接</td></tr>
+              <tr><td>晶振位置放不下 / 元件叠在一起</td><td>元件间距太小或方向不对</td><td>选中元件按空格旋转方向，按住拖拽调间距；Ctrl+滚轮缩放画布</td></tr>
+              <tr><td>改了电阻阻值没反应</td><td>改的是元件名而不是 VALUE 属性</td><td>双击电阻，在 <span class="inline-code">Value</span> 一栏填 220，不是改 Part Name</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2 id="sec-exercise">九、课后练习与延伸</h2>
+          <p><strong>练习 1（必做）</strong>：把本课电路画出来并保存为 <span class="inline-code">minisys.pdsprj</span>，完成电气规则检查。</p>
+          <p><strong>练习 2</strong>：在电路上加一个 4 位共阴数码管（元件 <span class="inline-code">7SEG-MPX4-CC</span>），段选接 P2.0~P2.7，位选接 P3.0~P3.3——为定时器计数练习提前布线。</p>
+          <p><strong>练习 3（进阶）</strong>：把按键改为接 INT0（P3.2）并标注网络名 <span class="inline-code">INT0</span>，预习外部中断章节的接法。</p>
+          <p><strong>延伸学习</strong>：画完图立即进入 <a href="proteus-simulate.html">Proteus 仿真调试与虚拟仪器</a>，加载刚才的 hex 让 LED 闪起来；碰到「元件库里没有某元件」再看 <a href="proteus-library.html">元件库导入</a>。</p>
+        </section>
+
+        <div class="flex justify-between mt-10 pt-4 border-t" style="border-color: var(--color-border)">
+          <a href="route.html" class="btn btn-outline btn-sm">← 返回学习路线</a>
+          <a href="proteus-simulate.html" class="btn btn-outline btn-sm">下一篇：仿真调试与虚拟仪器 →</a>
+        </div>
+
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>© 2026 McuStudy · 从零开始学单片机嵌入式</p>
+    <p>纯静态站点（HTML5 + Tailwind CSS v3 + 原生 JavaScript），可部署于 Vercel / GitHub Pages。</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
